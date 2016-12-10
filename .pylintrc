@@ -1,0 +1,8 @@
+[TYPECHECK]
+
+ignored-modules = numpy, numpy.random
+
+[messages control]
+
+disable=invalid-name,no-init,too-few-public-methods,missing-docstring,
+        too-many-arguments,line-too-long,too-many-locals
