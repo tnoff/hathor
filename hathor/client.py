@@ -772,7 +772,9 @@ class HathorClient(object):
         delete_episodes = []
         download_episodes = []
 
-        podcast_query = self.db_session.query(Podcast)
+        # Built podcast query to iterate through
+        podcast_query = self.db_session.query(Podcast).\
+            filter(Podcast.automatic_episode_download == True) #pylint:disable=singleton-comparison
         if include_podcasts:
             opts = (Podcast.id == pod for pod in include_podcasts)
             podcast_query = podcast_query.filter(or_(opts))
@@ -780,34 +782,53 @@ class HathorClient(object):
             opts = (Podcast.id != pod for pod in exclude_podcasts)
             podcast_query = podcast_query.filter(and_(opts))
 
+        # Find all episodes to attempt to download
         for podcast in podcast_query:
-            if not podcast.automatic_episode_download:
-                continue
             episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
                     filter(PodcastEpisode.podcast_id == podcast.id)
 
-            download_query = episode_query
-            if podcast.max_allowed:
-                download_query = download_query.limit(podcast.max_allowed)
-            for episode in download_query:
-                if not episode.file_path:
-                    download_episodes.append(episode)
+            # Make sure you call limit, then do check for file path
+            # If you add the check for file path is None first
+
+            # Get max allowed first, limit to the amount you would need to download
+            # then only download ones that arent downloaded
 
             if podcast.max_allowed:
-                delete_query = episode_query
-                for episode in delete_query[podcast.max_allowed:]:
-                    if not episode.prevent_deletion and episode.file_path:
-                        delete_episodes.append(episode)
+                episode_query = episode_query.limit(podcast.max_allowed).from_self()
+            for episode in episode_query.\
+                filter(PodcastEpisode.file_path == None): #pylint:disable=singleton-comparison
+                download_episodes.append(episode)
 
+        # Download episodes from query
         episodes_downloaded = None
         if download_episodes:
             self.logger.debug("Episodes %s set for download from file sync",
                               [i.id for i in download_episodes])
             episodes_downloaded = self.__episode_download_input(download_episodes)
 
+        # Find episodes to delete if there is max allowed on the podcast
+        # Not all episodes may have been downloaded, so this should use
+        # another episode query, since that will check if "file_path" is defined
+        # that way you dont delete episodes pre-maturely
+        for podcast in podcast_query.filter(Podcast.max_allowed != None):
+            episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
+                    filter(PodcastEpisode.podcast_id == podcast.id).\
+                    filter(PodcastEpisode.file_path != None)
+                    # Make sure offset is called first, since you want to first limit
+                    # then check if prevent deletion is false
+                    # This way files that should be kept, but also have
+                    # prevent delete will not count against files
+                    # that should be deleted
+            episode_query = episode_query.offset(podcast.max_allowed).from_self().\
+                    filter(PodcastEpisode.prevent_deletion == False) #pylint:disable=singleton-comparison
+
+            for episode in episode_query:
+                delete_episodes.append(episode)
+
         episodes_deleted = None
         if delete_episodes:
             self.logger.debug("Episodes %s set for deletion for max allowed from file sync",
                               [i.id for i in delete_episodes])
             episodes_deleted = self.__episode_delete_file_input(delete_episodes)
+
         return episodes_downloaded, episodes_deleted
