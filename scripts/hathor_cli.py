@@ -109,6 +109,10 @@ def _episode_args(sub_parser):
     ep_update.add_argument('--allow-delete', action='store_false',
                            help='Allow deletion of file from file-sync')
 
+    ep_update_file = sub_parser.add_parser('update-file', help='Update episode file path')
+    ep_update_file.add_argument('episode_id', type=int, help='Episode ID')
+    ep_update_file.add_argument('file_path', help='New file path for episode')
+
     ep_sync = sub_parser.add_parser('sync', help='Sync episode data')
     ep_sync.add_argument('-i', '--include-podcasts', nargs='+', type=int, help='Include these podcasts')
     ep_sync.add_argument('-e', '--exclude-podcasts', nargs='+', type=int, help='Exclude these podcasts')
@@ -310,6 +314,9 @@ def episode_update(client, args):
         prevent_delete = False
     client.episode_update(args['episode_id'], prevent_delete=prevent_delete)
 
+def episode_update_file_path(client, args):
+    client.episode_update_file_path(args['episode_id'], args['file_path'])
+
 def episode_cleanup(client, _):
     client.database_cleanup()
 
@@ -338,6 +345,7 @@ FUNCTION_MAPPING = {
         'delete' : episode_delete,
         'delete-file' : episode_delete_file,
         'update' : episode_update,
+        'update-file' : episode_update_file_path,
         'cleanup' : episode_cleanup,
         'sync' : episode_sync,
     }

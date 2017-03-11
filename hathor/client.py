@@ -601,6 +601,36 @@ class HathorClient(object):
         self.db_session.commit()
         self.logger.info("Episode updated:%s", episode.id)
 
+    def episode_update_file_path(self, episode_id, file_path):
+        '''
+        Update episode file path
+        episode_id          : ID of episode
+        file_path           : File path where episode will be moved
+
+        Returns: null
+        '''
+        episode = self.db_session.query(PodcastEpisode).get(episode_id)
+        if not episode:
+            self._fail("Podcast Episode not found for ID:%s" % episode_id)
+        self._check_argument_type(file_path, [basestring], 'File path must be string type')
+        file_path = os.path.abspath(file_path)
+        path_directory, basename = os.path.split(file_path)
+        # File cannot move out of podcast file location
+        podcast = self.db_session.query(Podcast).get(episode.podcast_id)
+        if path_directory != podcast.file_location:
+            self._fail("Podcast Episode cannot be moved out of"
+                       " podcast file location:%s" % podcast.file_location)
+        # Make sure file extension has not changed
+        _, ext = os.path.splitext(basename)
+        _, original_ext = os.path.splitext(episode.file_path)
+        if ext != original_ext:
+            self._fail("New file path for episode:%s must use"
+                       " extension:%s" % (episode.id, original_ext))
+        os.rename(episode.file_path, file_path)
+        episode.file_path = utils.clean_string(file_path)
+        self.logger.info("Update episode:%s file path to:%s", episode.id, file_path)
+        self.db_session.commit()
+
     def episode_delete(self, episode_input, delete_files=True):
         '''
         Delete one or many podcast episodes

@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+import os
 
 import httpretty
 import mock
@@ -350,6 +351,11 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             self.client.episode_update(1)
         self.check_error_message('Podcast Episode not found for ID:1', error)
 
+    def test_episode_update_file_path_fail(self):
+        with self.assertRaises(HathorException) as error:
+            self.client.episode_update_file_path(1, 'foo.foo')
+        self.check_error_message('Podcast Episode not found for ID:1', error)
+
     @httpretty.activate
     def test_episode_prevent_deletion(self):
         # download only one podcast episode
@@ -412,6 +418,54 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
                 self.client.podcast_file_sync()
                 self.assert_length(self.client.episode_list(), 2)
+
+    @httpretty.activate
+    def test_episode_update_file_path(self):
+        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
+            url = urls.soundcloud_track_list(podcast['broadcast_id'],
+                                             self.client.soundcloud_client_id)
+            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
+            self.client.episode_sync(max_episode_sync=0)
+            episode_list = self.client.episode_list(only_files=False)
+            with test_utils.temp_audio_file() as mp3_body:
+                test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
+                self.client.podcast_file_sync()
+
+            # make sure you cannot change file extension
+            # in this case, from mp3 to foo
+            episode = self.client.episode_show(episode_list[0]['id'])
+            new_file_dir, _ = os.path.split(episode[0]['file_path'])
+            with self.assertRaises(HathorException) as error:
+                self.client.episode_update_file_path(episode_list[0]['id'],
+                                                     os.path.join(new_file_dir, 'foo.foo'))
+            self.check_error_message('New file path for episode:%s must'
+                                     ' use extension:.mp3' % episode_list[0]['id'],
+                                     error)
+            # make sure you cannot change podcast file location
+            with test_utils.temp_dir() as temp_dir:
+                with self.assertRaises(HathorException) as error:
+                    self.client.episode_update_file_path(episode_list[0]['id'],
+                                                         os.path.join(temp_dir, 'foo.mp3'))
+                self.check_error_message('Podcast Episode cannot be moved out'
+                                         ' of podcast file location:%s' % podcast['file_location'],
+                                         error)
+
+            # update episode to valid path, make sure file exists
+            # and that database is updated
+            new_file_path = os.path.join(new_file_dir, 'foo.mp3')
+            self.client.episode_update_file_path(episode_list[0]['id'],
+                                                 new_file_path)
+
+            episode = self.client.episode_show(episode_list[0]['id'])
+            self.assertTrue(os.path.isfile(new_file_path))
+            self.assertEqual(episode[0]['file_path'], new_file_path)
+
+            # delete episode file, make sure list is empty
+            self.client.episode_delete(episode_list[0]['id'])
+            self.assert_length(self.client.episode_list(), 0)
+
+            # assert file is actually deleted
+            self.assertFalse(os.path.isfile(new_file_path))
 
     @httpretty.activate
     def test_file_sync_make_sure_all_episodes_deleted(self):
