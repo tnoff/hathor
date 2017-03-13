@@ -195,4 +195,4 @@ class TestHelper(unittest.TestCase):
                 self.fail("Key %s cannot be empty list" % key)
 
     def check_error_message(self, message, error):
-        self.assertTrue(message in error.exception)
+        self.assertEqual(message, str(error.exception))
