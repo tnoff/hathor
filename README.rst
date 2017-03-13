@@ -1,7 +1,7 @@
 ######
 Hathor
 ######
-Hathor is a python package that is designed to help you download and maintain podcast files.
+Hathor is a python package that is designed to help users download and maintain podcast files.
 
 
 ============
@@ -43,8 +43,8 @@ When the hathor client is initialized, certain variables must be specified. Thes
 are better documented in the codebase.
 
 These variables can also be loaded from a settings file. The default location of this settings file
-is in your home directory, under ``~/.hathor_settings.conf``. It can also be specified in the command line
-with the ``s`` flag.
+is the home directory, under ``~/.hathor_settings.conf``. It can also be specified in the command line
+with the ``-s`` flag.
 
 Setting options include:
 
@@ -71,7 +71,7 @@ Here is an example of what a settings file looks like::
 ----------------
 Podcast Archives
 ----------------
-When creating a new podcast record, you'll need to specify where the podcast will be downloaded
+When creating a new podcast record, users will need to specify where the podcast will be downloaded
 from, we call that the "archive". The following archives are supported:
 
 - Soundcloud
@@ -81,12 +81,12 @@ from, we call that the "archive". The following archives are supported:
 ******************************
 Soundcloud and Google API Keys
 ******************************
-To download podcasts from soundcloud and youtube, you will need to create credentials
+To download podcasts from soundcloud and youtube, users will need to create credentials
 that can be used for their APIs.
 
-For soundcloud you'll need a `client id <https://developers.soundcloud.com/>`_.
+For soundcloud users will need a `client id <https://developers.soundcloud.com/>`_.
 
-For youtube you'll need a `google api secret key <https://console.developers.google.com>`_.
+For youtube users will need a `google api secret key <https://console.developers.google.com>`_.
 
 These can be either placed in the settings file, or specified when initializing hathor.
 
@@ -105,66 +105,70 @@ the broadcast id will be the last portion of the url, in this case ``UCzQUP1qoWD
 --------------------
 Downloading Podcasts
 --------------------
-Once you have an archive type and broadcast id, you can create a new podcast record using the cli::
+With a archive type and broadcast id, users can then create a new podcast record using the cli::
 
     hathor podcast create 'podcast-name' "rss" "http://feeds.podtrac.com/xUnmFXZLuavF"
 
-After the podcast has been created, you can then run a "file-sync", which will check the web
-for new episodes, and then download the latest to your local machine::
+After the podcast has been created, users can then run a "file-sync", which will check the web
+for new episodes, and then download the latest to the local machine::
 
     hathor podcast file-sync
 
 You can then list the podcast episodes to check for new episodes::
 
+    # Will only list episodes with files
     hathor podcast episode list
+    # Will list all episodes
+    hathor podcast episode list --all
 
+Alternatively, you can sync podcast episodes without downloading them::
 
-----------------------------------------------------
-Download Extras : Max Allowed and Remove Commercials
-----------------------------------------------------
-There are additional flags used with podcasts to help better handle the media files.
+    hathor podcast episode sync
 
-The first of which is "max allowed", which controls how many podcast episodes are downloaded
-at any one time. For example, if max allowed is set to 5, hathor will download the five latest
+To download podcast episodes individually::
+
+    hathor podcast episode download <episode-id>
+
+-----------
+Max Allowed
+-----------
+The option "max allowed" controls how many podcast episode files are kept
+at one time. For example, if max allowed is set to 5, hathor will download the five latest
 episodes, and delete any that remain. Alternatively, this can be set to "None" to download all
 possible episodes.
 
-It is possible to prevent the deletion of a file from max allowed constrictions. To do this
-update the episode you wish to save and set ``prevent_delete`` to True. This is possible using the
-``hathor podcast episode update`` command.
+To set max allowed on a podcast::
 
+    hathor podcast update --max-allowed <max-allowed-int> <podcast-id>
 
-The second is "remove commercials", which will attempt to identify and remove commercial
-intervals from the downloaded media files. Note that this functionality will not work with
-youtube and is not supported.
+It is possible to prevent the deletion of a file from max allowed restrictions.
+If the user sets "prevent delete" to True, it will not be deleted by
+a file-sync command. To update the podcast episode use::
 
+    hathor podcast episode update --prevent-delete <episode-id>
+
+------------------
+Remove Commericals
+------------------
+The option "remove commercials", which will attempt to identify and remove commercial
+intervals from the downloaded media files (only works for mp3 files).
+
+To remove commericals for a podcast episodes upon download::
+
+    hathor podcast update --remove-commericals <podcast-id>
+
+-----------------------
+Episode filters Filters
+-----------------------
+Episode filters can be used to control which podcast episodes will be
+added to the database and downloaded via regexes.
+
+To add podcast filters::
+
+    hathor podcast filters create <podcast-id> <regex-filter>
 
 =====
 Tests
 =====
-To run the tests you'll have to install the additional packages in
+To run the tests install the additional packages in
 ``tests/requirements.txt``.
-
-================
-Database Scripts
-================
-Sub-major version bumps (for example: v0.2.3 --> v0.3.0) might contain database
-changes. Inside the ``database-scripts`` directory you can find scripts that can
-be run against an sqlite database in order to update the local database
-to the newest changes. These are not well tested.
-
-============
-Known Issues
-============
---------------
-Moviepy Issues
---------------
-I've found a couple of issues with moviepy that haven't been `fixed upstream
-<https://github.com/Zulko/moviepy/pull/225>`_.
-
-You specifically might see an error like the following::
-
-    result['video_fps'] = float(line[match.start():match.end()].split(' ')[1])
-    AttributeError: 'NoneType' object has no attribute 'start'
-
-If you see these problems I'd recommend installing `my fork <https://github.com/tnoff/moviepy.git>`_.
