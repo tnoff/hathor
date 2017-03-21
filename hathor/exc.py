@@ -6,3 +6,6 @@ class AudioFileException(Exception):
 
 class FunctionUndefined(Exception):
     pass
+
+class CLIException(HathorException):
+    pass

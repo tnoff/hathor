@@ -399,7 +399,7 @@ class HathorClient(object):
             podcasts_deleted.append(podcast.id)
         return podcasts_deleted
 
-    def podcast_title_filter_create(self, podcast_id, regex_string):
+    def filter_create(self, podcast_id, regex_string):
         '''
         Add a new title filter to podcast. When running an episode sync, if a title in the archive does
         not match the regex string, it will be ignored.
@@ -427,7 +427,7 @@ class HathorClient(object):
                          new_filter.id, podcast.id, regex_string)
         return new_filter.id
 
-    def podcast_title_filter_list(self, include_podcasts=None, exclude_podcasts=None):
+    def filter_list(self, include_podcasts=None, exclude_podcasts=None):
         '''
         List podcast title filters
         include_podcasts     :       Include only certain podcasts in results
@@ -448,14 +448,14 @@ class HathorClient(object):
             filters.append(title_filter.as_dict(self.datetime_output_format))
         return filters
 
-    def podcast_title_filter_delete(self, title_filter_input):
+    def filter_delete(self, filter_input):
         '''
         Delete one or many title filters
-        title_filter_input      :   Either a single int id, or a list of int ids
+        filter_input    :   Either a single int id, or a list of int ids
 
         Returns: list of ids of deleted podcast title filters
         '''
-        query = self._database_select(PodcastTitleFilter, title_filter_input)
+        query = self._database_select(PodcastTitleFilter, filter_input)
         return self.__podcast_title_filter_delete_input(query)
 
     def __podcast_title_filter_delete_input(self, filter_input):
@@ -768,7 +768,7 @@ class HathorClient(object):
                 episodes_deleted.append(episode.id)
         return episodes_deleted
 
-    def database_cleanup(self):
+    def episode_cleanup(self):
         '''
         Delete all podcast episode entries without a media file associated with them in order to clear room.
         Also runs the "VACUUM" command to recreate the database in order to shrink its file size

@@ -93,7 +93,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
             episode_title = youtube_archive1.DATA['items'][-1]['snippet']['title']
             first_item_title_regex = '^%s' % episode_title
-            self.client.podcast_title_filter_create(podcast['id'], first_item_title_regex)
+            self.client.filter_create(podcast['id'], first_item_title_regex)
 
             with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock):
                 httpretty.register_uri(httpretty.GET, url1,
@@ -502,7 +502,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 self.assertEqual(new_list[0]['id'], old_list[0]['id'])
 
     @httpretty.activate
-    def test_podcast_database_cleanup(self):
+    def test_podcast_episode_cleanup(self):
         # download only one podcast episode
         with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
             url = urls.soundcloud_track_list(podcast['broadcast_id'],
@@ -519,7 +519,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 all_episodes = self.client.episode_list(only_files=False)
                 self.assertTrue(len(all_episodes) > 1)
 
-                self.client.database_cleanup()
+                self.client.episode_cleanup()
                 all_episodes = self.client.episode_list(only_files=False)
                 self.assert_length(all_episodes, 1)
 

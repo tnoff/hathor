@@ -21,7 +21,7 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts' : [
-            'hathor = scripts.hathor_cli:main',
+            'hathor = hathor.cli:main',
             'audio-tool = scripts.audio_cli:main',
         ]
     },
