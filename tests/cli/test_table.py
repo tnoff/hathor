@@ -3,7 +3,7 @@ from StringIO import StringIO
 import mock
 
 from hathor import utils
-from hathor.cli import HandsomeTable
+from hathor.cli.common import HandsomeTable
 
 from tests import utils as test_utils
 

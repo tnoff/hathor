@@ -692,11 +692,15 @@ class HathorClient(object):
 
             # use artist name if possible
             artist_name = podcast['artist_name'] or podcast['name']
-
+            audio_tags = {
+                'artist' : artist_name,
+                'albumartist' : artist_name,
+                'album' : podcast['name'],
+                'title' : episode.title,
+                'date' : episode.date.strftime(self.datetime_output_format),
+            }
             try:
-                metadata.tags_update(output_path, artist=artist_name, album_artist=artist_name,
-                                     album=podcast['name'], title=episode.title,
-                                     date=episode.date.strftime(self.datetime_output_format))
+                metadata.tags_update(output_path, audio_tags)
                 self.logger.debug("Updated database audio tags for episode %s", episode.id)
             except AudioFileException as error:
                 self.logger.warn("Unable to update tags on file %s : %s", output_path, str(error))

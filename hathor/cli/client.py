@@ -1,12 +1,10 @@
 from ConfigParser import NoSectionError, NoOptionError, SafeConfigParser
-import argparse
 import copy
 import logging
 import sys
 
-from prettytable import PrettyTable
-
 from hathor import client, settings
+from hathor.cli.common import HandsomeTable, HathorArgparse, HathorCLI
 from hathor.exc import CLIException
 
 CLIENT_ARGS = [
@@ -37,41 +35,18 @@ LOG_SETTINGS_DICT = {
     'error' : logging.ERROR,
 }
 
-class HandsomeTable(PrettyTable):
-    def __init__(self, field_names, column_limit, **kwargs):
-        if column_limit == -1:
-            self.column_limit = None
-        self.column_limit = column_limit
-        super(HandsomeTable, self).__init__(field_names, **kwargs)
-
-    def add_row(self, row_data):
-        new_data = []
-        for column in row_data:
-            data = column
-            if isinstance(column, basestring) and self.column_limit is not None:
-                if len(column) > self.column_limit:
-                    data = column[0:self.column_limit]
-            new_data.append(data)
-        super(HandsomeTable, self).add_row(new_data)
-
-
-class CLI(object):
+class ClientCLI(HathorCLI):
     def __init__(self, **kwargs):
+        HathorCLI.__init__(self, **kwargs)
+
+        # Make sure args aren't being used twice
+        for key in ['column_limit', 'keys', 'sort_key',
+                    'module', 'command']:
+            kwargs.pop(key, None)
+
         client_args = {}
         for key in CLIENT_ARGS:
             client_args[key] = kwargs.pop(key, None)
-
-        self.column_limit = kwargs.pop('column_limit')
-        self.keys = kwargs.pop('keys', None)
-        if self.keys:
-            self.keys = self.keys.split(',')
-        self.sort_key = kwargs.pop('sort_key', None)
-
-        module = kwargs.pop('module')
-        command = kwargs.pop('command')
-
-        function_name = '%s_%s' % (module, command)
-        self.function_name = function_name.replace('-', '_')
 
         self.client = client.HathorClient(**client_args)
         self.kwargs = kwargs
@@ -166,12 +141,8 @@ class CLI(object):
                         raise CLIException("Invalid key:%s" % k)
                 item_list.append(value)
             table.add_row(item_list)
-        print table.get_string(sortby=self.sort_key, reversesort=True)
+        print table.get_string(sortby=self.sort_key, reversesort=True).encode('utf8')
 
-
-class HathorArgparse(argparse.ArgumentParser):
-    def error(self, message):
-        raise CLIException(message)
 
 def _podcast_args(sub_parser):
     podcast = sub_parser.add_parser('podcast', help='Podcast Module')
@@ -383,6 +354,10 @@ def generate_args(command_line_args):
     return args
 
 def main():
-    args = generate_args(sys.argv[1:])
-    command_line = CLI(**args)
+    try:
+        args = generate_args(sys.argv[1:])
+    except CLIException as error:
+        print "CLI Exception:", str(error)
+        return
+    command_line = ClientCLI(**args)
     command_line.run_command()

@@ -1,4 +1,5 @@
-from hathor import cli, client, settings, utils
+from hathor import client, settings, utils
+from hathor.cli import client as cli
 from hathor.exc import CLIException
 from tests import utils as test_utils
 

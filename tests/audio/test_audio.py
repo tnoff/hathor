@@ -34,18 +34,17 @@ class TestAudio(test_utils.TestHelper):
                 'title' : utils.random_string(),
                 'album' : utils.random_string(),
                 'performer'  : utils.random_string(),
-                'track_number' : '1/2',
-                'disc_number' : '1/1',
+                'tracknumber' : '1/2',
+                'discnumber' : '1/1',
                 'genre' : utils.random_string(),
                 'date' : '2015',
                 'copyright' : utils.random_string(),
-                'album_artist' : utils.random_string(),
+                'albumartist' : utils.random_string(),
             }
-            metadata.tags_update(temp, **args)
+            metadata.tags_update(temp, args)
             new_tags = metadata.tags_show(temp)
             self.assertEqual(args, new_tags)
-            for key in args:
-                metadata.tags_delete(temp, key)
+            metadata.tags_delete(temp, args.keys())
             new_tags = metadata.tags_show(temp)
             self.assertEqual(new_tags, {})
 
@@ -55,7 +54,7 @@ class TestAudio(test_utils.TestHelper):
                 'title' : utils.random_string(),
                 'album' : None,
             }
-            metadata.tags_update(temp, **args)
+            metadata.tags_update(temp, args)
             new_tags = metadata.tags_show(temp)
             self.assertEqual(new_tags, {'title' : args['title']})
 
@@ -65,10 +64,10 @@ class TestAudio(test_utils.TestHelper):
                 'title' : utils.random_string(),
                 'album' : utils.random_string(),
                 'artist' : utils.random_string(),
-                'album_artist' : utils.random_string(),
+                'albumartist' : utils.random_string(),
             }
-            metadata.tags_update(temp, **args)
-            metadata.tags_delete(temp, 'foo')
+            metadata.tags_update(temp, args)
+            metadata.tags_delete(temp, ['foo'])
             new_tags = metadata.tags_show(temp)
             self.assertEqual(args, new_tags)
 
@@ -77,8 +76,8 @@ class TestAudio(test_utils.TestHelper):
             args = {
                 'title' : utils.random_string(),
             }
-            metadata.tags_update(temp, **args)
-            metadata.tags_delete(temp, 'foo', 'bar')
+            metadata.tags_update(temp, args)
+            metadata.tags_delete(temp, ['foo', 'bar'])
             new_tags = metadata.tags_show(temp)
             self.assertEqual(new_tags, args)
 

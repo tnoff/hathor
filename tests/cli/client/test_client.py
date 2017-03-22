@@ -3,21 +3,11 @@ from StringIO import StringIO
 import mock
 
 from hathor import utils
-from hathor.cli import generate_args, load_settings, CLI
+from hathor.cli.client import generate_args, load_settings, ClientCLI
 from hathor.exc import CLIException
 from tests import utils as test_utils
 
-class MockClient(object):
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-
-    def podcast_delete(self, **kwargs): #pylint:disable=unused-argument,no-self-use
-        return [2, 5]
-
-    def podcast_update(self, **kwargs): #pylint:disable=unused-argument,no-self-use
-        return None
-
-class TestCLI(test_utils.TestHelper):
+class TestClientCLI(test_utils.TestHelper):
     def test_cli_class_no_results(self):
         kwargs = {
             'column_limit' : -1,
@@ -26,10 +16,13 @@ class TestCLI(test_utils.TestHelper):
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
-        with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
-            x = CLI(**kwargs)
-            x.run_command()
-        self.assertEqual("No items\n", mock_out.getvalue())
+        with mock.patch('hathor.client.HathorClient') as mock_class:
+            with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
+                instance = mock_class.return_value
+                instance.podcast_list.return_value = []
+                x = ClientCLI(**kwargs)
+                x.run_command()
+            self.assertEqual("No items\n", mock_out.getvalue())
 
     def test_keys(self):
         kwargs = {
@@ -39,15 +32,15 @@ class TestCLI(test_utils.TestHelper):
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
-        x = CLI(**kwargs)
+        x = ClientCLI(**kwargs)
         self.assertEqual(x.keys, None)
 
         kwargs['keys'] = 'foo'
-        x = CLI(**kwargs)
+        x = ClientCLI(**kwargs)
         self.assertEqual(x.keys, ['foo'])
 
         kwargs['keys'] = 'foo,bar'
-        x = CLI(**kwargs)
+        x = ClientCLI(**kwargs)
         self.assertEqual(x.keys, ['foo', 'bar'])
 
     def test_return_none(self):
@@ -62,7 +55,7 @@ class TestCLI(test_utils.TestHelper):
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
                 instance.podcast_list.return_value = None
-                x = CLI(**kwargs)
+                x = ClientCLI(**kwargs)
                 x.run_command()
             self.assertEqual(mock_out.getvalue(), '')
 
@@ -78,7 +71,7 @@ class TestCLI(test_utils.TestHelper):
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
                 instance.podcast_delete.return_value = [2, 5]
-                x = CLI(**kwargs)
+                x = ClientCLI(**kwargs)
                 x.run_command()
             self.assertEqual(mock_out.getvalue(), '2, 5\n')
 
@@ -94,7 +87,7 @@ class TestCLI(test_utils.TestHelper):
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
                 instance.podcast_file_sync.return_value = ([3, 6], [7, 9, 10])
-                x = CLI(**kwargs)
+                x = ClientCLI(**kwargs)
                 x.run_command()
             self.assertEqual(mock_out.getvalue(), '3, 6\n7, 9, 10\n')
 
@@ -119,7 +112,7 @@ class TestCLI(test_utils.TestHelper):
                     'name' : 'derp',
                 },
             ]
-            x = CLI(**kwargs)
+            x = ClientCLI(**kwargs)
             with self.assertRaises(CLIException) as error:
                 x.run_command()
             self.check_error_message("Invalid key:foo", error)
@@ -145,10 +138,10 @@ class TestCLI(test_utils.TestHelper):
                         'name' : 'derp',
                     },
                 ]
-                x = CLI(**kwargs)
+                x = ClientCLI(**kwargs)
                 x.run_command()
             self.assertEqual(mock_out.getvalue(),
-                             "+----+------+\n| id | name |\n+----+------+\n"
+                             "+----+------+\n| Id | Name |\n+----+------+\n"
                              "| 1  | foo  |\n| 2  | derp |\n+----+------+\n")
 
     def test_return_dict_list_with_pod_cache(self):
@@ -180,10 +173,10 @@ class TestCLI(test_utils.TestHelper):
                         'podcast_id' : 3,
                     },
                 ]
-                x = CLI(**kwargs)
+                x = ClientCLI(**kwargs)
                 x.run_command()
             self.assertEqual(mock_out.getvalue(),
-                             "+----+------+---------+\n| id | name | podcast "
+                             "+----+------+---------+\n| Id | Name | Podcast "
                              "|\n+----+------+---------+\n| 1  | foo  |  name1  "
                              "|\n| 2  | derp |  name1  |\n+----+------+---------+\n")
 
@@ -216,10 +209,10 @@ class TestCLI(test_utils.TestHelper):
                         'podcast' : 3,
                     },
                 ]
-                x = CLI(**kwargs)
+                x = ClientCLI(**kwargs)
                 x.run_command()
             self.assertEqual(mock_out.getvalue(),
-                             "+----+------+---------+\n| id | name | podcast "
+                             "+----+------+---------+\n| Id | Name | Podcast "
                              "|\n+----+------+---------+\n| 1  | foo  |  name1  "
                              "|\n| 2  | derp |  name1  |\n+----+------+---------+\n")
 

@@ -17,8 +17,8 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts' : [
-            'hathor = hathor.cli:main',
-            'audio-tool = scripts.audio_cli:main',
+            'hathor = hathor.cli.client:main',
+            'audio-tool = hathor.cli.audio:main',
         ]
     },
     packages=setuptools.find_packages(exclude=['tests']),
