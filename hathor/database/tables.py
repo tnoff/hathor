@@ -34,7 +34,6 @@ class Podcast(BASE):
     broadcast_id = Column(String, nullable=False)
     # optional args
     max_allowed = Column(Integer)
-    remove_commercial = Column(Boolean)
     file_location = Column(String(10*1024))
     artist_name = Column(String(256))
     automatic_episode_download = Column(Boolean)

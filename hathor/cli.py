@@ -184,7 +184,6 @@ def _podcast_args(sub_parser):
     pod_add.add_argument('broadcast_id', help='Broadcast ID')
     pod_add.add_argument('--max-allowed', type=int,
                          help='Maximum number of podcast episodes that will be downloaded to local machine')
-    pod_add.add_argument('--remove-commercials', action='store_true', help='Remove commercials upon downloading episodes')
     pod_add.add_argument('--file-location', help='Path where podcast episode files will be stored')
     pod_add.add_argument('--artist-name', help='Name of artist for media metadata tags')
     pod_add.add_argument('--no-auto-download', action='store_false',
@@ -208,12 +207,6 @@ def _podcast_args(sub_parser):
     pod_up.add_argument('--max-allowed', type=int,
                         help='Maximum number of podcast episodes that will be downloaded'\
                              'to local machine, use 0 to set to None/Unlimited')
-    remove_group = pod_up.add_mutually_exclusive_group()
-    remove_group.add_argument('--remove-commercials', action='store_true',
-                              help='Remove commercials upon downloading files')
-    remove_group.add_argument('--keep-commercials', action='store_false',
-                              dest='remove_commercials',
-                              help='Keep commercials upon downloading files')
     pod_up.add_argument('--artist-name', help='Name ofartist for media metadata tags')
     auto_group = pod_up.add_mutually_exclusive_group()
     auto_group.add_argument('--auto-download', action='store_true',

@@ -1,21 +1,12 @@
 import argparse
 import json
 
-from hathor.audio import editor, metadata
+from hathor.audio import metadata
 
 def parse_args():
     p = argparse.ArgumentParser(description='Random tools for audio files')
 
     sub = p.add_subparsers(dest='module', description='Module')
-
-    volumey = sub.add_parser('volume', help='Get graph/data about audio volume information')
-    volumey_sub = volumey.add_subparsers(dest='command', help='Command')
-    csvy = volumey_sub.add_parser('csv', help='Output volume data in CSV format')
-    csvy.add_argument('input_file', help='Audio input file')
-    csvy.add_argument('output_file', help='Audio output flie')
-    pngy = volumey_sub.add_parser('png', help='Output volume data in PNG format')
-    pngy.add_argument('input_file', help='Audio input file')
-    pngy.add_argument('output_file', help='Audio output flie')
 
     tagy = sub.add_parser('tags', help='Metadata tags for media files')
     tagy_sub = tagy.add_subparsers(dest='command', help='Command')
@@ -57,14 +48,6 @@ def parse_args():
 
     return p.parse_args()
 
-def volume_csv(args):
-    print 'Writing data to %s' % args.output_file
-    editor.volume_data_csv(args.input_file, args.output_file)
-
-def volume_png(args):
-    print 'Writing data to %s' % args.output_file
-    editor.volume_data_png(args.input_file, args.output_file)
-
 def tags_update(args):
     update_args = vars(args)
     update_args.pop('command')
@@ -92,10 +75,6 @@ def picture_update(args):
     print 'Updated picture for audio file:%s' % args.audio_file
 
 FUNCTION_MAPPING = {
-    'volume' : {
-        'csv' : volume_csv,
-        'png' : volume_png,
-    },
     'tags' : {
         'update' : tags_update,
         'show' : tags_show,

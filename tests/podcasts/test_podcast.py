@@ -125,24 +125,6 @@ class TestPodcast(utils.TestHelper):
             podcast = self.client.podcast_show(podcast['id'])[0]
             self.assertEqual(podcast['max_allowed'], 3)
 
-    def test_remove_commercial_values(self):
-        # make sure remove commercial values are set correctly
-        # .. upon creation and updates
-        with self.assertRaises(HathorException) as error:
-            with utils.temp_podcast(self.client, remove_commercials='foo'):
-                pass
-        self.check_error_message('Remove commercials must be boolean type - str type given', error)
-        with utils.temp_podcast(self.client, remove_commercials=True) as podcast:
-            self.assertEqual(podcast['remove_commercial'], True)
-
-            self.client.podcast_update(podcast['id'], remove_commercials=None)
-            podcast = self.client.podcast_show(podcast['id'])[0]
-            self.assertEqual(podcast['remove_commercial'], True)
-
-            self.client.podcast_update(podcast['id'], remove_commercials=False)
-            podcast = self.client.podcast_show(podcast['id'])[0]
-            self.assertEqual(podcast['remove_commercial'], False)
-
     @httpretty.activate
     def test_podcast_location_update(self):
         # check fails with invalid data

@@ -3,13 +3,11 @@ import os
 from mutagen.id3._util import ID3NoHeaderError
 import mock
 
-from hathor.audio import editor, metadata
+from hathor.audio import metadata
 from hathor import utils
 from hathor.exc import AudioFileException
 
 from tests import utils as test_utils
-from tests.audio.data import audio_volume_data
-from tests.audio.data import audio_volume_data_no_commercial
 
 def mutagen_mock(_, **__):
     return None
@@ -148,45 +146,3 @@ class TestAudio(test_utils.TestHelper):
                     self.assertTrue(actual_path.endswith('.png'))
                     # make sure file gets deleted
                     os.remove('%s.png' % new_temp_pic)
-
-    def test_generate_volume_data(self):
-        length = 12
-        with test_utils.temp_audio_file(open_data=False, duration=length) as temp_audio:
-            volume_data = editor.generate_audio_volume_array(temp_audio)
-            self.assert_length(volume_data, length - 1)
-
-    def test_volume_data_csv(self): #pylint:disable=no-self-use
-        with test_utils.temp_audio_file(open_data=False) as temp_audio:
-            with utils.temp_file(suffix='.csv') as temp_csv:
-                editor.volume_data_csv(temp_audio, temp_csv)
-
-    def test_volume_data_png(self): #pylint:disable=no-self-use
-        with test_utils.temp_audio_file(open_data=False) as temp_audio:
-            with utils.temp_file(suffix='.png') as temp_png:
-                editor.volume_data_png(temp_audio, temp_png)
-
-    def test_identify_commercials(self):
-        audio_data = audio_volume_data.DATA
-        commercial_intervals = editor.guess_commercial_intervals(audio_data)
-        self.assert_length(commercial_intervals, 4)
-        non_commercials = editor.invert_intervals(commercial_intervals, len(audio_data))
-        self.assert_length(non_commercials, 5)
-
-    def test_identify_commercials_returns_none(self):
-        audio_data = audio_volume_data_no_commercial.DATA
-        commercial_intervals = editor.guess_commercial_intervals(audio_data)
-        self.assert_length(commercial_intervals, 0)
-        non_commercials = editor.invert_intervals(commercial_intervals, len(audio_data))
-        self.assertEqual(non_commercials, [(0, len(audio_data) - 1)])
-
-    def test_fix_index_overlap(self):
-        index = [(2, 3), (4, 7), (5, 9)]
-        result = editor._fix_index_overlap(index) #pylint:disable=protected-access
-        self.assertEqual(result, [(2, 3), (4, 9)])
-
-        result = editor._fix_index_overlap([]) #pylint:disable=protected-access
-        self.assertEqual(result, [])
-
-        index = [(2, 3), (4, 7), (9, 12)]
-        result = editor._fix_index_overlap(index) #pylint:disable=protected-access
-        self.assertEqual(result, index)

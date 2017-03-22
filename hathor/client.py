@@ -7,8 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy import and_, desc, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
-
-from hathor.audio import editor, metadata
+from hathor.audio import metadata
 from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
 from hathor.exc import AudioFileException, HathorException
@@ -190,15 +189,13 @@ class HathorClient(object):
                 raise
 
     def podcast_create(self, archive_type, broadcast_id, podcast_name, max_allowed=None,
-                       remove_commercials=False, file_location=None, artist_name=None,
-                       automatic_download=True):
+                       file_location=None, artist_name=None, automatic_download=True):
         '''
         Create new podcast
         archive_type         :   Where podcast is downloaded from (rss/soundcloud/youtube)
         broadcast_id         :   Identifier of podcast by archive_type, such as youtube channel ID
         podcast_name         :   Name to identify podcast in database
         max_allowed          :   When syncing the podcast, keep the last N episodes(if none keep all)
-        remove_commercials   :   Attempt to remove commercials once audio files are downloaded
         file_location        :   Where podcast files will be stored
         artist_name          :   Name of artist to use when updating media file metadata
         automatic_download   :   Automatically download new episodes with file-sync
@@ -209,7 +206,6 @@ class HathorClient(object):
         self._check_argument_type(broadcast_id, basestring, 'Brodcast ID must be string type')
         self._check_argument_type(archive_type, basestring, 'Archive Type must be string type')
         self._check_argument_type(automatic_download, bool, 'Automatic download must be boolean type')
-        self._check_argument_type(remove_commercials, bool, 'Remove commercials must be boolean type')
         self._check_argument_type(max_allowed, [None, int], 'Max allowed must be None or int type')
         self._check_argument_type(file_location, [None, basestring], 'File location must be None or string type')
         self._check_argument_type(artist_name, [None, basestring], 'File location must be None or string type')
@@ -229,7 +225,6 @@ class HathorClient(object):
             'archive_type' : archive_type,
             'broadcast_id' : utils.clean_string(broadcast_id),
             'max_allowed' : max_allowed,
-            'remove_commercial' : remove_commercials,
             'file_location' : os.path.abspath(file_location),
             'artist_name' : utils.clean_string(artist_name),
             'automatic_episode_download' : automatic_download,
@@ -273,8 +268,7 @@ class HathorClient(object):
         return podcast_data
 
     def podcast_update(self, podcast_id, podcast_name=None, broadcast_id=None, archive_type=None,
-                       max_allowed=None, remove_commercials=None, artist_name=None,
-                       automatic_download=None):
+                       max_allowed=None, artist_name=None, automatic_download=None):
         '''
         Update a single podcast
         podcast_id           :   ID of podcast to edit
@@ -282,7 +276,6 @@ class HathorClient(object):
         broadcast_id         :   Identifier of podcast by archive_type, such as youtube channel ID
         podcast_name         :   Name to identify podcast in database
         max_allowed          :   When syncing the podcast, keep the last N episodes. Set to 0 for unlimited
-        remove_commercials   :   Attempt to remove commercials once audio files are downloaded
         artist_name          :   Name of artist to use when updating media file metadata
         automatic_download   :   Automatically download episodes with file-sync
 
@@ -319,10 +312,6 @@ class HathorClient(object):
             else:
                 pod.max_allowed = max_allowed
             self.logger.debug("Updating max allowed to %s for podcast %s", max_allowed, podcast_id)
-        if remove_commercials is not None:
-            self._check_argument_type(remove_commercials, bool, 'Remove commercials must be bool type')
-            self.logger.debug("Updating remove commercials to %s for podcast %s", remove_commercials, podcast_id)
-            pod.remove_commercial = remove_commercials
         if automatic_download is not None:
             self._check_argument_type(automatic_download, bool, 'Automatic download must be bool type')
             self.logger.debug("Updating automatic download to %s for podcast %s", automatic_download, podcast_id)
@@ -665,37 +654,6 @@ class HathorClient(object):
         query = self._database_select(PodcastEpisode, episode_input)
         return self.__episode_download_input(query)
 
-    def __remove_commercials(self, output_path):
-        with utils.temp_file(suffix='.jpg') as temp_picture:
-            # check whether or not to save picture cover
-            # function will throw exception if cant identify cover picture properly
-            save_cover_picture = True
-            try:
-                metadata.picture_extract(output_path, temp_picture)
-                self.logger.debug("Cover picture for file %s being saved to file %s", output_path, temp_picture)
-            except AudioFileException:
-                save_cover_picture = False
-                self.logger.warn("No cover picture found for file %s", output_path)
-            with utils.temp_file(suffix='.mp3', delete=False) as temp_audio:
-                self.logger.debug("Generating audio volume list for commercial identify")
-                volume_list = editor.generate_audio_volume_array(output_path)
-                self.logger.debug("Gathering commercial data for file %s", output_path)
-                commercial_intervals, non_commercial_intervals = \
-                        editor.commercial_identify(output_path, volume_list=volume_list)
-                self.logger.debug("Found commercial intervals %s in file %s, removing commercials",
-                                  commercial_intervals, output_path)
-                self.logger.debug("Writing new audio file %s with non commercial intervals %s",
-                                  temp_audio, non_commercial_intervals)
-                editor.commercial_remove(output_path, temp_audio, non_commercial_intervals, verbose=False)
-                self.logger.debug("Moving commercial free file %s back to original path %s", temp_audio, output_path)
-                if save_cover_picture:
-                    self.logger.debug("Reset cover picture on file %s from file %s", temp_audio, temp_picture)
-                    metadata.picture_update(temp_audio, temp_picture)
-                self.logger.debug("Moving contents of file %s back to correct path %s", temp_audio, output_path)
-                os.rename(temp_audio, output_path)
-                # make sure you get the right file size
-                return os.path.getsize(output_path)
-
     def __episode_download_input(self, episode_input):
         def build_episode_path(episode, podcast):
             pod_path = podcast['file_location']
@@ -727,9 +685,6 @@ class HathorClient(object):
                 self.logger.error("Unable to download episode:%s, skipping", episode.id)
                 continue
             self.logger.info("Downloaded episode %s data to file %s", episode.id, output_path)
-            if podcast['remove_commercial']:
-                self.logger.info("Removing commercials for episode:%s", episode.id)
-                download_size = self.__remove_commercials(output_path)
 
             episode.file_path = utils.clean_string(output_path)
             episode.file_size = download_size

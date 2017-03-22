@@ -8,11 +8,7 @@ setuptools.setup(
     install_requires=[
         'beautifulsoup4 >= 4.4.0',
         'httpretty >= 0.8.4',
-        'matplotlib >= 1.5.1',
-        'moviepy >= 0.2.2.11',
         'mutagen >= 1.34',
-        'numpy >= 1.10.4',
-        'Pillow >= 3.2.0',
         'python-dateutil >= 2.6.0',
         'requests >= 2.5.1',
         'SQLAlchemy >= 1.0.8',

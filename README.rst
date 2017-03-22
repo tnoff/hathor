@@ -147,16 +147,6 @@ a file-sync command. To update the podcast episode use::
 
     hathor podcast episode update --prevent-delete <episode-id>
 
-------------------
-Remove Commericals
-------------------
-The option "remove commercials", which will attempt to identify and remove commercial
-intervals from the downloaded media files (only works for mp3 files).
-
-To remove commericals for a podcast episodes upon download::
-
-    hathor podcast update --remove-commericals <podcast-id>
-
 -----------------------
 Episode filters Filters
 -----------------------

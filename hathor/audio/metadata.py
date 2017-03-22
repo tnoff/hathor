@@ -159,5 +159,6 @@ def picture_update(audio_file_path, image_path, encoding=3, picture_type=3, desc
         if key.startswith('APIC'):
             del audio_file[key]
 
-    audio_file['APIC'] = mutagen_id3.APIC(encoding=encoding, mime=mime, data=data, type=picture_type, desc=description)
+    audio_file['APIC'] = mutagen_id3.APIC(encoding=encoding, mime=mime, #pylint:disable=no-member
+                                          data=data, type=picture_type, desc=description)
     audio_file.save()

@@ -197,7 +197,6 @@ class TestPodcastArgs(test_utils.TestHelper):
         expected = {
             'module' : 'podcast',
             'command' : 'create',
-            'remove_commercials' : False,
             'file_location' : None,
             'artist_name' : None,
             'automatic_download' : True,
@@ -236,9 +235,6 @@ class TestPodcastArgs(test_utils.TestHelper):
 
         args = cli.parse_args(common_args + ['--max-allowed', '8'])
         self.assertEqual(args['max_allowed'], 8)
-
-        args = cli.parse_args(common_args + ['--remove-commercials'])
-        self.assertTrue(args['remove_commercials'])
 
         file_location = utils.random_string()
         args = cli.parse_args(common_args + ['--file-location', file_location])
@@ -336,17 +332,6 @@ class TestPodcastArgs(test_utils.TestHelper):
 
         args = cli.parse_args(common_args + ['--max-allowed', '11'])
         self.assertEqual(args['max_allowed'], 11)
-
-        args = cli.parse_args(common_args + ['--remove-commercials'])
-        self.assertTrue(args['remove_commercials'])
-        args = cli.parse_args(common_args + ['--keep-commercials'])
-        self.assertFalse(args['remove_commercials'])
-
-        with self.assertRaises(CLIException) as error:
-            cli.parse_args(common_args + ['--remove-commercials',
-                                          '--keep-commercials'])
-        self.check_error_message("argument --keep-commercials: not"
-                                 " allowed with argument --remove-commercials", error)
 
         args = cli.parse_args(common_args + ['--auto-download'])
         self.assertTrue(args['automatic_download'])

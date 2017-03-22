@@ -5,10 +5,8 @@ import os
 import httpretty
 import mock
 
-from hathor.audio import metadata
 from hathor.exc import HathorException
 from hathor.podcast import urls
-from hathor import utils
 
 from tests import utils as test_utils
 from tests.podcasts.data import history_on_fire
@@ -253,63 +251,6 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 # make sure episode list shows episode with only_files=True
                 episode_list = self.client.episode_list()
                 self.assert_length(episode_list, 1)
-
-    @httpretty.activate
-    def test_episode_download_remove_commercial(self):
-        # curl download used for rss and soundcloud
-        pod_args = {
-            'archive_type' : 'rss',
-            'max_allowed' : 1,
-            'remove_commercials' : True,
-        }
-        with test_utils.temp_podcast(self.client, broadcast_url=True, **pod_args) as podcast:
-            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
-            self.client.episode_sync()
-            episode_list = self.client.episode_list(only_files=False)
-            with test_utils.temp_audio_file() as mp3_body:
-                test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.episode_download(episode_list[0]['id'], )
-                episode = self.client.episode_show(episode_list[0]['id'])[0]
-                self.assert_not_none(episode['file_path'])
-                # make sure episode list shows episode with only_files=True
-                episode_list = self.client.episode_list()
-                self.assert_length(episode_list, 1)
-                self.assert_not_none(episode_list[0]['file_size'])
-                self.assertTrue(episode_list[0]['file_size'] > 0)
-
-    @httpretty.activate
-    def test_episode_download_remove_commercial_with_picture(self):
-        # curl download used for rss and soundcloud
-        pod_args = {
-            'archive_type' : 'rss',
-            'max_allowed' : 1,
-            'remove_commercials' : True,
-        }
-        with test_utils.temp_podcast(self.client, broadcast_url=True, **pod_args) as podcast:
-            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
-            self.client.episode_sync()
-            episode_list = self.client.episode_list(only_files=False)
-            with test_utils.temp_audio_file(open_data=False) as mp3_file:
-                with test_utils.temp_image_file() as image_file:
-                    metadata.picture_update(mp3_file, image_file)
-                    with open(mp3_file, 'r') as f:
-                        mp3_body = f.read()
-                        test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                        self.client.episode_download(episode_list[0]['id'], )
-                        episode = self.client.episode_show(episode_list[0]['id'])[0]
-                        self.assert_not_none(episode['file_path'])
-                        # make sure episode list shows episode with only_files=True
-                        episode_list = self.client.episode_list()
-                        self.assert_length(episode_list, 1)
-                        self.assert_not_none(episode_list[0]['file_size'])
-                        self.assertTrue(episode_list[0]['file_size'] > 0)
-
-                        # make sure image file is right
-                        with utils.temp_file(suffix='.jpg') as temper:
-                            metadata.picture_extract(episode_list[0]['file_path'], temper)
-                            with open(temper, 'r') as f:
-                                with open(image_file, 'r') as ff:
-                                    self.assertEqual(f.read(), ff.read())
 
     @httpretty.activate
     def test_episode_delete(self):
