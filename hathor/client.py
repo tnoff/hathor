@@ -53,7 +53,7 @@ def check_inputs(user_input):
                 return False, 'Input must be int type, %s given' % inputty
     return True, user_input
 
-def check_argument_type(value, types_allowed):
+def check_arguement_type(value, types_allowed):
     if not isinstance(types_allowed, list):
         types_allowed = [types_allowed]
     valid = False
@@ -156,8 +156,8 @@ class HathorClient(object):
             user_input = result
         return user_input
 
-    def _check_argument_type(self, user_input, types_allowed, message):
-        code, error_message = check_argument_type(user_input, types_allowed)
+    def _check_arguement_type(self, user_input, types_allowed, message):
+        code, error_message = check_arguement_type(user_input, types_allowed)
         if code is True:
             return
         else:
@@ -202,13 +202,13 @@ class HathorClient(object):
 
         Returns: Integer ID of created podcast
         '''
-        self._check_argument_type(podcast_name, basestring, 'Podcast name must be string type')
-        self._check_argument_type(broadcast_id, basestring, 'Brodcast ID must be string type')
-        self._check_argument_type(archive_type, basestring, 'Archive Type must be string type')
-        self._check_argument_type(automatic_download, bool, 'Automatic download must be boolean type')
-        self._check_argument_type(max_allowed, [None, int], 'Max allowed must be None or int type')
-        self._check_argument_type(file_location, [None, basestring], 'File location must be None or string type')
-        self._check_argument_type(artist_name, [None, basestring], 'File location must be None or string type')
+        self._check_arguement_type(podcast_name, basestring, 'Podcast name must be string type')
+        self._check_arguement_type(broadcast_id, basestring, 'Brodcast ID must be string type')
+        self._check_arguement_type(archive_type, basestring, 'Archive Type must be string type')
+        self._check_arguement_type(automatic_download, bool, 'Automatic download must be boolean type')
+        self._check_arguement_type(max_allowed, [None, int], 'Max allowed must be None or int type')
+        self._check_arguement_type(file_location, [None, basestring], 'File location must be None or string type')
+        self._check_arguement_type(artist_name, [None, basestring], 'File location must be None or string type')
 
         self._check_argument_oneof(archive_type, ARCHIVE_KEYS, 'Archive Type must be in accepted list of keys')
 
@@ -281,30 +281,30 @@ class HathorClient(object):
 
         Returns: null
         '''
-        self._check_argument_type(podcast_id, int, 'Podcast ID must be int type')
+        self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
         pod = self.db_session.query(Podcast).get(podcast_id)
         if not pod:
             self._fail("Podcast not found for ID:%s" % podcast_id)
 
         if podcast_name is not None:
-            self._check_argument_type(podcast_name, basestring, 'Podcast name must be string type or None')
+            self._check_arguement_type(podcast_name, basestring, 'Podcast name must be string type or None')
             self.logger.debug("Updating podcast name to %s for podcast %s", podcast_name, podcast_id)
             pod.name = utils.clean_string(podcast_name)
         if artist_name is not None:
-            self._check_argument_type(artist_name, basestring, 'Podcast name must be string type or None')
+            self._check_arguement_type(artist_name, basestring, 'Podcast name must be string type or None')
             self.logger.debug("Updating artist name to %s for podcast %s", artist_name, podcast_id)
             pod.artist_name = utils.clean_string(artist_name)
         if archive_type is not None:
-            self._check_argument_type(archive_type, basestring, 'Archive Type must be string type or None')
+            self._check_arguement_type(archive_type, basestring, 'Archive Type must be string type or None')
             self._check_argument_oneof(archive_type, ARCHIVE_KEYS, 'Archive Type must be in accepted list')
             self.logger.debug("Updating archive to %s for podcast %s", archive_type, podcast_id)
             pod.archive_type = archive_type
         if broadcast_id is not None:
-            self._check_argument_type(broadcast_id, basestring, 'Broadcast ID must be string type or None')
+            self._check_arguement_type(broadcast_id, basestring, 'Broadcast ID must be string type or None')
             self.logger.debug("Updating broadcast id to %s for podcast %s", broadcast_id, podcast_id)
             pod.broadcast_id = utils.clean_string(broadcast_id)
         if max_allowed is not None:
-            self._check_argument_type(max_allowed, int, 'Max allowed must be int type or None')
+            self._check_arguement_type(max_allowed, int, 'Max allowed must be int type or None')
             if max_allowed < 0:
                 self._fail('Max allowed must be positive integer or 0')
             if max_allowed == 0:
@@ -313,7 +313,7 @@ class HathorClient(object):
                 pod.max_allowed = max_allowed
             self.logger.debug("Updating max allowed to %s for podcast %s", max_allowed, podcast_id)
         if automatic_download is not None:
-            self._check_argument_type(automatic_download, bool, 'Automatic download must be bool type')
+            self._check_arguement_type(automatic_download, bool, 'Automatic download must be bool type')
             self.logger.debug("Updating automatic download to %s for podcast %s", automatic_download, podcast_id)
             pod.automatic_episode_download = automatic_download
 
@@ -333,8 +333,8 @@ class HathorClient(object):
 
         Returns: null
         '''
-        self._check_argument_type(podcast_id, int, 'Podcast ID must be int type')
-        self._check_argument_type(file_location, basestring, 'File location must be None or string type')
+        self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
+        self._check_arguement_type(file_location, basestring, 'File location must be None or string type')
         pod = self.db_session.query(Podcast).get(podcast_id)
         if not pod:
             self._fail("Podcast not found for ID:%s" % podcast_id)
@@ -398,8 +398,8 @@ class HathorClient(object):
 
         Returns: Integer id of created podcast title filter
         '''
-        self._check_argument_type(podcast_id, int, 'Podcast ID must be int type')
-        self._check_argument_type(regex_string, basestring, 'Regex string must be string type')
+        self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
+        self._check_arguement_type(regex_string, basestring, 'Regex string must be string type')
 
         podcast = self.db_session.query(Podcast).get(podcast_id)
         if not podcast:
@@ -467,7 +467,7 @@ class HathorClient(object):
         Returns: null
         '''
         include_podcasts, exclude_podcasts = self._check_includers(include_podcasts, exclude_podcasts)
-        self._check_argument_type(max_episode_sync, [None, int], 'Max episode sync must be None or int type')
+        self._check_arguement_type(max_episode_sync, [None, int], 'Max episode sync must be None or int type')
         self.__episode_sync_cluders(include_podcasts, exclude_podcasts, max_episode_sync=max_episode_sync)
         return True
 
@@ -537,8 +537,8 @@ class HathorClient(object):
 
         Returns: List of dictionaries for all episodes requested
         '''
-        self._check_argument_type(only_files, bool, 'Only Files must be boolean type')
-        self._check_argument_type(sort_date, bool, 'Sort date must be boolean type')
+        self._check_arguement_type(only_files, bool, 'Only Files must be boolean type')
+        self._check_arguement_type(sort_date, bool, 'Sort date must be boolean type')
         include_podcasts, exclude_podcasts = self._check_includers(include_podcasts, exclude_podcasts)
 
         query = self.db_session.query(PodcastEpisode)
@@ -583,7 +583,7 @@ class HathorClient(object):
         if not episode:
             self._fail("Podcast Episode not found for ID:%s" % episode_id)
 
-        self._check_argument_type(prevent_delete, [None, bool], 'Prevent delete must be None or boolean type')
+        self._check_arguement_type(prevent_delete, [None, bool], 'Prevent delete must be None or boolean type')
         if prevent_delete is not None:
             self.logger.debug("Updating prevent delete to %s for episode %s", prevent_delete, episode_id)
             episode.prevent_deletion = prevent_delete
@@ -601,7 +601,7 @@ class HathorClient(object):
         episode = self.db_session.query(PodcastEpisode).get(episode_id)
         if not episode:
             self._fail("Podcast Episode not found for ID:%s" % episode_id)
-        self._check_argument_type(file_path, [basestring], 'File path must be string type')
+        self._check_arguement_type(file_path, [basestring], 'File path must be string type')
         file_path = os.path.abspath(file_path)
         path_directory, basename = os.path.split(file_path)
         # File cannot move out of podcast file location

@@ -3,6 +3,7 @@ import logging
 
 import mock
 
+from hathor import client as client_class
 from hathor.exc import HathorException
 from hathor import utils
 from tests import utils as test_utils
@@ -127,3 +128,28 @@ class TestClient(test_utils.TestHelper):
             with self.assertRaises(HathorException) as error:
                 client._check_includers(['foo', 2, 3], 3) #pylint:disable=protected-access
             self.check_error_message('Input must be int type, foo given', error)
+
+    def test_arguement_type(self):
+        # test sme basic args that work
+        code, mess = client_class.check_arguement_type(True, bool)
+        self.assertTrue(code)
+        self.assertEqual(mess, 'Valid input')
+
+        code, mess = client_class.check_arguement_type('foo', basestring)
+        self.assertTrue(code)
+        self.assertEqual(mess, 'Valid input')
+
+        code, mess = client_class.check_arguement_type(3, int)
+        self.assertTrue(code)
+        self.assertEqual(mess, 'Valid input')
+
+        code, mess = client_class.check_arguement_type(3, basestring)
+        self.assertFalse(code)
+        self.assertEqual(mess, 'int type given')
+
+    def test_arguemnt_type_fails(self):
+        with test_utils.temp_client() as client_args:
+            client = client_args.pop('podcast_client')
+            with self.assertRaises(HathorException) as error:
+                client._check_arguement_type(3, basestring, 'pls no whyd you do this')
+            self.check_error_message("pls no whyd you do this - int type given", error)
