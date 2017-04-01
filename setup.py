@@ -13,6 +13,7 @@ setuptools.setup(
         'mutagen >= 1.34',
         'numpy >= 1.10.4',
         'Pillow >= 3.2.0',
+        'python-dateutil >= 2.6.0',
         'requests >= 2.5.1',
         'SQLAlchemy >= 1.0.8',
         'prettytable >= 0.7.2',
