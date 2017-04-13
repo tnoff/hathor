@@ -13,7 +13,7 @@ class AudioCLI(HathorCLI):
         self.kwargs = kwargs
         # make sure all common args arent used
         for key in ['column_limit', 'keys', 'sort_key',
-                    'command', 'module']:
+                    'command', 'module', 'reverse_sort']:
             self.kwargs.pop(key, None)
 
     def run_command(self):
@@ -32,10 +32,10 @@ class AudioCLI(HathorCLI):
             return
         # - Check to see if dict
         if isinstance(value, dict):
-            table = HandsomeTable(["Key", "Value"], self.column_limit)
+            table = HandsomeTable(["key", "value"], self.column_limit)
             for key, val in value.items():
                 table.add_row([key, val])
-            print table.get_string(sortby='Key', reversesort=True).encode('utf-8')
+            print table.get_string(sortby='key', reversesort=self.reverse_sort).encode('utf-8')
             return
 
         # - Check if list of strings
@@ -52,6 +52,7 @@ def parse_args(args):
                    type=int, help="Limit on length of columns in output")
     p.add_argument('-k', '--keys', help="Common seperated list of keys to show")
     p.add_argument('-sk', '--sort-key', help="Sort output based on key")
+    p.add_argument('-r', '--reverse-sort', action='store_true', help="Show table output in reverse order")
 
     sub = p.add_subparsers(dest='module', description='Module')
 

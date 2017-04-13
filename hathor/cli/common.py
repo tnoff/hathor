@@ -25,6 +25,12 @@ class HandsomeTable(PrettyTable):
             new_data.append(data)
         super(HandsomeTable, self).add_row(new_data)
 
+    def get_string(self, *args, **kwargs):
+        sort_key = kwargs.pop('sortby', None)
+        if sort_key:
+            splitter = sort_key.split('_')
+            kwargs['sortby'] = ' '.join(i.capitalize() for i in splitter)
+        return super(HandsomeTable, self).get_string(*args, **kwargs)
 
 class HathorCLI(object):
     def __init__(self, **kwargs):
@@ -34,12 +40,9 @@ class HathorCLI(object):
         self.keys = kwargs.pop('keys', None)
         if self.keys:
             self.keys = self.keys.split(',')
-        sort_key = kwargs.pop('sort_key', None)
-        if sort_key:
-            splitter = sort_key.split('_')
-            self.sort_key = ' '.join(i.capitalize() for i in splitter)
-        else:
-            self.sort_key = None
+        self.sort_key = kwargs.pop('sort_key', None)
+
+        self.reverse_sort = kwargs.pop('reverse_sort', False)
 
         module = kwargs.pop('module')
         command = kwargs.pop('command')

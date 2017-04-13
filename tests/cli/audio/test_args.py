@@ -13,6 +13,7 @@ class TestGlobalArgs(test_utils.TestHelper):
         self.assertEqual(args.pop('module'), 'tags')
         self.assertEqual(args.pop('command'), 'show')
         self.assertEqual(args.pop('column_limit'), settings.COLUMN_LIMIT_DEFAULT)
+        self.assertEqual(args.pop('reverse_sort'), False)
         args.pop('input_file', None)
         for key in ['keys', 'sort_key']:
             self.assertEqual(args.pop(key), None)

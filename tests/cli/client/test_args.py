@@ -22,6 +22,7 @@ class TestGlobalArgs(test_utils.TestHelper):
         self.assertEqual(args.pop('command'), 'list')
         self.assertEqual(args.pop('column_limit'), settings.COLUMN_LIMIT_DEFAULT)
         self.assertEqual(args.pop('console_logging'), False)
+        self.assertEqual(args.pop('reverse_sort'), False)
         null_args = ['database_file', 'logging_file', 'google_api_key',
                      'podcast_directory', 'keys', 'sort_key',
                      'datetime_output_format', 'console_logging_level',

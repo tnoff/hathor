@@ -41,7 +41,7 @@ class ClientCLI(HathorCLI):
 
         # Make sure args aren't being used twice
         for key in ['column_limit', 'keys', 'sort_key',
-                    'module', 'command']:
+                    'module', 'command', 'reverse_sort']:
             kwargs.pop(key, None)
 
         client_args = {}
@@ -141,7 +141,8 @@ class ClientCLI(HathorCLI):
                         raise CLIException("Invalid key:%s" % k)
                 item_list.append(value)
             table.add_row(item_list)
-        print table.get_string(sortby=self.sort_key, reversesort=True).encode('utf8')
+        print table.get_string(sortby=self.sort_key,
+                               reversesort=self.reverse_sort).encode('utf8')
 
 
 def _podcast_args(sub_parser):
@@ -297,6 +298,7 @@ def parse_args(args):
                              ', should be comma seperated list')
     parser.add_argument('-sk', '--sort-key',
                         help='Sort on key if output is list table')
+    parser.add_argument('-r', '--reverse-sort', action='store_true', help="Show table output in reverse")
 
     sub = parser.add_subparsers(description='Modules', dest='module')
 
