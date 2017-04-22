@@ -73,17 +73,6 @@ class ClientCLI(HathorCLI):
                 print 'Fail'
             return
 
-        if isinstance(value, int):
-            print value
-            return
-
-        if isinstance(value, tuple):
-            for integer_list in value:
-                if integer_list is None:
-                    continue
-                print ', '.join('%s' % item for item in integer_list)
-            return
-
         # Now assume list
         if len(value) == 0:
             print 'No items'

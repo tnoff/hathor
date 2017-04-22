@@ -90,11 +90,10 @@ class TestClient(test_utils.TestHelper):
         with test_utils.temp_dir(delete=False) as dir_temp:
             with test_utils.temp_client(podcast_directory=dir_temp) as client_args:
                 client = client_args.pop('podcast_client')
-                pod_id = client.podcast_create('rss', '1234', utils.random_string())
-                podcast = client.podcast_show(pod_id)
-                self.assertTrue(podcast[0]['file_location'].startswith(dir_temp))
-                os.rmdir(podcast[0]['file_location'])
-                client.podcast_delete(pod_id)
+                podcast = client.podcast_create('rss', '1234', utils.random_string())
+                self.assertTrue(podcast['file_location'].startswith(dir_temp))
+                os.rmdir(podcast['file_location'])
+                client.podcast_delete(podcast['id'])
 
     def test_check_user_input(self):
         # make sure only takes in single int or list of ints
@@ -151,5 +150,5 @@ class TestClient(test_utils.TestHelper):
         with test_utils.temp_client() as client_args:
             client = client_args.pop('podcast_client')
             with self.assertRaises(HathorException) as error:
-                client._check_arguement_type(3, basestring, 'pls no whyd you do this')
+                client._check_arguement_type(3, basestring, 'pls no whyd you do this') #pylint:disable=protected-access
             self.check_error_message("pls no whyd you do this - int type given", error)

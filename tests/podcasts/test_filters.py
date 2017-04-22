@@ -21,8 +21,8 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
             regex = common_utils.random_string()
             result = self.client.filter_create(podcast['id'], regex)
             filters = self.client.filter_list()
-            self.assertEqual(filters, [{'id' : result, 'podcast_id' : podcast['id'], 'regex_string' : regex}])
-            self.client.filter_delete(result)
+            self.assertEqual(filters, [{'id' : result['id'], 'podcast_id' : podcast['id'], 'regex_string' : regex}])
+            self.client.filter_delete(result['id'])
             self.assert_length(self.client.filter_list(), 0)
 
     def test_filter_deleted_with_podcast(self):
@@ -47,11 +47,11 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
 
                 include_pod1 = self.client.filter_list(include_podcasts=[podcast1['id']])
                 self.assert_length(include_pod1, 1)
-                self.assertEqual([result1], [i['id'] for i in include_pod1])
+                self.assertEqual([result1], [i for i in include_pod1])
 
                 exclude_pod1 = self.client.filter_list(exclude_podcasts=[podcast1['id']])
                 self.assert_length(exclude_pod1, 1)
-                self.assertEqual([result2], [i['id'] for i in exclude_pod1])
+                self.assertEqual([result2], [i for i in exclude_pod1])
 
     @httpretty.activate
     def test_filters_with_broadcast_update(self):

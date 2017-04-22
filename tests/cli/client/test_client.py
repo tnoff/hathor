@@ -75,22 +75,6 @@ class TestClientCLI(test_utils.TestHelper):
                 x.run_command()
             self.assertEqual(mock_out.getvalue(), '2, 5\n')
 
-    def test_return_tuple(self):
-        kwargs = {
-            'column_limit' : 100,
-            'module' : 'podcast',
-            'command' : 'sync',
-            'logging_file_level' : 10,
-            'console_logging_level' : 10,
-        }
-        with mock.patch('hathor.client.HathorClient') as mock_class:
-            with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
-                instance = mock_class.return_value
-                instance.podcast_sync.return_value = ([3, 6], [7, 9, 10])
-                x = ClientCLI(**kwargs)
-                x.run_command()
-            self.assertEqual(mock_out.getvalue(), '3, 6\n7, 9, 10\n')
-
     def test_return_bool_true(self):
         kwargs = {
             'column_limit' : 100,
@@ -122,22 +106,6 @@ class TestClientCLI(test_utils.TestHelper):
                 x = ClientCLI(**kwargs)
                 x.run_command()
             self.assertEqual("Fail\n", mock_out.getvalue())
-
-    def test_return_bool_int(self):
-        kwargs = {
-            'column_limit' : 100,
-            'module' : 'podcast',
-            'command' : 'create',
-            'logging_file_level' : 10,
-            'console_logging_level' : 10,
-        }
-        with mock.patch('hathor.client.HathorClient') as mock_class:
-            with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
-                instance = mock_class.return_value
-                instance.podcast_create.return_value = 3
-                x = ClientCLI(**kwargs)
-                x.run_command()
-            self.assertEqual("3\n", mock_out.getvalue())
 
     def test_return_dict_invalid_keys(self):
         kwargs = {

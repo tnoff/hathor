@@ -104,15 +104,15 @@ def temp_podcast(pod_client, broadcast_url=False, delete=True, **kwargs):
         else:
             broadcast_id = utils.random_string()
     with temp_dir() as temp:
-        result = pod_client.podcast_create(archive_type, broadcast_id,
-                                           podcast_name,
-                                           file_location=temp,
-                                           **kwargs)
+        podcast = pod_client.podcast_create(archive_type, broadcast_id,
+                                            podcast_name,
+                                            file_location=temp,
+                                            **kwargs)
         try:
-            yield pod_client.podcast_show(result)[0]
+            yield podcast
         finally:
             if delete:
-                pod_client.podcast_delete(result)
+                pod_client.podcast_delete(podcast['id'])
 
 class YoutubeClass(object):
     def __init__(self, options, mock_live=False, raise_error=False):

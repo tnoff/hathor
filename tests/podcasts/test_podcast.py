@@ -35,10 +35,9 @@ class TestPodcast(utils.TestHelper):
 
     def test_podcast_create_with_file_location(self):
         with utils.temp_dir(delete=False) as temp_dir:
-            pod_id = self.client.podcast_create('rss', '123', 'foo', file_location=temp_dir)
-            pod = self.client.podcast_show(pod_id)[0]
-            self.assertEqual(pod['file_location'], temp_dir)
-            self.client.podcast_delete(pod_id)
+            podcast = self.client.podcast_create('rss', '123', 'foo', file_location=temp_dir)
+            self.assertEqual(podcast['file_location'], temp_dir)
+            self.client.podcast_delete(podcast['id'])
 
     def test_podcast_multiple_crud(self):
         # check multiple outputs on show and delete

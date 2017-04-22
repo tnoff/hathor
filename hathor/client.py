@@ -200,7 +200,7 @@ class HathorClient(object):
         artist_name          :   Name of artist to use when updating media file metadata
         automatic_download   :   Automatically download new episodes with podcast sync
 
-        Returns: Integer ID of created podcast
+        Returns: Integer dict object representing created podcast
         '''
         self._check_arguement_type(podcast_name, basestring, 'Podcast name must be string type')
         self._check_arguement_type(broadcast_id, basestring, 'Brodcast ID must be string type')
@@ -241,7 +241,7 @@ class HathorClient(object):
 
         self.logger.debug("Ensuring podcast %d path exists %s", new_pod.id, file_location)
         self._ensure_path(file_location)
-        return new_pod.id
+        return new_pod.as_dict(self.datetime_output_format)
 
     def podcast_list(self):
         '''
@@ -279,7 +279,7 @@ class HathorClient(object):
         artist_name          :   Name of artist to use when updating media file metadata
         automatic_download   :   Automatically download episodes with podcast sync
 
-        Returns: null
+        Returns: dict object representing updated podcast
         '''
         self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
         pod = self.db_session.query(Podcast).get(podcast_id)
@@ -323,6 +323,8 @@ class HathorClient(object):
         except IntegrityError:
             self.db_session.rollback()
             self._fail('Cannot update podcast id:%s' % podcast_id)
+        return pod.as_dict(self.datetime_output_format)
+
 
     def podcast_update_file_location(self, podcast_id, file_location, move_files=True):
         '''
@@ -357,6 +359,7 @@ class HathorClient(object):
                 self.logger.info("Updating episode %s to path %s in db", episode.id, episode.file_path)
                 self.db_session.commit()
             self._remove_directory(old_podcast_dir)
+        return pod.as_dict(self.datetime_output_format)
 
     def podcast_delete(self, podcast_input, delete_files=True):
         '''
@@ -396,7 +399,7 @@ class HathorClient(object):
         podcast_id      :       ID of podcast to add filter to
         regex_string    :       Regex string to use when matching against an archive item title
 
-        Returns: Integer id of created podcast title filter
+        Returns: dict object representing new podcast filter
         '''
         self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
         self._check_arguement_type(regex_string, basestring, 'Regex string must be string type')
@@ -414,7 +417,7 @@ class HathorClient(object):
         self.db_session.commit()
         self.logger.info("Created new podcast filter:%s, podcast_id:%s and regex:%s",
                          new_filter.id, podcast.id, regex_string)
-        return new_filter.id
+        return new_filter.as_dict(self.datetime_output_format)
 
     def filter_list(self, include_podcasts=None, exclude_podcasts=None):
         '''
@@ -464,12 +467,11 @@ class HathorClient(object):
         max_episode_sync     :       Sync up to N number of episodes, to override each podcasts max allowed
                                      For unlimited number of episodes, use 0
 
-        Returns: null
+        Returns: list of dictionaries representing new episodes added
         '''
         include_podcasts, exclude_podcasts = self._check_includers(include_podcasts, exclude_podcasts)
         self._check_arguement_type(max_episode_sync, [None, int], 'Max episode sync must be None or int type')
-        self.__episode_sync_cluders(include_podcasts, exclude_podcasts, max_episode_sync=max_episode_sync)
-        return True
+        return self.__episode_sync_cluders(include_podcasts, exclude_podcasts, max_episode_sync=max_episode_sync)
 
     def __episode_sync_cluders(self, include_podcasts, exclude_podcasts,
                                max_episode_sync=None, automatic_sync=True):
@@ -481,6 +483,7 @@ class HathorClient(object):
             opts = (Podcast.id != pod for pod in exclude_podcasts)
             query = query.filter(and_(opts))
 
+        new_episodes = []
         for podcast in query:
             if not automatic_sync and not podcast.automatic_episode_download:
                 self.logger.warn("Skipping episode sync on podcast:%s", podcast.id)
@@ -520,12 +523,14 @@ class HathorClient(object):
                     self.db_session.commit()
                     self.logger.debug("Created new podcast episode %s with args %s", new_episode.id,
                                       ' -- '.join('%s-%s' % (k, v) for k, v in episode_args.items()))
+                    new_episodes.append(new_episode.as_dict(self.datetime_output_format))
                 except IntegrityError:
                     # if you attempt to add another episode with the same
                     # url, it will fail here, thats expected, we dont want
                     # duplicate episodes
                     self.db_session.rollback()
                     self.logger.debug("Podcast episode is duplicate, title was %s", episode_args['title'])
+        return new_episodes
 
     def episode_list(self, only_files=True, sort_date=False, include_podcasts=None, exclude_podcasts=None):
         '''
@@ -577,7 +582,7 @@ class HathorClient(object):
         episode_id           :   ID of episode to update
         prevent_deletion     :   Prevent deletion of episode from podcast sync
 
-        Returns: null
+        Returns: dict representing updated episodes
         '''
         episode = self.db_session.query(PodcastEpisode).get(episode_id)
         if not episode:
@@ -589,6 +594,7 @@ class HathorClient(object):
             episode.prevent_deletion = prevent_delete
         self.db_session.commit()
         self.logger.info("Episode updated:%s", episode.id)
+        return episode.as_dict(self.datetime_output_format)
 
     def episode_update_file_path(self, episode_id, file_path):
         '''
@@ -596,7 +602,7 @@ class HathorClient(object):
         episode_id          : ID of episode
         file_path           : File path where episode will be moved
 
-        Returns: null
+        Returns: dict representing updated episode
         '''
         episode = self.db_session.query(PodcastEpisode).get(episode_id)
         if not episode:
@@ -619,6 +625,7 @@ class HathorClient(object):
         episode.file_path = utils.clean_string(file_path)
         self.logger.info("Update episode:%s file path to:%s", episode.id, file_path)
         self.db_session.commit()
+        return episode.as_dict(self.datetime_output_format)
 
     def episode_delete(self, episode_input, delete_files=True):
         '''
@@ -649,7 +656,7 @@ class HathorClient(object):
         Download episode(s) to local machine
         episode_input    :   Either a single integer id or list of integer ids
 
-        Returns: List of integer IDs of episodes downloaded
+        Returns: List of dictionaries of episodes downloaded
         '''
         query = self._database_select(PodcastEpisode, episode_input)
         return self.__episode_download_input(query)
@@ -704,7 +711,7 @@ class HathorClient(object):
                 self.logger.debug("Updated database audio tags for episode %s", episode.id)
             except AudioFileException as error:
                 self.logger.warn("Unable to update tags on file %s : %s", output_path, str(error))
-            episodes_downloaded.append(episode.id)
+            episodes_downloaded.append(episode.as_dict(self.datetime_output_format))
         return episodes_downloaded
 
     def episode_delete_file(self, episode_input):
@@ -736,6 +743,7 @@ class HathorClient(object):
         self.db_session.commit()
         self.db_session.execute("VACUUM")
         self.logger.info("Database cleaned of uneeded episodes")
+        return True
 
     def podcast_sync(self, include_podcasts=None, exclude_podcasts=None,
                      sync_web_episodes=True, download_episodes=True):
@@ -746,7 +754,7 @@ class HathorClient(object):
         sync_web_episodes    :   Sync latest known podcast episodes with web
         download_episodes    :   Download new podcast episodes
 
-        Returns: tuple of (downloaded episodes, deleted episodes), will use null for either if nothing to return
+        Returns: null
         '''
         include_podcasts, exclude_podcasts = self._check_includers(include_podcasts, exclude_podcasts)
 
@@ -754,8 +762,8 @@ class HathorClient(object):
             self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
                                         automatic_sync=False)
         if download_episodes:
-            return self._podcast_download_episodes(include_podcasts, exclude_podcasts)
-        return None, None
+            self._podcast_download_episodes(include_podcasts, exclude_podcasts)
+        return None
 
     def _podcast_download_episodes(self, include_podcasts, exclude_podcasts):
         delete_episodes = []
@@ -789,11 +797,10 @@ class HathorClient(object):
                 download_episodes.append(episode)
 
         # Download episodes from query
-        episodes_downloaded = None
         if download_episodes:
             self.logger.debug("Episodes %s set for download from file sync",
                               [i.id for i in download_episodes])
-            episodes_downloaded = self.__episode_download_input(download_episodes)
+            self.__episode_download_input(download_episodes)
 
         # Find episodes to delete if there is max allowed on the podcast
         # Not all episodes may have been downloaded, so this should use
@@ -814,10 +821,8 @@ class HathorClient(object):
             for episode in episode_query:
                 delete_episodes.append(episode)
 
-        episodes_deleted = None
         if delete_episodes:
             self.logger.debug("Episodes %s set for deletion for max allowed from file sync",
                               [i.id for i in delete_episodes])
-            episodes_deleted = self.__episode_delete_file_input(delete_episodes)
-
-        return episodes_downloaded, episodes_deleted
+            self.__episode_delete_file_input(delete_episodes)
+        return None
