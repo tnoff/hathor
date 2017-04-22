@@ -153,7 +153,7 @@ class TestPodcast(utils.TestHelper):
                     self.assertNotEqual(podcast['file_location'], new_podcast['file_location'])
 
     @httpretty.activate
-    def test_podcast_file_sync_no_max_allowed(self):
+    def test_podcast_sync_no_max_allowed(self):
         # make sure no max allowed downloads all possible podcasts
         with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=None) as podcast:
             url = urls.soundcloud_track_list(podcast['broadcast_id'],
@@ -163,13 +163,13 @@ class TestPodcast(utils.TestHelper):
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:
                 utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 episode_list = self.client.episode_list()
                 self.assert_length(episode_list, 1)
                 self.assert_not_none(episode_list[0]['file_path'])
 
     @httpretty.activate
-    def test_podcast_file_sync_no_automatic_episode_download(self):
+    def test_podcast_sync_no_automatic_episode_download(self):
         # make sure no max allowed downloads all possible podcasts
         with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=None, automatic_download=False) as podcast:
             url = urls.soundcloud_track_list(podcast['broadcast_id'],
@@ -179,12 +179,12 @@ class TestPodcast(utils.TestHelper):
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:
                 utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 episode_list = self.client.episode_list()
                 self.assert_length(episode_list, 0)
 
     @httpretty.activate
-    def test_podcast_file_sync(self):
+    def test_podcast_sync(self):
         # download only one podcast episode
         with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
             url = urls.soundcloud_track_list(podcast['broadcast_id'],
@@ -195,7 +195,7 @@ class TestPodcast(utils.TestHelper):
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:
                 utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 episode_list = self.client.episode_list()
                 self.assert_not_none(episode_list[0]['file_path'])
                 first_episode_date = episode_list[0]['date']
@@ -207,7 +207,7 @@ class TestPodcast(utils.TestHelper):
                 episode_list = self.client.episode_list(only_files=False)
                 with utils.temp_audio_file() as mp3_body:
                     utils.mock_mp3_download(episode_list[1]['download_url'], mp3_body)
-                    self.client.podcast_file_sync()
+                    self.client.podcast_sync()
 
                     # make sure 2 episodes in db, but only 1 with a file path
                     episode_list = self.client.episode_list()
@@ -220,8 +220,8 @@ class TestPodcast(utils.TestHelper):
                                     datetime.strptime(first_episode_date, self.client.datetime_output_format))
 
     @httpretty.activate
-    def test_podcast_file_sync_include(self):
-        # create two podcasts, then run a file-sync that only includes one
+    def test_podcast_sync_include(self):
+        # create two podcasts, then run a podcast sync that only includes one
         # make sure any episodes created point back to that pod
         with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
             url = urls.soundcloud_track_list(podcast['broadcast_id'],
@@ -232,14 +232,14 @@ class TestPodcast(utils.TestHelper):
             with utils.temp_audio_file() as mp3_body:
                 utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
                 with utils.temp_podcast(self.client):
-                    self.client.podcast_file_sync(include_podcasts=[podcast['id']], )
+                    self.client.podcast_sync(include_podcasts=[podcast['id']], )
                     episode_list = self.client.episode_list()
                     self.assertTrue(len(episode_list) > 0)
                     for episode in episode_list:
                         self.assertEqual(podcast['id'], episode['podcast_id'])
 
     @httpretty.activate
-    def test_podcast_file_sync_exclude(self):
+    def test_podcast_sync_exclude(self):
         # create two podcasts, exclude one, make sure only that pod was updated
         with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast1:
             url = urls.soundcloud_track_list(podcast1['broadcast_id'],
@@ -250,7 +250,7 @@ class TestPodcast(utils.TestHelper):
             with utils.temp_audio_file() as mp3_body:
                 utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
                 with utils.temp_podcast(self.client) as podcast2:
-                    self.client.podcast_file_sync(exclude_podcasts=[podcast2['id']], )
+                    self.client.podcast_sync(exclude_podcasts=[podcast2['id']], )
                     episode_list = self.client.episode_list()
                     self.assertTrue(len(episode_list) > 0)
                     for episode in episode_list:
@@ -266,7 +266,7 @@ class TestPodcast(utils.TestHelper):
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:
                 utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 episode_list = self.client.episode_list()
                 # delete and make sure file is still there
                 self.client.podcast_delete(podcast['id'], delete_files=False)

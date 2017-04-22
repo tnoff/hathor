@@ -308,7 +308,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
                 test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 # mark episode to prevent deletion
                 self.client.episode_update(episode_list[0]['id'], prevent_delete=True)
 
@@ -321,7 +321,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
 
                 test_utils.mock_mp3_download(episode_list[1]['download_url'], mp3_body)
                 test_utils.mock_mp3_download(episode_list[2]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
 
                 episode_list = self.client.episode_list()
                 ep_ids = [i['id'] for i in episode_list]
@@ -331,7 +331,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 self.assertTrue(3 not in ep_ids)
 
     @httpretty.activate
-    def test_file_sync_dont_download_extra_episode(self):
+    def test_sync_dont_download_extra_episode(self):
         # run file sync with max allowed 2, 3 files available
         # update first episode with prevent delete
         # delete last episode that wasnt downloaded
@@ -345,7 +345,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             with test_utils.temp_audio_file() as mp3_body:
                 test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
                 test_utils.mock_mp3_download(episode_list[1]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
 
                 self.assert_length(self.client.episode_list(), 2)
                 # mark episode to prevent deletion
@@ -357,7 +357,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 url = urls.soundcloud_track_list(podcast['broadcast_id'],
                                                  self.client.soundcloud_client_id)
                 httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 self.assert_length(self.client.episode_list(), 2)
 
     @httpretty.activate
@@ -370,7 +370,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
                 test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
 
             # make sure you cannot change file extension
             # in this case, from mp3 to foo
@@ -409,7 +409,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             self.assertFalse(os.path.isfile(new_file_path))
 
     @httpretty.activate
-    def test_file_sync_make_sure_all_episodes_deleted(self):
+    def test_sync_make_sure_all_episodes_deleted(self):
         # run file sync with max allowed 1, 3 files available
         # set prevent delete to true on one episode
         # download extra 2 episodes that were not downloaded before
@@ -422,7 +422,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
                 test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 old_list = self.client.episode_list()
 
                 self.assert_length(old_list, 1)
@@ -437,7 +437,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 url = urls.soundcloud_track_list(podcast['broadcast_id'],
                                                  self.client.soundcloud_client_id)
                 httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 new_list = self.client.episode_list()
                 self.assert_length(new_list, 1)
                 self.assertEqual(new_list[0]['id'], old_list[0]['id'])
@@ -454,7 +454,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
                 test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 episode_list = self.client.episode_list()
                 self.assert_not_none(episode_list[0]['file_path'])
                 all_episodes = self.client.episode_list(only_files=False)
@@ -465,21 +465,21 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 self.assert_length(all_episodes, 1)
 
     @httpretty.activate
-    def test_file_sync_fails_doesnt_delete(self):
+    def test_sync_fails_doesnt_delete(self):
         with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=1) as podcast:
             url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
             with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock):
                 httpretty.register_uri(httpretty.GET, url1,
                                        body=json.dumps(youtube_archive1.DATA),
                                        content_type='application/json')
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 old_episodes = self.client.episode_list()
 
             with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock_error):
                 httpretty.register_uri(httpretty.GET, url1,
                                        body=json.dumps(youtube_archive1_new_item.DATA),
                                        content_type='application/json')
-                self.client.podcast_file_sync()
+                self.client.podcast_sync()
                 downloaded_episodes = self.client.episode_list()
 
             self.assert_length(downloaded_episodes, 1)

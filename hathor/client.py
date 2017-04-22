@@ -198,7 +198,7 @@ class HathorClient(object):
         max_allowed          :   When syncing the podcast, keep the last N episodes(if none keep all)
         file_location        :   Where podcast files will be stored
         artist_name          :   Name of artist to use when updating media file metadata
-        automatic_download   :   Automatically download new episodes with file-sync
+        automatic_download   :   Automatically download new episodes with podcast sync
 
         Returns: Integer ID of created podcast
         '''
@@ -277,7 +277,7 @@ class HathorClient(object):
         podcast_name         :   Name to identify podcast in database
         max_allowed          :   When syncing the podcast, keep the last N episodes. Set to 0 for unlimited
         artist_name          :   Name of artist to use when updating media file metadata
-        automatic_download   :   Automatically download episodes with file-sync
+        automatic_download   :   Automatically download episodes with podcast sync
 
         Returns: null
         '''
@@ -575,7 +575,7 @@ class HathorClient(object):
         '''
         Update episode information
         episode_id           :   ID of episode to update
-        prevent_deletion     :   Prevent deletion of episode from file-sync
+        prevent_deletion     :   Prevent deletion of episode from podcast sync
 
         Returns: null
         '''
@@ -737,8 +737,8 @@ class HathorClient(object):
         self.db_session.execute("VACUUM")
         self.logger.info("Database cleaned of uneeded episodes")
 
-    def podcast_file_sync(self, include_podcasts=None, exclude_podcasts=None,
-                          sync_web_episodes=True, download_episodes=True):
+    def podcast_sync(self, include_podcasts=None, exclude_podcasts=None,
+                     sync_web_episodes=True, download_episodes=True):
         '''
         Updates the media files for podcasts. First sync with interwebs to check for newer episodes, then check to see if any need to be downloaded.
         include_podcasts     :   Only include these podcasts. Single ID or lists of IDs

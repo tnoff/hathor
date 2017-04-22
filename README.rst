@@ -109,10 +109,10 @@ With a archive type and broadcast id, users can then create a new podcast record
 
     hathor podcast create 'podcast-name' "rss" "http://feeds.podtrac.com/xUnmFXZLuavF"
 
-After the podcast has been created, users can then run a "file-sync", which will check the web
+After the podcast has been created, users can then run a podcast sync, which will check the web
 for new episodes, and then download the latest to the local machine::
 
-    hathor podcast file-sync
+    hathor podcast sync
 
 You can then list the podcast episodes to check for new episodes::
 
@@ -143,7 +143,7 @@ To set max allowed on a podcast::
 
 It is possible to prevent the deletion of a file from max allowed restrictions.
 If the user sets "prevent delete" to True, it will not be deleted by
-a file-sync command. To update the podcast episode use::
+a podcast sync command. To update the podcast episode use::
 
     hathor podcast episode update --prevent-delete <episode-id>
 

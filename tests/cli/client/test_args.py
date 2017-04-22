@@ -369,18 +369,18 @@ class TestPodcastArgs(test_utils.TestHelper):
                                '2', 'foo', '--no-move'])
         self.assertFalse(args['move_files'])
 
-    def test_file_sync(self):
+    def test_podcast_sync(self):
         expected = {
             'module' : 'podcast',
-            'command' : 'file-sync',
+            'command' : 'sync',
             'sync_web_episodes' : True,
             'download_episodes' : True,
         }
-        args = cli.parse_args(['podcast', 'file-sync'])
+        args = cli.parse_args(['podcast', 'sync'])
         for key, value in expected.items():
             self.assertEqual(args[key], value)
 
-        common_args = ['podcast', 'file-sync']
+        common_args = ['podcast', 'sync']
         args = cli.parse_args(common_args + ['--no-web-sync'])
         self.assertFalse(args['sync_web_episodes'])
 

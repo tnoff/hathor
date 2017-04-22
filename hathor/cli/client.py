@@ -160,7 +160,7 @@ def _podcast_args(sub_parser):
     pod_add.add_argument('--artist-name', help='Name of artist for media metadata tags')
     pod_add.add_argument('--no-auto-download', action='store_true',
                          dest='no_automatic_download',
-                         help='Do not automatically download new episodes with file-sync')
+                         help='Do not automatically download new episodes with podcast sync')
 
     podcast_sub.add_parser('list', help='List podcasts')
 
@@ -194,7 +194,7 @@ def _podcast_args(sub_parser):
     pod_update_file.add_argument('--no-move', action='store_false',
                                  dest='move_files', help='Do not move episode files')
 
-    pod_file = podcast_sub.add_parser('file-sync', help='Sync podcast episode files')
+    pod_file = podcast_sub.add_parser('sync', help='Sync podcast episode files')
     pod_file.add_argument('-i', '--include-podcasts', nargs='+', type=int, help='Include these podcasts')
     pod_file.add_argument('-e', '--exclude-podcasts', nargs='+', type=int, help='Exclude these podcasts')
     pod_file.add_argument('--no-web-sync', action='store_false',
@@ -246,10 +246,10 @@ def _episode_args(sub_parser):
     delete_group = ep_update.add_mutually_exclusive_group()
     delete_group.add_argument('--prevent-delete', action='store_true',
                               help='Prevent deletion of file from'
-                                   ' file-sync (will not be counted toward max allowed)')
+                                   ' podcast sync (will not be counted toward max allowed)')
     delete_group.add_argument('--allow-delete', action='store_true',
                               dest='no_prevent_delete',
-                              help='Allow deletion of file from file-sync')
+                              help='Allow deletion of file from podcast sync')
 
     ep_update_file = episodes_sub.add_parser('update-file-path', help='Update episode file path')
     ep_update_file.add_argument('episode_id', type=int, help='Episode ID')

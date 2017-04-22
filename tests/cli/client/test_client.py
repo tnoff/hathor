@@ -79,14 +79,14 @@ class TestClientCLI(test_utils.TestHelper):
         kwargs = {
             'column_limit' : 100,
             'module' : 'podcast',
-            'command' : 'file-sync',
+            'command' : 'sync',
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
         with mock.patch('hathor.client.HathorClient') as mock_class:
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
-                instance.podcast_file_sync.return_value = ([3, 6], [7, 9, 10])
+                instance.podcast_sync.return_value = ([3, 6], [7, 9, 10])
                 x = ClientCLI(**kwargs)
                 x.run_command()
             self.assertEqual(mock_out.getvalue(), '3, 6\n7, 9, 10\n')
