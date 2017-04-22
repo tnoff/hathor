@@ -58,7 +58,7 @@ class TestTagArgs(test_utils.TestHelper):
             'module' : 'tags',
             'command' : 'delete',
             'input_file' : 'foo',
-            'tags_list' : ['bar', 'derp'],
+            'tag_list' : ['bar', 'derp'],
         }
         args = cli.parse_args(['tags', 'delete', 'foo', 'bar', 'derp'])
         for key, value in expected.items():

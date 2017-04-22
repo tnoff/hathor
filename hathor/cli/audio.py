@@ -69,7 +69,7 @@ def parse_args(args):
 
     deletey = tagy_sub.add_parser('delete', help='Delete tags from audio file')
     deletey.add_argument('input_file', help='Audio file input')
-    deletey.add_argument('tags_list', nargs='+', help='Args to delete')
+    deletey.add_argument('tag_list', nargs='+', help='Args to delete')
 
     picy = sub.add_parser('picture', help='Pictures for audio file metadata')
     picy_sub = picy.add_subparsers(dest='command', help='Command')
