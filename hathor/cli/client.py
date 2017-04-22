@@ -158,8 +158,8 @@ def _podcast_args(sub_parser):
                          help='Maximum number of podcast episodes that will be downloaded to local machine')
     pod_add.add_argument('--file-location', help='Path where podcast episode files will be stored')
     pod_add.add_argument('--artist-name', help='Name of artist for media metadata tags')
-    pod_add.add_argument('--no-auto-download', action='store_false',
-                         dest='automatic_download',
+    pod_add.add_argument('--no-auto-download', action='store_true',
+                         dest='no_automatic_download',
                          help='Do not automatically download new episodes with file-sync')
 
     podcast_sub.add_parser('list', help='List podcasts')
@@ -184,8 +184,8 @@ def _podcast_args(sub_parser):
     auto_group.add_argument('--auto-download', action='store_true',
                             dest='automatic_download',
                             help='Automatically download new episodes with file sync')
-    auto_group.add_argument('--no-auto-download', action='store_false',
-                            dest='automatic_download',
+    auto_group.add_argument('--no-auto-download', action='store_true',
+                            dest='no_automatic_download',
                             help='Do not automatically download new episodes with file sync')
 
     pod_update_file = podcast_sub.add_parser('update-file-location', help='Update file location')
@@ -247,8 +247,8 @@ def _episode_args(sub_parser):
     delete_group.add_argument('--prevent-delete', action='store_true',
                               help='Prevent deletion of file from'
                                    ' file-sync (will not be counted toward max allowed)')
-    delete_group.add_argument('--allow-delete', action='store_false',
-                              dest='prevent_delete',
+    delete_group.add_argument('--allow-delete', action='store_true',
+                              dest='no_prevent_delete',
                               help='Allow deletion of file from file-sync')
 
     ep_update_file = episodes_sub.add_parser('update-file-path', help='Update episode file path')
@@ -306,7 +306,43 @@ def parse_args(args):
     _pod_filter_args(sub)
     _episode_args(sub)
 
-    return vars(parser.parse_args(args))
+    args = vars(parser.parse_args(args))
+
+    # Check args for automatic download, since can offset
+    auto = args.pop('automatic_download', None)
+    no_auto = args.pop('no_automatic_download', None)
+    # if neither was set to bool value, assume you dont have to set it
+    if not (auto is None and no_auto is None):
+        # else check which values was None
+
+        # if auto is None but no auto is set, assume create function
+        if auto is None and no_auto is not None:
+            args['automatic_download'] = not no_auto
+        # else assume both set, take value as whichever flag used
+        # assume mutually exlcusive argparse means only one is true
+        else:
+            if auto is True:
+                args['automatic_download'] = True
+            elif no_auto is True:
+                args['automatic_download'] = False
+            # assume neither was set, and use none value
+            else:
+                args['automatic_download'] = None
+
+    # Check args for prevent deletion
+    prevent = args.pop('prevent_delete', None)
+    no_prevent = args.pop('no_prevent_delete', None)
+    # if neither was set to bool, assume not needed
+    if not (prevent is None and no_prevent is None):
+        # assume one or other is true
+        if prevent is True:
+            args['prevent_delete'] = True
+        elif no_prevent is True:
+            args['prevent_delete'] = False
+        # if neither true set to None
+        else:
+            args['prevent_delete'] = None
+    return args
 
 def __get_logging_level(value, default):
     if value is None:

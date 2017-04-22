@@ -340,6 +340,9 @@ class TestPodcastArgs(test_utils.TestHelper):
         args = cli.parse_args(common_args + ['--no-auto-download'])
         self.assertFalse(args['automatic_download'])
 
+        args = cli.parse_args(common_args)
+        self.assert_none(args['automatic_download'])
+
         with self.assertRaises(CLIException) as error:
             cli.parse_args(common_args + ['--auto-download', '--no-auto-download'])
         self.check_error_message("argument --no-auto-download: not allowed"
@@ -534,6 +537,9 @@ class TestEpisodeArgs(test_utils.TestHelper):
         self.assertTrue(args['prevent_delete'])
         args = cli.parse_args(['episode', 'update', '5', '--allow-delete'])
         self.assertFalse(args['prevent_delete'])
+
+        args = cli.parse_args(['episode', 'update', '5'])
+        self.assert_none(args['prevent_delete'])
 
     def test_episode_update_file__path(self):
         expected = {
