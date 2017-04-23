@@ -1,12 +1,15 @@
 import os
 import logging
 
+import httpretty
 import mock
 
 from hathor import client as client_class
 from hathor.exc import HathorException
+from hathor.database.tables import PodcastEpisode
 from hathor import utils
 from tests import utils as test_utils
+from tests.podcasts.data import history_on_fire
 
 class MockLogging(object):
     def __init__(self, command_list):
@@ -30,6 +33,30 @@ class TestClient(test_utils.TestHelper):
             client = client_args.pop('podcast_client')
             level = client.logger.getEffectiveLevel()
             self.assertEqual(level, 30)
+
+    @httpretty.activate
+    def test_plugins_loaded(self):
+        def mock_plugin(self, result):
+            episode = self.db_session.query(PodcastEpisode).get(result[0]['id'])
+            episode.description = "foo-description"
+            self.db_session.commit()
+            return result
+
+        with test_utils.temp_client() as client_args:
+            client = client_args.pop('podcast_client')
+            client.plugins = [('episode_download', mock_plugin)]
+            with test_utils.temp_podcast(client, archive_type='rss', broadcast_url=True) as podcast:
+                httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
+
+                client.episode_sync()
+                episode_list = client.episode_list(only_files=False)
+                self.assert_not_length(episode_list, 0)
+
+                with test_utils.temp_audio_file() as mp3_body:
+                    test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
+                    client.episode_download(episode_list[0]['id'], )
+                episode = client.episode_show(episode_list[0]['id'])[0]
+                self.assertEqual(episode['description'], 'foo-description')
 
     def test_database_file(self):
         with utils.temp_file() as temp_file:

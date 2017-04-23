@@ -157,6 +157,43 @@ To add podcast filters::
 
     hathor podcast filters create <podcast-id> <regex-filter>
 
+
+=======
+Plugins
+=======
+
+Plugins can be added for most functions in the hathor client.
+
+Any plugins will have to be written in python and be placed in the
+``hathor/plugins/`` directory.
+
+Plugins should be named after the function you want them to run after,
+for example if the plugin function is named "episode_download", it will be
+run after the episode_download client function is complete.
+
+Plugin functions should take 2 arguments, the first being the hathor client
+(self), and the second being the result of the original client function.
+
+Plugins should also return a result, that will be treated as the result of the
+client function.
+
+Take the following plugin function for example::
+
+    # the following is in hathor/plugins/fix_title.py
+    from hathor.database.tables import PodcastEpisode
+
+    def episode_download(self, results):
+        for episode in results:
+            if episode['podcast_id'] in [2, 3, 5]:
+                episode['title'] = 'some fancy title'
+                episode_obj = self.db_session.query(PodcastEpisode).get(episode['id'])
+                episode_obj.title = 'some fancy title'
+                self.db_session.commit()
+        return results
+
+This will change the title of new episodes for certain podcasts. Note that for the change
+to be permanent, you'll have to change the episodes in the database.
+
 =====
 Tests
 =====

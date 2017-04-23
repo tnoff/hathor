@@ -73,6 +73,9 @@ class ClientCLI(HathorCLI):
                 print 'Fail'
             return
 
+        if isinstance(value, dict):
+            value = [value]
+
         # Now assume list
         if len(value) == 0:
             print 'No items'
