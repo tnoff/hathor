@@ -117,17 +117,17 @@ for new episodes, and then download the latest to the local machine::
 You can then list the podcast episodes to check for new episodes::
 
     # Will only list episodes with files
-    hathor podcast episode list
+    hathor episode list
     # Will list all episodes
-    hathor podcast episode list --all
+    hathor episode list --all
 
 Alternatively, you can sync podcast episodes without downloading them::
 
-    hathor podcast episode sync
+    hathor episode sync
 
 To download podcast episodes individually::
 
-    hathor podcast episode download <episode-id>
+    hathor episode download <episode-id>
 
 -----------
 Max Allowed
@@ -145,7 +145,7 @@ It is possible to prevent the deletion of a file from max allowed restrictions.
 If the user sets "prevent delete" to True, it will not be deleted by
 a podcast sync command. To update the podcast episode use::
 
-    hathor podcast episode update --prevent-delete <episode-id>
+    hathor episode update --prevent-delete <episode-id>
 
 -----------------------
 Episode filters Filters
@@ -155,7 +155,7 @@ added to the database and downloaded via regexes.
 
 To add podcast filters::
 
-    hathor podcast filters create <podcast-id> <regex-filter>
+    hathor filter create <podcast-id> <regex-filter>
 
 
 =======
