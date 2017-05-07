@@ -42,7 +42,7 @@ class ArchiveInterface(object):
     def broadcast_update(self, broadcast_id, max_results=None, filters=None): #pylint:disable=unused-argument,no-self-use
         raise FunctionUndefined("No broadcast update for class")
 
-    def episode_download(self, episode_url, output_prefix): #pylint:disable=unused-argument,no-self-use
+    def episode_download(self, download_url, output_prefix, **_): #pylint:disable=unused-argument,no-self-use
         raise FunctionUndefined("No episode download for class")
 
 class RSSManager(ArchiveInterface):
@@ -128,8 +128,8 @@ class SoundcloudManager(ArchiveInterface):
 
         return archive_data
 
-    def episode_download(self, episode_url, output_prefix, **_):
-        download_url = "%s?client_id=%s" % (episode_url, self.soundcloud_client_id)
+    def episode_download(self, download_url, output_prefix, **_):
+        download_url = "%s?client_id=%s" % (download_url, self.soundcloud_client_id)
         output_path = '%s.%s' % (output_prefix, self.episode_format)
         return output_path, curl_download(download_url, output_path)
 
@@ -196,6 +196,7 @@ class YoutubeManager(ArchiveInterface):
             'noplaylist' : True,
             'format': 'best',
             'progress_hooks' : [self.__check_filename_hook],
+            'logger' : self.logger,
         }
         try:
             with youtube_dl.YoutubeDL(options) as yt:

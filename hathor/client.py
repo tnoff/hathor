@@ -122,8 +122,7 @@ def check_arguement_type(value, types_allowed):
             break
     if not valid:
         return False, '%s type given' % str(value.__class__.__name__)
-    else:
-        return True, 'Valid input'
+    return True, 'Valid input'
 
 class HathorClient(object):
     def __init__(self, podcast_directory=None, datetime_output_format=settings.DEFAULT_DATETIME_FORMAT,
