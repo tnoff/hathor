@@ -8,7 +8,7 @@ from hathor.exc import HathorException
 from hathor.podcast import urls
 
 from tests import utils
-from tests.podcasts.data import history_on_fire
+from tests.podcasts.data import rss_feed
 from tests.podcasts.data import soundcloud_one_track, soundcloud_one_track_only_page
 from tests.podcasts.data import soundcloud_two_tracks
 
@@ -134,7 +134,7 @@ class TestPodcast(utils.TestHelper):
         # check works with valid data
         with utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True, max_allowed=2) as podcast:
             httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
-                                   body=history_on_fire.DATA)
+                                   body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:

@@ -49,4 +49,5 @@ def clean_string(stringy):
         return None
     s = stringy.lstrip(' ')
     s = s.rstrip(' ').rstrip('\n').rstrip(' ')
+    s = s.replace('\n', ' ').replace('\r', '')
     return s

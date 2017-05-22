@@ -9,7 +9,7 @@ from hathor.exc import HathorException
 from hathor.database.tables import PodcastEpisode
 from hathor import utils
 from tests import utils as test_utils
-from tests.podcasts.data import history_on_fire
+from tests.podcasts.data import rss_feed
 
 class MockLogging(object):
     def __init__(self, command_list):
@@ -46,7 +46,7 @@ class TestClient(test_utils.TestHelper):
             client = client_args.pop('podcast_client')
             client.plugins = [('episode_download', mock_plugin)]
             with test_utils.temp_podcast(client, archive_type='rss', broadcast_url=True) as podcast:
-                httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
+                httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=rss_feed.DATA)
 
                 client.episode_sync()
                 episode_list = client.episode_list(only_files=False)

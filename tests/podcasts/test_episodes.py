@@ -9,7 +9,7 @@ from hathor.exc import HathorException
 from hathor.podcast import urls
 
 from tests import utils as test_utils
-from tests.podcasts.data import history_on_fire
+from tests.podcasts.data import rss_feed
 from tests.podcasts.data import soundcloud_archive_page1, soundcloud_archive_page2
 from tests.podcasts.data import soundcloud_one_track
 from tests.podcasts.data import soundcloud_two_tracks, soundcloud_three_tracks
@@ -170,7 +170,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     @httpretty.activate
     def test_episode_list_with_sort_date(self):
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast:
-            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=rss_feed.DATA)
 
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False, sort_date=True)
@@ -182,7 +182,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     @httpretty.activate
     def test_episode_list_include_podcast_filter(self):
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast1:
-            httpretty.register_uri(httpretty.GET, podcast1['broadcast_id'], body=history_on_fire.DATA)
+            httpretty.register_uri(httpretty.GET, podcast1['broadcast_id'], body=rss_feed.DATA)
 
             with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=2) as podcast2:
                 page1_url = urls.soundcloud_track_list(podcast2['broadcast_id'],
@@ -200,7 +200,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     @httpretty.activate
     def test_episode_list_exclude_podcast_filter(self):
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast1:
-            httpretty.register_uri(httpretty.GET, podcast1['broadcast_id'], body=history_on_fire.DATA)
+            httpretty.register_uri(httpretty.GET, podcast1['broadcast_id'], body=rss_feed.DATA)
 
             with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=2) as podcast2:
                 page1_url = urls.soundcloud_track_list(podcast2['broadcast_id'],
@@ -219,7 +219,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     def test_episode_show(self):
         # check works with valid data
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast:
-            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=rss_feed.DATA)
 
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
@@ -240,7 +240,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     def test_episode_download_curl(self):
         # curl download used for rss and soundcloud
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast:
-            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
@@ -255,7 +255,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     @httpretty.activate
     def test_episode_delete(self):
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast:
-            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
@@ -272,7 +272,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     def test_episode_delete_file(self):
         # check works with valid input
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast:
-            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=history_on_fire.DATA)
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:

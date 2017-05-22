@@ -10,7 +10,7 @@ from hathor.podcast.archive import ArchiveInterface, RSSManager, SoundcloudManag
 from hathor import utils
 
 from tests import utils as test_utils
-from tests.podcasts.data import history_on_fire
+from tests.podcasts.data import rss_feed
 from tests.podcasts.data import soundcloud_one_track_cant_download
 from tests.podcasts.data import soundcloud_one_track
 from tests.podcasts.data import youtube_archive1
@@ -54,7 +54,7 @@ class TestArchive(test_utils.TestHelper):
     def test_rss_feed(self):
         url = 'http://example.%s.com' % utils.random_string()
         manager = RSSManager(logging, None, None)
-        httpretty.register_uri(httpretty.GET, url, body=history_on_fire.DATA)
+        httpretty.register_uri(httpretty.GET, url, body=rss_feed.DATA)
         episodes = manager.broadcast_update(url)
         self.assert_length(episodes, 12)
         for ep in episodes:
@@ -64,7 +64,7 @@ class TestArchive(test_utils.TestHelper):
     def test_rss_feed_non_200(self):
         url = 'http://example1.%s.com' % utils.random_string()
         manager = RSSManager(logging, None, None)
-        httpretty.register_uri(httpretty.GET, url, body=history_on_fire.DATA, status=400)
+        httpretty.register_uri(httpretty.GET, url, body=rss_feed.DATA, status=400)
         with self.assertRaises(HathorException) as error:
             manager.broadcast_update(url)
         self.check_error_message('Getting invalid status code:400 for rss feed', error)

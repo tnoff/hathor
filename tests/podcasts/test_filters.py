@@ -7,7 +7,7 @@ from hathor.podcast import urls
 from hathor import utils as common_utils
 
 from tests import utils
-from tests.podcasts.data import history_on_fire
+from tests.podcasts.data import rss_feed
 from tests.podcasts.data import soundcloud_two_tracks
 
 class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-methods
@@ -76,7 +76,7 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
         with utils.temp_podcast(self.client, archive_type='rss', broadcast_id=broadcast_url,
                                 max_allowed=3) as podcast:
             self.client.filter_create(podcast['id'], regex1)
-            httpretty.register_uri(httpretty.GET, broadcast_url, body=history_on_fire.DATA)
+            httpretty.register_uri(httpretty.GET, broadcast_url, body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             self.assert_length(episode_list, 1)
