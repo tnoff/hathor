@@ -87,11 +87,19 @@ class SoundcloudManager(ArchiveInterface):
         self.episode_format = 'mp3'
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None):
-        self.logger.debug("Getting episodes from soundcloud broadcast:%s", broadcast_id)
-        url = urls.soundcloud_track_list(broadcast_id, self.soundcloud_client_id)
         archive_data = []
-
         filters = filters or []
+
+        self.logger.debug("Getting account id for soundcloud channel name:%s", broadcast_id)
+        account_url = urls.soundcloud_account(broadcast_id, self.soundcloud_client_id)
+        req = requests.get(account_url)
+        if req.status_code != 200:
+            raise HathorException("Error getting soundcloud account id, request error:%s" % req.status_code)
+        data = json.loads(req.text)
+        account_id = data['id']
+
+        self.logger.debug("Getting episodes from soundcloud account id:%s", account_id)
+        url = urls.soundcloud_track_list(account_id, self.soundcloud_client_id)
 
         while True:
             req = requests.get(url)

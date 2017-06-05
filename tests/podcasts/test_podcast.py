@@ -9,6 +9,7 @@ from hathor.podcast import urls
 
 from tests import utils
 from tests.podcasts.data import rss_feed
+from tests.podcasts.data import soundcloud_account
 from tests.podcasts.data import soundcloud_one_track
 from tests.podcasts.data import soundcloud_two_tracks
 
@@ -184,9 +185,13 @@ class TestPodcast(utils.TestHelper):
     def test_podcast_sync(self):
         # download only one podcast episode
         with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track.DATA))
+            url1 = urls.soundcloud_account(podcast['broadcast_id'],
+                                           self.client.soundcloud_client_id)
+            real_id = soundcloud_account.DATA['id']
+            url2 = urls.soundcloud_track_list(real_id,
+                                              self.client.soundcloud_client_id)
+            httpretty.register_uri(httpretty.GET, url1, body=json.dumps(soundcloud_account.DATA))
+            httpretty.register_uri(httpretty.GET, url2, body=json.dumps(soundcloud_one_track.DATA))
             self.client.episode_sync()
 
             episode_list = self.client.episode_list(only_files=False)
@@ -197,9 +202,13 @@ class TestPodcast(utils.TestHelper):
                 self.assert_not_none(episode_list[0]['file_path'])
                 first_episode_date = episode_list[0]['date']
                 # add an additional, newer podcast, make sure things are deleted
-                url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                                 self.client.soundcloud_client_id)
-                httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_two_tracks.DATA))
+                url1 = urls.soundcloud_account(podcast['broadcast_id'],
+                                               self.client.soundcloud_client_id)
+                real_id = soundcloud_account.DATA['id']
+                url2 = urls.soundcloud_track_list(real_id,
+                                                  self.client.soundcloud_client_id)
+                httpretty.register_uri(httpretty.GET, url1, body=json.dumps(soundcloud_account.DATA))
+                httpretty.register_uri(httpretty.GET, url2, body=json.dumps(soundcloud_two_tracks.DATA))
                 self.client.episode_sync()
                 episode_list = self.client.episode_list(only_files=False)
                 with utils.temp_audio_file() as mp3_body:

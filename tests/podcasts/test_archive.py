@@ -10,6 +10,7 @@ from hathor import utils
 
 from tests import utils as test_utils
 from tests.podcasts.data import rss_feed
+from tests.podcasts.data import soundcloud_account
 from tests.podcasts.data import soundcloud_one_track_cant_download
 from tests.podcasts.data import soundcloud_one_track
 from tests.podcasts.data import youtube_archive1
@@ -30,12 +31,14 @@ class TestArchive(test_utils.TestHelper):
         sound_id = '123'
         broadcast = 'foo'
         manager = SoundcloudManager(logging, sound_id, None)
-        url = urls.soundcloud_track_list(broadcast, sound_id)
-        code = 400
-        httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track.DATA), status=code)
+        url1 = urls.soundcloud_account(broadcast, sound_id)
+        broadcast_real_id = soundcloud_account.DATA['id']
+        url2 = urls.soundcloud_track_list(broadcast_real_id, sound_id)
+        httpretty.register_uri(httpretty.GET, url1, body=json.dumps(soundcloud_account.DATA))
+        httpretty.register_uri(httpretty.GET, url2, body=json.dumps(soundcloud_one_track.DATA), status=400)
         with self.assertRaises(HathorException) as error:
             manager.broadcast_update(broadcast)
-        self.assertTrue('Error getting soundcloud track list, request error:%s' % code, error)
+        self.assertTrue('Error getting soundcloud track list, request error:%s' % 400, error)
 
     @httpretty.activate
     def test_youtube_error_is_400(self):
@@ -73,8 +76,11 @@ class TestArchive(test_utils.TestHelper):
         sound_id = '123'
         broadcast = 'foo'
         manager = SoundcloudManager(logging, sound_id, None)
-        url = urls.soundcloud_track_list(broadcast, sound_id)
-        httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track_cant_download.DATA))
+        url1 = urls.soundcloud_account(broadcast, sound_id)
+        broadcast_real_id = soundcloud_account.DATA['id']
+        url2 = urls.soundcloud_track_list(broadcast_real_id, sound_id)
+        httpretty.register_uri(httpretty.GET, url1, body=json.dumps(soundcloud_account.DATA))
+        httpretty.register_uri(httpretty.GET, url2, body=json.dumps(soundcloud_one_track_cant_download.DATA))
         episodes = manager.broadcast_update(broadcast)
         self.assert_length(episodes, 0)
 
