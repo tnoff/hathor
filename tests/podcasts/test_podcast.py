@@ -9,7 +9,7 @@ from hathor.podcast import urls
 
 from tests import utils
 from tests.podcasts.data import rss_feed
-from tests.podcasts.data import soundcloud_one_track, soundcloud_one_track_only_page
+from tests.podcasts.data import soundcloud_one_track
 from tests.podcasts.data import soundcloud_two_tracks
 
 class TestPodcast(utils.TestHelper):
@@ -154,26 +154,24 @@ class TestPodcast(utils.TestHelper):
     @httpretty.activate
     def test_podcast_sync_no_max_allowed(self):
         # make sure no max allowed downloads all possible podcasts
-        with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=None) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track_only_page.DATA))
+        with utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True, max_allowed=None) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:
-                utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
+                for episode in episode_list:
+                    utils.mock_mp3_download(episode['download_url'], mp3_body)
                 self.client.podcast_sync()
-                episode_list = self.client.episode_list()
-                self.assert_length(episode_list, 1)
-                self.assert_not_none(episode_list[0]['file_path'])
+                new_episode_list = self.client.episode_list()
+                self.assert_length(new_episode_list, len(episode_list))
 
     @httpretty.activate
     def test_podcast_sync_no_automatic_episode_download(self):
         # make sure no max allowed downloads all possible podcasts
-        with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=None, automatic_download=False) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track_only_page.DATA))
+        with utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True,
+                                max_allowed=None, automatic_download=False) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:
@@ -222,10 +220,9 @@ class TestPodcast(utils.TestHelper):
     def test_podcast_sync_include(self):
         # create two podcasts, then run a podcast sync that only includes one
         # make sure any episodes created point back to that pod
-        with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track.DATA))
+        with utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True, max_allowed=1) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:
@@ -240,10 +237,9 @@ class TestPodcast(utils.TestHelper):
     @httpretty.activate
     def test_podcast_sync_exclude(self):
         # create two podcasts, exclude one, make sure only that pod was updated
-        with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast1:
-            url = urls.soundcloud_track_list(podcast1['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track.DATA))
+        with utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True, max_allowed=1) as podcast1:
+            httpretty.register_uri(httpretty.GET, podcast1['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:
@@ -257,10 +253,9 @@ class TestPodcast(utils.TestHelper):
 
     @httpretty.activate
     def test_podcast_dont_delete_episode_files(self):
-        with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track.DATA))
+        with utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True, max_allowed=1) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             with utils.temp_audio_file() as mp3_body:

@@ -17,7 +17,7 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
             super(TestPodcastFilters, self).run(result)
 
     def test_filter_crud(self):
-        with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
+        with utils.temp_podcast(self.client, max_allowed=1) as podcast:
             regex = common_utils.random_string()
             result = self.client.filter_create(podcast['id'], regex)
             filters = self.client.filter_list()
@@ -26,7 +26,7 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
             self.assert_length(self.client.filter_list(), 0)
 
     def test_filter_deleted_with_podcast(self):
-        with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
+        with utils.temp_podcast(self.client, max_allowed=1) as podcast:
             regex = common_utils.random_string()
             result = self.client.filter_create(podcast['id'], regex)
         filter_list = self.client.filter_list()
@@ -40,7 +40,7 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
 
     def test_filter_list_cluders(self):
         with utils.temp_podcast(self.client, archive_type='rss', max_allowed=1) as podcast1:
-            with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast2:
+            with utils.temp_podcast(self.client, max_allowed=1) as podcast2:
                 regex = common_utils.random_string()
                 result1 = self.client.filter_create(podcast1['id'], regex)
                 result2 = self.client.filter_create(podcast2['id'], regex)

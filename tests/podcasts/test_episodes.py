@@ -11,8 +11,6 @@ from hathor.podcast import urls
 from tests import utils as test_utils
 from tests.podcasts.data import rss_feed
 from tests.podcasts.data import soundcloud_archive_page1, soundcloud_archive_page2
-from tests.podcasts.data import soundcloud_one_track
-from tests.podcasts.data import soundcloud_two_tracks, soundcloud_three_tracks
 from tests.podcasts.data import youtube_archive1, youtube_archive2
 from tests.podcasts.data import youtube_archive1_new_item
 
@@ -48,26 +46,18 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
 
     @httpretty.activate
     def test_episode_sync_maximum_episodes(self):
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=2) as podcast:
-            page1_url = urls.soundcloud_track_list(podcast['broadcast_id'], self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, page1_url, body=json.dumps(soundcloud_archive_page1.DATA),
-                                   content_type='application/json')
-            page2_url = soundcloud_archive_page1.DATA['next_href']
-            httpretty.register_uri(httpretty.GET, page2_url, body=json.dumps(soundcloud_archive_page2.DATA),
-                                   content_type='application/json')
+        with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True, max_allowed=2) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync(max_episode_sync=0)
             episode_list = self.client.episode_list(only_files=False)
-            self.assertEqual(len(episode_list), 4)
+            self.assertEqual(len(episode_list), 12)
 
     @httpretty.activate
     def test_episode_sync_set_number_episodes(self):
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=2) as podcast:
-            page1_url = urls.soundcloud_track_list(podcast['broadcast_id'], self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, page1_url, body=json.dumps(soundcloud_archive_page1.DATA),
-                                   content_type='application/json')
-            page2_url = soundcloud_archive_page1.DATA['next_href']
-            httpretty.register_uri(httpretty.GET, page2_url, body=json.dumps(soundcloud_archive_page2.DATA),
-                                   content_type='application/json')
+        with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True, max_allowed=2) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync(max_episode_sync=3)
             episode_list = self.client.episode_list(only_files=False)
             self.assertEqual(len(episode_list), 3)
@@ -76,14 +66,13 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     def test_episode_sync_exits_on_maximum(self):
         with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=1) as podcast:
             url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
-            with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock):
-                httpretty.register_uri(httpretty.GET, url1,
-                                       body=json.dumps(youtube_archive1.DATA),
-                                       content_type='application/json')
-                self.client.episode_sync()
+            httpretty.register_uri(httpretty.GET, url1,
+                                   body=json.dumps(youtube_archive1.DATA),
+                                   content_type='application/json')
+            self.client.episode_sync()
 
-                episode_list = self.client.episode_list(only_files=False)
-                self.assert_length(episode_list, 1)
+            episode_list = self.client.episode_list(only_files=False)
+            self.assert_length(episode_list, 1)
 
     @httpretty.activate
     def test_episode_passes_title_filters(self):
@@ -184,10 +173,10 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast1:
             httpretty.register_uri(httpretty.GET, podcast1['broadcast_id'], body=rss_feed.DATA)
 
-            with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=2) as podcast2:
-                page1_url = urls.soundcloud_track_list(podcast2['broadcast_id'],
-                                                       self.client.soundcloud_client_id)
-                httpretty.register_uri(httpretty.GET, page1_url, body=json.dumps(soundcloud_archive_page1.DATA),
+            with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=2) as podcast2:
+                url1 = urls.youtube_channel_get(podcast2['broadcast_id'], self.client.google_api_key)
+                httpretty.register_uri(httpretty.GET, url1,
+                                       body=json.dumps(youtube_archive1.DATA),
                                        content_type='application/json')
                 self.client.episode_sync()
                 episode_list_all = self.client.episode_list(only_files=False)
@@ -202,10 +191,10 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast1:
             httpretty.register_uri(httpretty.GET, podcast1['broadcast_id'], body=rss_feed.DATA)
 
-            with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=2) as podcast2:
-                page1_url = urls.soundcloud_track_list(podcast2['broadcast_id'],
-                                                       self.client.soundcloud_client_id)
-                httpretty.register_uri(httpretty.GET, page1_url, body=json.dumps(soundcloud_archive_page1.DATA),
+            with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=2) as podcast2:
+                url1 = urls.youtube_channel_get(podcast2['broadcast_id'], self.client.google_api_key)
+                httpretty.register_uri(httpretty.GET, url1,
+                                       body=json.dumps(youtube_archive1.DATA),
                                        content_type='application/json')
                 self.client.episode_sync()
                 episode_list_all = self.client.episode_list(only_files=False)
@@ -300,46 +289,41 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     @httpretty.activate
     def test_episode_prevent_deletion(self):
         # download only one podcast episode
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_one_track.DATA))
-            self.client.episode_sync()
+        with test_utils.temp_podcast(self.client, archive_type='rss',
+                                     broadcast_url=True, max_allowed=1) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
+            self.client.episode_sync(max_episode_sync=0)
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
+                # download 2nd episode in list
+                test_utils.mock_mp3_download(episode_list[1]['download_url'], mp3_body)
+                self.client.episode_download([episode_list[1]['id']])
+                # mark episode to prevent deletion
+                self.client.episode_update(episode_list[1]['id'], prevent_delete=True)
+
+                # Run podcast sync, assert only newest episode (1st one in list)
+                # .. is downloaded, and that older one (2nd in list) is still
+                # .. there after sync
+                httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                       body=rss_feed.DATA)
                 test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
                 self.client.podcast_sync()
-                # mark episode to prevent deletion
-                self.client.episode_update(episode_list[0]['id'], prevent_delete=True)
 
-                # add an additional, newer podcast, make sure prevented deletion episode stays
-                url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                                 self.client.soundcloud_client_id)
-                httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
-                self.client.episode_sync(max_episode_sync=0)
-                episode_list = self.client.episode_list(only_files=False)
+                new_list = self.client.episode_list()
+                episode_ids = [i['id'] for i in new_list]
 
-                test_utils.mock_mp3_download(episode_list[1]['download_url'], mp3_body)
-                test_utils.mock_mp3_download(episode_list[2]['download_url'], mp3_body)
-                self.client.podcast_sync()
-
-                episode_list = self.client.episode_list()
-                ep_ids = [i['id'] for i in episode_list]
-
-                self.assertTrue(2 in ep_ids)
-                self.assertTrue(1 in ep_ids)
-                self.assertTrue(3 not in ep_ids)
+                self.assertTrue(episode_list[0]['id'] in episode_ids)
+                self.assertTrue(episode_list[1]['id'] in episode_ids)
 
     @httpretty.activate
     def test_sync_dont_download_extra_episode(self):
-        # run file sync with max allowed 2, 3 files available
+        # run file sync with max allowed 2
         # update first episode with prevent delete
-        # delete last episode that wasnt downloaded
-        # run again with 3 tracks available, make sure no additional episodes are downloaded
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=2) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
+        # run again and make sure extra episode not downloaded
+        with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True, max_allowed=2) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync(max_episode_sync=0)
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
@@ -347,25 +331,29 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                 test_utils.mock_mp3_download(episode_list[1]['download_url'], mp3_body)
                 self.client.podcast_sync()
 
-                self.assert_length(self.client.episode_list(), 2)
+                old_list = self.client.episode_list()
+                self.assert_length(old_list, 2)
                 # mark episode to prevent deletion
                 # delete last episode
                 self.client.episode_update(episode_list[0]['id'], prevent_delete=True)
-                self.client.episode_delete(episode_list[-1]['id'])
 
                 # retry download
-                url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                                 self.client.soundcloud_client_id)
-                httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
+                httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                       body=rss_feed.DATA)
                 self.client.podcast_sync()
-                self.assert_length(self.client.episode_list(), 2)
+                new_list = self.client.episode_list()
+                self.assert_length(new_list, 2)
+
+                # make sure list same
+                for (count, ep) in enumerate(new_list):
+                    self.assertEqual(ep['id'], old_list[count]['id'])
 
     @httpretty.activate
     def test_episode_update_file_path(self):
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
+        with test_utils.temp_podcast(self.client, archive_type='rss',
+                                     broadcast_url=True, max_allowed=1) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync(max_episode_sync=0)
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
@@ -410,45 +398,45 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
 
     @httpretty.activate
     def test_sync_make_sure_all_episodes_deleted(self):
-        # run file sync with max allowed 1, 3 files available
+        # run file sync with max allowed 1
         # set prevent delete to true on one episode
         # download extra 2 episodes that were not downloaded before
         # run file sync again, make sure all episodes deleted
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
+        with test_utils.temp_podcast(self.client, archive_type='rss',
+                                     broadcast_url=True, max_allowed=1) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
             self.client.episode_sync(max_episode_sync=0)
             episode_list = self.client.episode_list(only_files=False)
             with test_utils.temp_audio_file() as mp3_body:
-                test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
-                self.client.podcast_sync()
+                test_utils.mock_mp3_download(episode_list[2]['download_url'], mp3_body)
+                self.client.episode_download([episode_list[2]['id']])
                 old_list = self.client.episode_list()
 
                 self.assert_length(old_list, 1)
                 # mark episode to prevent deletion
-                self.client.episode_update(episode_list[0]['id'], prevent_delete=True)
+                self.client.episode_update(episode_list[2]['id'], prevent_delete=True)
                 # download extra two episodes
+                test_utils.mock_mp3_download(episode_list[0]['download_url'], mp3_body)
                 test_utils.mock_mp3_download(episode_list[1]['download_url'], mp3_body)
-                test_utils.mock_mp3_download(episode_list[2]['download_url'], mp3_body)
-                self.client.episode_download([episode_list[1]['id'], episode_list[2]['id']])
+                self.client.episode_download([episode_list[0]['id'], episode_list[1]['id']])
 
                 # retry download
-                url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                                 self.client.soundcloud_client_id)
-                httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_three_tracks.DATA))
+                httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                       body=rss_feed.DATA)
                 self.client.podcast_sync()
                 new_list = self.client.episode_list()
-                self.assert_length(new_list, 1)
-                self.assertEqual(new_list[0]['id'], old_list[0]['id'])
+                self.assert_length(new_list, 2)
+                # make sure original episode in list
+                self.assertTrue(old_list[0]['id'] in [i['id'] for i in new_list])
 
     @httpretty.activate
     def test_podcast_episode_cleanup(self):
         # download only one podcast episode
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=1) as podcast:
-            url = urls.soundcloud_track_list(podcast['broadcast_id'],
-                                             self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url, body=json.dumps(soundcloud_two_tracks.DATA))
+        with test_utils.temp_podcast(self.client, archive_type='rss',
+                                     broadcast_url=True, max_allowed=1) as podcast:
+            httpretty.register_uri(httpretty.GET, podcast['broadcast_id'],
+                                   body=rss_feed.DATA)
 
             self.client.episode_sync(max_episode_sync=0)
             episode_list = self.client.episode_list(only_files=False)
