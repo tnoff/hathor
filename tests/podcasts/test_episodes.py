@@ -51,7 +51,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
                                    body=rss_feed.DATA)
             self.client.episode_sync(max_episode_sync=0)
             episode_list = self.client.episode_list(only_files=False)
-            self.assertEqual(len(episode_list), 12)
+            self.assertEqual(len(episode_list), 6)
 
     @httpretty.activate
     def test_episode_sync_set_number_episodes(self):

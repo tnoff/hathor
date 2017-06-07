@@ -71,7 +71,7 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
 
     @httpretty.activate
     def test_filters_with_broadcast_update_rss(self):
-        regex1 = '^EPISODE 11'
+        regex1 = '^EPISODE 5'
         broadcast_url = 'http://%s.com' % common_utils.random_string()
         with utils.temp_podcast(self.client, archive_type='rss', broadcast_id=broadcast_url,
                                 max_allowed=3) as podcast:

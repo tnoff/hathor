@@ -56,7 +56,7 @@ class TestArchive(test_utils.TestHelper):
         manager = RSSManager(logging, None, None)
         httpretty.register_uri(httpretty.GET, url, body=rss_feed.DATA)
         episodes = manager.broadcast_update(url)
-        self.assert_length(episodes, 12)
+        self.assert_length(episodes, 6)
         for ep in episodes:
             self.assert_dictionary(ep)
 
