@@ -2,7 +2,6 @@ import json
 import logging
 
 import httpretty
-import mock
 
 from hathor.exc import HathorException, FunctionUndefined
 from hathor.podcast import urls
@@ -88,6 +87,5 @@ class TestArchive(test_utils.TestHelper):
                                        google_key)
         httpretty.register_uri(httpretty.GET, url, body=json.dumps(youtube_one_item_not_video.DATA),
                                content_type='application/json')
-        with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock):
-            episodes = manager.broadcast_update(broadcast)
-            self.assert_length(episodes, 0)
+        episodes = manager.broadcast_update(broadcast)
+        self.assert_length(episodes, 0)

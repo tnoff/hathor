@@ -75,24 +75,6 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             self.assert_length(episode_list, 1)
 
     @httpretty.activate
-    def test_episode_passes_title_filters(self):
-        with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=1) as podcast:
-            url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
-            episode_title = youtube_archive1.DATA['items'][-1]['snippet']['title']
-            first_item_title_regex = '^%s' % episode_title
-            self.client.filter_create(podcast['id'], first_item_title_regex)
-
-            with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock):
-                httpretty.register_uri(httpretty.GET, url1,
-                                       body=json.dumps(youtube_archive1.DATA),
-                                       content_type='application/json')
-                self.client.episode_sync()
-                episode_list = self.client.episode_list(only_files=False)
-                self.assert_length(episode_list, 1)
-
-                self.assertEqual(episode_title, episode_list[0]['title'])
-
-    @httpretty.activate
     def test_episode_sync_and_download_youtube(self):
         with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=8) as podcast:
             url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)

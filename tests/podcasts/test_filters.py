@@ -9,6 +9,8 @@ from hathor import utils as common_utils
 from tests import utils
 from tests.podcasts.data import rss_feed
 from tests.podcasts.data import soundcloud_two_tracks
+from tests.podcasts.data import youtube_archive1
+
 
 class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-methods
     def run(self, result=None):
@@ -54,7 +56,7 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
                 self.assertEqual([result2], [i for i in exclude_pod1])
 
     @httpretty.activate
-    def test_filters_with_broadcast_update(self):
+    def test_filters_with_broadcast_update_soundcloud(self):
         two_track_data = soundcloud_two_tracks.DATA
         first_title = two_track_data['collection'][0]['title']
         regex1 = '^%s' % first_title
@@ -80,3 +82,20 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
             self.client.episode_sync()
             episode_list = self.client.episode_list(only_files=False)
             self.assert_length(episode_list, 1)
+
+    @httpretty.activate
+    def test_episode_passes_title_filters_youtube(self):
+        with utils.temp_podcast(self.client, archive_type='youtube', max_allowed=1) as podcast:
+            url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
+            episode_title = youtube_archive1.DATA['items'][-1]['snippet']['title']
+            first_item_title_regex = '^%s' % episode_title
+            self.client.filter_create(podcast['id'], first_item_title_regex)
+
+            httpretty.register_uri(httpretty.GET, url1,
+                                   body=json.dumps(youtube_archive1.DATA),
+                                   content_type='application/json')
+            self.client.episode_sync()
+            episode_list = self.client.episode_list(only_files=False)
+            self.assert_length(episode_list, 1)
+
+            self.assertEqual(episode_title, episode_list[0]['title'])
