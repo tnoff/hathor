@@ -25,8 +25,9 @@ def temp_file(name=None, suffix='', delete=True):
                     raise
 
 def normalize_name(name):
-    name = '_'.join(i.lower() for i in name.split(' '))
-    valid_chars = string.ascii_lowercase + string.digits + '_'
+    valid_chars = string.ascii_lowercase + string.digits
+    valid_chars += string.ascii_uppercase + '_' + ' '
+
     bad_chars = []
     for char in name:
         if char not in valid_chars:
