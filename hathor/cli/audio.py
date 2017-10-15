@@ -41,7 +41,12 @@ class AudioCLI(HathorCLI):
         # - Check if list of strings
         if isinstance(value, list):
 
-            if isinstance(value[0], basestring):
+            try:
+                first_value = value[0]
+            except IndexError:
+                return
+
+            if isinstance(first_value, basestring):
                 print ', '.join('%s' % i for i in value)
                 return
 
