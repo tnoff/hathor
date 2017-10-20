@@ -765,7 +765,7 @@ class HathorClient(object):
 
             output_path, download_size = manager.episode_download(episode.download_url,
                                                                   episode_path_prefix)
-            if output_path is None and download_size is None:
+            if output_path is None or (download_size is None or download_size is 0):
                 self.logger.error("Unable to download episode:%s, skipping", episode.id)
                 continue
             self.logger.info("Downloaded episode %s data to file %s", episode.id, output_path)

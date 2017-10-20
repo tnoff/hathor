@@ -14,13 +14,18 @@ from hathor import utils
 
 def curl_download(episode_url, output_path):
     req = requests.get(episode_url, stream=True)
-    download_size = int(req.headers.get('content-length'))
+    track_download_size = False
+    try:
+        download_size = int(req.headers.get('content-length'))
+    except TypeError:
+        track_download_size = True
+        download_size = 0
     chunk_size = 16 * 1024
     with open(output_path, 'wb') as file_output:
-        written_data = 0
         for chunk in req.iter_content(chunk_size=chunk_size):
             file_output.write(chunk)
-            written_data += chunk_size
+            if track_download_size:
+                download_size += len(chunk)
     return download_size
 
 def verify_title_filters(filters, title):
