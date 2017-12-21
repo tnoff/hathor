@@ -181,6 +181,8 @@ class HathorClient(object):
 
     def _database_select(self, table, given_input):
         given_input = self._check_input(given_input)
+        if not given_input:
+            return []
         return self.db_session.query(table).filter(table.id.in_(given_input))
 
     def _fail(self, message):
