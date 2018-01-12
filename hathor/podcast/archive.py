@@ -69,11 +69,18 @@ class RSSManager(ArchiveInterface):
             if max_results and len(episodes) >= max_results:
                 self.logger.debug("Exiting rss update early, at max results:%s", max_results)
                 return episodes
+
+            # Description not important so dont worry if its not there
+            try:
+                desc = utils.clean_string(item.find('description').string)
+            except (KeyError, AttributeError):
+                desc = None
+
             episode_data = {
                 'download_link' : utils.clean_string(item.find('enclosure').attrs['url']),
                 'title' : utils.clean_string(item.find('title').string),
                 'date' : parser.parse(item.find('pubdate').string),
-                'description' : utils.clean_string(item.find('description').string),
+                'description' : desc,
             }
             if not verify_title_filters(filters, episode_data['title']):
                 self.logger.debug("Title:%s , does not pass filters, skipping",
