@@ -810,6 +810,8 @@ class HathorClient(object):
                 self._remove_file(episode.file_path)
                 episode.file_path = None
                 episode.file_size = None
+                # Make sure prevent delete is turned off
+                episode.prevent_deletion = False
                 self.db_session.commit()
                 self.logger.info("Removed file and updated record for episode %s", episode.id)
                 episodes_deleted.append(episode.id)
