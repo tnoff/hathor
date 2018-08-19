@@ -76,8 +76,16 @@ class RSSManager(ArchiveInterface):
             except (KeyError, AttributeError):
                 desc = None
 
+            # Check for URL
+            try:
+                url = item.find('enclosure').attrs['url']
+            except AttributeError:
+                # Ignore entry if url not found
+                self.logger.error("Ignoring item:%s, url not found", item)
+                continue
+
             episode_data = {
-                'download_link' : utils.clean_string(item.find('enclosure').attrs['url']),
+                'download_link' : utils.clean_string(url),
                 'title' : utils.clean_string(item.find('title').string),
                 'date' : parser.parse(item.find('pubdate').string),
                 'description' : desc,
