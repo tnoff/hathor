@@ -2,6 +2,7 @@ import os
 
 import mutagen
 import mutagen.id3 as mutagen_id3
+from mutagen.flac import FLAC, Picture
 
 from hathor.exc import AudioFileException
 
@@ -20,6 +21,9 @@ def _generate_id3(file_path):
     except mutagen_id3._util.ID3NoHeaderError as error: #pylint:disable=protected-access
         raise AudioFileException("Invalid file %s type -- %s" % (file_path, str(error)))
     return audio_file
+
+def _generate_flac(file_path):
+    return FLAC(file_path)
 
 def tags_update(input_file, key_values):
     '''
@@ -114,8 +118,6 @@ def picture_update(audio_file, picture_file, encoding=3, picture_type=3, descrip
     picture_type         :   Type of picture, passed to mutagen. 3 is cover image
     description          :   Description of image
     '''
-    audio_file = _generate_id3(audio_file)
-
     if picture_file.endswith('.png'):
         mime = 'image/png'
     elif picture_file.endswith('.jpg') or picture_file.endswith('.jpeg'):
@@ -126,11 +128,21 @@ def picture_update(audio_file, picture_file, encoding=3, picture_type=3, descrip
     with open(picture_file, 'r') as reader:
         data = reader.read()
 
-    for key in audio_file.keys():
-        if key.startswith('APIC'):
-            del audio_file[key]
-
-    audio_file['APIC'] = mutagen_id3.APIC(encoding=encoding, mime=mime, #pylint:disable=no-member
-                                          data=data, type=picture_type, desc=description)
-    audio_file.save()
+    # Check if file is flac or mp3
+    if audio_file.endswith('.flac'):
+        generated_audio_file = _generate_flac(audio_file)
+        image = Picture()
+        image.type = encoding
+        image.desc = description
+        image.data = data
+        generated_audio_file.add_picture(image)
+        generated_audio_file.save(audio_file)
+    else:
+        generated_audio_file = _generate_id3(audio_file)
+        for key in generated_audio_file.keys():
+            if key.startswith('APIC'):
+                del generated_audio_file[key]
+        generated_audio_file['APIC'] = mutagen_id3.APIC(encoding=encoding, mime=mime, #pylint:disable=no-member
+                                                        data=data, type=picture_type, desc=description)
+        generated_audio_file.save()
     return True
