@@ -125,7 +125,7 @@ def picture_update(audio_file, picture_file, encoding=3, picture_type=3, descrip
     else:
         raise AudioFileException("Unsupported image type:%s" % picture_file)
 
-    with open(picture_file, 'r') as reader:
+    with open(picture_file, 'rb') as reader:
         data = reader.read()
 
     # Check if file is flac or mp3
@@ -139,9 +139,12 @@ def picture_update(audio_file, picture_file, encoding=3, picture_type=3, descrip
         generated_audio_file.save(audio_file)
     else:
         generated_audio_file = _generate_id3(audio_file)
+        keys_to_delete = []
         for key in generated_audio_file.keys():
             if key.startswith('APIC'):
-                del generated_audio_file[key]
+                keys_to_delete.append(key)
+        for key in keys_to_delete:
+            del generated_audio_file[key]
         generated_audio_file['APIC'] = mutagen_id3.APIC(encoding=encoding, mime=mime, #pylint:disable=no-member
                                                         data=data, type=picture_type, desc=description)
         generated_audio_file.save()

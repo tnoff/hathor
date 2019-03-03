@@ -1,4 +1,5 @@
 import argparse
+import re
 
 from prettytable import PrettyTable
 
@@ -19,7 +20,7 @@ class HandsomeTable(PrettyTable):
         new_data = []
         for column in row_data:
             data = '%s' % column
-            if isinstance(data, basestring) and self.column_limit is not None:
+            if isinstance(data, str) and self.column_limit is not None:
                 if len(data) > self.column_limit:
                     data = data[:self.column_limit]
             new_data.append(data)
@@ -52,4 +53,17 @@ class HathorCLI(object):
 
 class HathorArgparse(argparse.ArgumentParser):
     def error(self, message):
+        '''
+        Some logic here to keep the error printing consistent
+        If theres a cli arg that contains "invalid choice: '<whatever>' (choose from 'opt1', 'opt2')"
+        Make sure the options are presented in alphabetical order
+        '''
+        CHOICE_REGEX = ".* invalid choice: '[a-zA-Z]+' \(choose from (.*)\)"
+        result = re.match(CHOICE_REGEX, message)
+        if result:
+            options = result.group(1)
+            OPTIONS_REGEX = "'([a-zA-Z0-9]+)'"
+            options_list = sorted(re.findall(OPTIONS_REGEX, options))
+            sorted_output = ", ".join("'%s'" % opt for opt in options_list)
+            message = message.replace(options, sorted_output)
         raise CLIException(message)

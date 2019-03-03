@@ -56,7 +56,7 @@ class TestGlobalArgs(test_utils.TestHelper):
         with self.assertRaises(CLIException) as error:
             cli.parse_args(['-ll', 'foo'])
         self.check_error_message("argument -ll/--log-file-level: invalid choice: "
-                                 "'foo' (choose from 'debug', 'info', 'warn', 'error')",
+                                 "'foo' (choose from 'debug', 'error', 'info', 'warn')",
                                  error)
         for level in LOG_LEVELS:
             args = cli.parse_args(['-ll', level] + self.func)
@@ -108,7 +108,7 @@ class TestGlobalArgs(test_utils.TestHelper):
         with self.assertRaises(CLIException) as error:
             cli.parse_args(['-cll', 'foo'])
         self.check_error_message("argument -cll/--console-log-level: invalid choice: "
-                                 "'foo' (choose from 'debug', 'info', 'warn', 'error')",
+                                 "'foo' (choose from 'debug', 'error', 'info', 'warn')",
                                  error)
         for level in LOG_LEVELS:
             args = cli.parse_args(['-cll', level] + self.func)
@@ -222,8 +222,7 @@ class TestPodcastArgs(test_utils.TestHelper):
             cli.parse_args(['podcast', 'create', 'foo',
                             'bar', 'foo'])
         self.check_error_message("argument archive_type: invalid choice:"
-                                 " 'bar' (choose from 'youtube',"
-                                 " 'soundcloud', 'rss')", error)
+                                 " 'bar' (choose from 'rss', 'soundcloud', 'youtube')", error)
 
         for choice in client.ARCHIVE_TYPES:
             args = cli.parse_args(['podcast', 'create', 'foo',

@@ -1,4 +1,4 @@
-from StringIO import StringIO
+from io import StringIO
 
 import mock
 
@@ -141,6 +141,12 @@ class TestClientCLI(test_utils.TestHelper):
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
+        output = "b'+----+------+\\n" \
+                 "| Id | Name |\\n" \
+                 "+----+------+\\n" \
+                 "| 1  | foo  |\\n" \
+                 "| 2  | derp |\\n" \
+                 "+----+------+'\n"
         with mock.patch('hathor.client.HathorClient') as mock_class:
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
@@ -156,9 +162,7 @@ class TestClientCLI(test_utils.TestHelper):
                 ]
                 x = ClientCLI(**kwargs)
                 x.run_command()
-            self.assertEqual(mock_out.getvalue(),
-                             "+----+------+\n| Id | Name |\n+----+------+\n"
-                             "| 1  | foo  |\n| 2  | derp |\n+----+------+\n")
+            self.assertEqual(mock_out.getvalue(), output)
 
     def test_return_dict_list_with_pod_cache(self):
         kwargs = {
@@ -168,6 +172,12 @@ class TestClientCLI(test_utils.TestHelper):
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
+        output = "b'+----+------+---------+\\n" \
+                 "| Id | Name | Podcast |\\n" \
+                 "+----+------+---------+\\n" \
+                 "| 1  | foo  |  name1  |\\n" \
+                 "| 2  | derp |  name1  |\\n" \
+                 "+----+------+---------+'\n"
         with mock.patch('hathor.client.HathorClient') as mock_class:
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
@@ -191,10 +201,7 @@ class TestClientCLI(test_utils.TestHelper):
                 ]
                 x = ClientCLI(**kwargs)
                 x.run_command()
-            self.assertEqual(mock_out.getvalue(),
-                             "+----+------+---------+\n| Id | Name | Podcast "
-                             "|\n+----+------+---------+\n| 1  | foo  |  name1  "
-                             "|\n| 2  | derp |  name1  |\n+----+------+---------+\n")
+            self.assertEqual(mock_out.getvalue(), output)
 
     def test_return_dict_list_with_pod_cache_podcast(self):
         kwargs = {
@@ -204,6 +211,12 @@ class TestClientCLI(test_utils.TestHelper):
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
+        output = "b'+----+------+---------+\\n" \
+                 "| Id | Name | Podcast |\\n" \
+                 "+----+------+---------+\\n" \
+                 "| 1  | foo  |  name1  |\\n" \
+                 "| 2  | derp |  name1  |\\n" \
+                 "+----+------+---------+'\n"
         with mock.patch('hathor.client.HathorClient') as mock_class:
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
@@ -227,10 +240,7 @@ class TestClientCLI(test_utils.TestHelper):
                 ]
                 x = ClientCLI(**kwargs)
                 x.run_command()
-            self.assertEqual(mock_out.getvalue(),
-                             "+----+------+---------+\n| Id | Name | Podcast "
-                             "|\n+----+------+---------+\n| 1  | foo  |  name1  "
-                             "|\n| 2  | derp |  name1  |\n+----+------+---------+\n")
+            self.assertEqual(mock_out.getvalue(), output)
 
     def test_cli_settings_file(self):
         with utils.temp_file(suffix='.conf') as tempfile:

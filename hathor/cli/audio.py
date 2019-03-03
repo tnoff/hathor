@@ -26,16 +26,16 @@ class AudioCLI(HathorCLI):
         # - Check if bool
         if isinstance(value, bool):
             if value is True:
-                print 'Success'
+                print('Success')
             else:
-                print 'Fail'
+                print('Fail')
             return
         # - Check to see if dict
         if isinstance(value, dict):
             table = HandsomeTable(["key", "value"], self.column_limit)
             for key, val in value.items():
                 table.add_row([key, val])
-            print table.get_string(sortby='key', reversesort=self.reverse_sort).encode('utf-8')
+            print(table.get_string(sortby='key', reversesort=self.reverse_sort).encode('utf-8'))
             return
 
         # - Check if list of strings
@@ -46,8 +46,8 @@ class AudioCLI(HathorCLI):
             except IndexError:
                 return
 
-            if isinstance(first_value, basestring):
-                print ', '.join('%s' % i for i in value)
+            if isinstance(first_value, str):
+                print(', '.join('%s' % i for i in value))
                 return
 
 
@@ -96,7 +96,7 @@ def main():
     try:
         args = parse_args(sys.argv[1:])
     except CLIException as error:
-        print "CLI Exception:", str(error)
+        print("CLI Exception:", str(error))
         return
     x = AudioCLI(**args)
     x.run_command()

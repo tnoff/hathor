@@ -199,3 +199,29 @@ Tests
 =====
 To run the tests install the additional packages in
 ``tests/requirements.txt``.
+
+-------------
+Moviepy Issue
+-------------
+
+The current issue of moviepy (only used in tests), has a bug where fps is not defined.
+To get around this use this patch::
+
+    diff --git a/moviepy/audio/AudioClip.py b/moviepy/audio/AudioClip.py
+    index 8572407..6089b2a 100644
+    --- a/moviepy/audio/AudioClip.py
+    +++ b/moviepy/audio/AudioClip.py
+    @@ -188,8 +188,11 @@ class AudioClip(Clip):
+     
+             """
+             if not fps:
+    -            if not self.fps:
+    -                fps = 44100
+    +            try:
+    +                if not self.fps:
+    +                    fps = 44100
+    +            except AttributeError:
+    +                    fps = 44100
+                 else:
+                     fps = self.fps
+     

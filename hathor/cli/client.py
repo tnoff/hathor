@@ -1,4 +1,4 @@
-from ConfigParser import NoSectionError, NoOptionError, SafeConfigParser
+from configparser import NoSectionError, NoOptionError, SafeConfigParser
 import copy
 import logging
 import sys
@@ -68,9 +68,9 @@ class ClientCLI(HathorCLI):
 
         if isinstance(value, bool):
             if value is True:
-                print 'Success'
+                print('Success')
             else:
-                print 'Fail'
+                print('Fail')
             return
 
         if isinstance(value, dict):
@@ -78,11 +78,11 @@ class ClientCLI(HathorCLI):
 
         # Now assume list
         if len(value) == 0:
-            print 'No items'
+            print('No items')
             return
 
         if isinstance(value[0], int):
-            print ', '.join('%s' % item for item in value)
+            print(', '.join('%s' % item for item in value))
             return
         # Safe to assume its a dictionary here
         # Keys is either defined by CLI, or all by default
@@ -91,7 +91,7 @@ class ClientCLI(HathorCLI):
             # If keys not given, make sure some
             # items, such as ID and Name, are
             # placed first
-            keys = value[0].keys()
+            keys = list(value[0].keys())
             index = 0
             for k in ORDERD_KEYS:
                 try:
@@ -133,8 +133,8 @@ class ClientCLI(HathorCLI):
                         raise CLIException("Invalid key:%s" % k)
                 item_list.append(value)
             table.add_row(item_list)
-        print table.get_string(sortby=self.sort_key,
-                               reversesort=self.reverse_sort).encode('utf8')
+        print(table.get_string(sortby=self.sort_key,
+                               reversesort=self.reverse_sort).encode('utf8'))
 
 
 def _podcast_args(sub_parser):
@@ -371,9 +371,13 @@ def generate_args(command_line_args):
     # from CLI if given
     cli_args = parse_args(command_line_args)
     args = load_settings(cli_args.pop('settings', None))
+
+    args_to_pop = []
     for k, v in cli_args.items():
         if v is None:
-            cli_args.pop(k)
+            args_to_pop.append(k)
+    for k in args_to_pop:
+        cli_args.pop(k)
     args.update(cli_args)
 
     # Set logging levels to python class
@@ -387,7 +391,7 @@ def main():
     try:
         args = generate_args(sys.argv[1:])
     except CLIException as error:
-        print "CLI Exception:", str(error)
+        print("CLI Exception:", str(error))
         return
     command_line = ClientCLI(**args)
     command_line.run_command()

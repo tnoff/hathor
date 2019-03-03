@@ -1,4 +1,4 @@
-from StringIO import StringIO
+from io import StringIO
 
 import mock
 
@@ -14,7 +14,7 @@ class TestHandsomeTable(test_utils.TestHelper):
             table = HandsomeTable(fields, -1)
             row = [utils.random_string(length=101) for _ in range(5)]
             table.add_row(row)
-            print table # will not actually print
+            print(table) # will not actually print
 
         table_printed = mock_print.getvalue()
         table_row = table_printed.split('\n')[3]
@@ -28,7 +28,7 @@ class TestHandsomeTable(test_utils.TestHelper):
             table = HandsomeTable(fields, 50)
             row = [utils.random_string(length=101) for _ in range(5)]
             table.add_row(row)
-            print table # will not actually print
+            print(table) # will not actually print
 
         table_printed = mock_print.getvalue()
         table_row = table_printed.split('\n')[3]
@@ -42,7 +42,7 @@ class TestHandsomeTable(test_utils.TestHelper):
             table = HandsomeTable(fields, 50)
             row = ['foo', 'derp']
             table.add_row(row)
-            print table # will not actually print
+            print(table) # will not actually print
 
         self.assertEqual(mock_print.getvalue(), "+-----+-----------+\n| Foo "
                                                 "| Derp Herp |\n+-----+-----------+\n| "
@@ -55,7 +55,8 @@ class TestHandsomeTable(test_utils.TestHelper):
             table.add_row(['apple', 'cherry'])
             table.add_row(['jerry', 'derry'])
             table.add_row(['berry', 'perry'])
-            print table.get_string(sortby="foo")# will not actually print
+            print(table.get_string(sortby="foo"))# will not actually print
+
 
         self.assertEqual(mock_print.getvalue(), "+-------+-----------+\n|  Foo  | "
                                                 "Derp Herp |\n+-------+-----------+\n| apple "

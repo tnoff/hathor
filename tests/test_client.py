@@ -161,7 +161,7 @@ class TestClient(test_utils.TestHelper):
         self.assertTrue(code)
         self.assertEqual(mess, 'Valid input')
 
-        code, mess = client_class.check_arguement_type('foo', basestring)
+        code, mess = client_class.check_arguement_type('foo', str)
         self.assertTrue(code)
         self.assertEqual(mess, 'Valid input')
 
@@ -169,7 +169,7 @@ class TestClient(test_utils.TestHelper):
         self.assertTrue(code)
         self.assertEqual(mess, 'Valid input')
 
-        code, mess = client_class.check_arguement_type(3, basestring)
+        code, mess = client_class.check_arguement_type(3, str)
         self.assertFalse(code)
         self.assertEqual(mess, 'int type given')
 
@@ -177,5 +177,5 @@ class TestClient(test_utils.TestHelper):
         with test_utils.temp_client() as client_args:
             client = client_args.pop('podcast_client')
             with self.assertRaises(HathorException) as error:
-                client._check_arguement_type(3, basestring, 'pls no whyd you do this') #pylint:disable=protected-access
+                client._check_arguement_type(3, str, 'pls no whyd you do this') #pylint:disable=protected-access
             self.check_error_message("pls no whyd you do this - int type given", error)

@@ -261,13 +261,13 @@ class HathorClient(object):
 
         Returns: Integer dict object representing created podcast
         '''
-        self._check_arguement_type(podcast_name, basestring, 'Podcast name must be string type')
-        self._check_arguement_type(broadcast_id, basestring, 'Brodcast ID must be string type')
-        self._check_arguement_type(archive_type, basestring, 'Archive Type must be string type')
+        self._check_arguement_type(podcast_name, str, 'Podcast name must be string type')
+        self._check_arguement_type(broadcast_id, str, 'Brodcast ID must be string type')
+        self._check_arguement_type(archive_type, str, 'Archive Type must be string type')
         self._check_arguement_type(automatic_download, bool, 'Automatic download must be boolean type')
         self._check_arguement_type(max_allowed, [None, int], 'Max allowed must be None or int type')
-        self._check_arguement_type(file_location, [None, basestring], 'File location must be None or string type')
-        self._check_arguement_type(artist_name, [None, basestring], 'File location must be None or string type')
+        self._check_arguement_type(file_location, [None, str], 'File location must be None or string type')
+        self._check_arguement_type(artist_name, [None, str], 'File location must be None or string type')
 
         self._check_argument_oneof(archive_type, ARCHIVE_KEYS, 'Archive Type must be in accepted list of keys')
 
@@ -349,20 +349,20 @@ class HathorClient(object):
             self._fail("Podcast not found for ID:%s" % podcast_id)
 
         if podcast_name is not None:
-            self._check_arguement_type(podcast_name, basestring, 'Podcast name must be string type or None')
+            self._check_arguement_type(podcast_name, str, 'Podcast name must be string type or None')
             self.logger.debug("Updating podcast name to %s for podcast %s", podcast_name, podcast_id)
             pod.name = utils.clean_string(podcast_name)
         if artist_name is not None:
-            self._check_arguement_type(artist_name, basestring, 'Podcast name must be string type or None')
+            self._check_arguement_type(artist_name, str, 'Podcast name must be string type or None')
             self.logger.debug("Updating artist name to %s for podcast %s", artist_name, podcast_id)
             pod.artist_name = utils.clean_string(artist_name)
         if archive_type is not None:
-            self._check_arguement_type(archive_type, basestring, 'Archive Type must be string type or None')
+            self._check_arguement_type(archive_type, str, 'Archive Type must be string type or None')
             self._check_argument_oneof(archive_type, ARCHIVE_KEYS, 'Archive Type must be in accepted list')
             self.logger.debug("Updating archive to %s for podcast %s", archive_type, podcast_id)
             pod.archive_type = archive_type
         if broadcast_id is not None:
-            self._check_arguement_type(broadcast_id, basestring, 'Broadcast ID must be string type or None')
+            self._check_arguement_type(broadcast_id, str, 'Broadcast ID must be string type or None')
             self.logger.debug("Updating broadcast id to %s for podcast %s", broadcast_id, podcast_id)
             pod.broadcast_id = utils.clean_string(broadcast_id)
         if max_allowed is not None:
@@ -399,7 +399,7 @@ class HathorClient(object):
         Returns: null
         '''
         self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
-        self._check_arguement_type(file_location, basestring, 'File location must be None or string type')
+        self._check_arguement_type(file_location, str, 'File location must be None or string type')
         pod = self.db_session.query(Podcast).get(podcast_id)
         if not pod:
             self._fail("Podcast not found for ID:%s" % podcast_id)
@@ -468,7 +468,7 @@ class HathorClient(object):
         Returns: dict object representing new podcast filter
         '''
         self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
-        self._check_arguement_type(regex_string, basestring, 'Regex string must be string type')
+        self._check_arguement_type(regex_string, str, 'Regex string must be string type')
 
         podcast = self.db_session.query(Podcast).get(podcast_id)
         if not podcast:
@@ -682,7 +682,7 @@ class HathorClient(object):
         episode = self.db_session.query(PodcastEpisode).get(episode_id)
         if not episode:
             self._fail("Podcast Episode not found for ID:%s" % episode_id)
-        self._check_arguement_type(file_path, [basestring], 'File path must be string type')
+        self._check_arguement_type(file_path, [str], 'File path must be string type')
         file_path = os.path.abspath(file_path)
         path_directory, basename = os.path.split(file_path)
         # File cannot move out of podcast file location

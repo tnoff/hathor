@@ -6,14 +6,14 @@ setuptools.setup(
     author='Tyler D. North',
     author_email='tylernorth18@gmail.com',
     install_requires=[
-        'beautifulsoup4 >= 4.4.0',
-        'httpretty >= 0.8.4',
-        'mutagen >= 1.34',
-        'python-dateutil >= 2.6.0',
-        'requests >= 2.5.1',
-        'SQLAlchemy >= 1.0.8',
+        'beautifulsoup4 >= 4.7.1',
+        'httpretty >= 0.9.6',
+        'mutagen >= 1.42.0',
+        'python-dateutil >= 2.8.0',
+        'requests >= 2.21.0',
+        'SQLAlchemy >= 1.2.18',
         'prettytable >= 0.7.2',
-        'youtube-dl >= 2015.12.23'
+        'youtube-dl >= 2019.3.1',
     ],
     entry_points={
         'console_scripts' : [
@@ -22,5 +22,5 @@ setuptools.setup(
         ]
     },
     packages=setuptools.find_packages(exclude=['tests']),
-    version='0.1.8',
+    version='1.0.0',
 )

@@ -1,4 +1,4 @@
-from StringIO import StringIO
+from io import StringIO
 
 import mock
 
@@ -30,6 +30,12 @@ class TestAudioClient(test_utils.TestHelper):
                 'bar' : 'herp',
             },
         }
+        output = "b'+-----+-------+\\n" \
+                 "| Key | Value |\\n" \
+                 "+-----+-------+\\n" \
+                 "| bar |  herp |\\n" \
+                 "| foo |  derp |\\n" \
+                 "+-----+-------+'\n"
         with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
             with mock.patch('hathor.audio.metadata.tags_update') as mock_class:
                 mock_class.return_value = {
@@ -38,9 +44,7 @@ class TestAudioClient(test_utils.TestHelper):
                 }
                 x = cli.AudioCLI(**kwargs)
                 x.run_command()
-        self.assertEqual(mock_out.getvalue(), "+-----+-------+\n| Key | Value |\n"
-                                              "+-----+-------+\n| bar |  herp |\n|"
-                                              " foo |  derp |\n+-----+-------+\n")
+            self.assertEqual(mock_out.getvalue(), output)
 
     def test_tags_show(self):
         kwargs = {
@@ -52,6 +56,12 @@ class TestAudioClient(test_utils.TestHelper):
                 'bar' : 'bar2',
             },
         }
+        output = "b'+-----+-------+\\n" \
+                 "| Key | Value |\\n" \
+                 "+-----+-------+\\n" \
+                 "| bar |  bar2 |\\n" \
+                 "| foo |  foo2 |\\n" \
+                 "+-----+-------+'\n"
         with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
             with mock.patch('hathor.audio.metadata.tags_show') as mock_class:
                 mock_class.return_value = {
@@ -60,9 +70,7 @@ class TestAudioClient(test_utils.TestHelper):
                 }
                 x = cli.AudioCLI(**kwargs)
                 x.run_command()
-        self.assertEqual(mock_out.getvalue(), "+-----+-------+\n| Key | Value |\n"
-                                              "+-----+-------+\n| bar |  bar2 |\n"
-                                              "| foo |  foo2 |\n+-----+-------+\n")
+            self.assertEqual(mock_out.getvalue(), output)
 
     def test_picture_extract(self):
         kwargs = {
@@ -71,6 +79,15 @@ class TestAudioClient(test_utils.TestHelper):
             'input_file' : 'foo',
             'output_file' : 'bar',
         }
+        output = "b'+-------------+-----------+\\n" \
+                "|     Key     |   Value   |\\n" \
+                "+-------------+-----------+\\n" \
+                "|     desc    | some text |\\n" \
+                "|   encoding  |     3     |\\n" \
+                "|     mime    |    foo    |\\n" \
+                "| output_path |    bar    |\\n" \
+                "|     type    |   cover   |\\n" \
+                "+-------------+-----------+'\n"
         with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
             with mock.patch('hathor.audio.metadata.picture_extract') as mock_class:
                 mock_class.return_value = {
@@ -82,13 +99,7 @@ class TestAudioClient(test_utils.TestHelper):
                 }
                 x = cli.AudioCLI(**kwargs)
                 x.run_command()
-        self.assertEqual(mock_out.getvalue(), "+-------------+-----------+\n|"
-                                              "     Key     |   Value   |\n+---"
-                                              "----------+-----------+\n|     desc    "
-                                              "| some text |\n|   encoding  |     3     "
-                                              "|\n|     mime    |    foo    |\n| output_path "
-                                              "|    bar    |\n|     type    |   "
-                                              "cover   |\n+-------------+-----------+\n")
+            self.assertEqual(mock_out.getvalue(), output)
 
     def test_picture_update(self):
         kwargs = {
