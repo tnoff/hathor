@@ -162,11 +162,11 @@ class HathorClient(object):
         self.db_session = sessionmaker(bind=engine)()
 
         if not soundcloud_client_id:
-            self.logger.warn("No soundcloud client id given, will not be able to access soundcloud api")
+            self.logger.debug("No soundcloud client id given, will not be able to access soundcloud api")
         self.soundcloud_client_id = soundcloud_client_id
 
         if not google_api_key:
-            self.logger.warn("No google api key given, will not be to able to access google api")
+            self.logger.debug("No google api key given, will not be to able to access google api")
         self.google_api_key = google_api_key
 
         self.plugins = load_plugins()
@@ -557,7 +557,7 @@ class HathorClient(object):
         new_episodes = []
         for podcast in query:
             if not automatic_sync and not podcast.automatic_episode_download:
-                self.logger.warn("Skipping episode sync on podcast:%s", podcast.id)
+                self.logger.debug("Skipping episode sync on podcast:%s", podcast.id)
                 continue
 
             self.logger.debug("Running episode sync on podcast %s", podcast.id)
