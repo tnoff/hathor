@@ -141,12 +141,12 @@ class TestClientCLI(test_utils.TestHelper):
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
-        output = "b'+----+------+\\n" \
-                 "| Id | Name |\\n" \
-                 "+----+------+\\n" \
-                 "| 1  | foo  |\\n" \
-                 "| 2  | derp |\\n" \
-                 "+----+------+'\n"
+        output = "+----+------+\n" \
+                 "| Id | Name |\n" \
+                 "+----+------+\n" \
+                 "| 1  | foo  |\n" \
+                 "| 2  | derp |\n" \
+                 "+----+------+\n"
         with mock.patch('hathor.client.HathorClient') as mock_class:
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
@@ -172,12 +172,12 @@ class TestClientCLI(test_utils.TestHelper):
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
-        output = "b'+----+------+---------+\\n" \
-                 "| Id | Name | Podcast |\\n" \
-                 "+----+------+---------+\\n" \
-                 "| 1  | foo  |  name1  |\\n" \
-                 "| 2  | derp |  name1  |\\n" \
-                 "+----+------+---------+'\n"
+        output = "+----+------+---------+\n" \
+                 "| Id | Name | Podcast |\n" \
+                 "+----+------+---------+\n" \
+                 "| 1  | foo  |  name1  |\n" \
+                 "| 2  | derp |  name1  |\n" \
+                 "+----+------+---------+\n"
         with mock.patch('hathor.client.HathorClient') as mock_class:
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value
@@ -211,12 +211,12 @@ class TestClientCLI(test_utils.TestHelper):
             'logging_file_level' : 10,
             'console_logging_level' : 10,
         }
-        output = "b'+----+------+---------+\\n" \
-                 "| Id | Name | Podcast |\\n" \
-                 "+----+------+---------+\\n" \
-                 "| 1  | foo  |  name1  |\\n" \
-                 "| 2  | derp |  name1  |\\n" \
-                 "+----+------+---------+'\n"
+        output = "+----+------+---------+\n" \
+                 "| Id | Name | Podcast |\n" \
+                 "+----+------+---------+\n" \
+                 "| 1  | foo  |  name1  |\n" \
+                 "| 2  | derp |  name1  |\n" \
+                 "+----+------+---------+\n"
         with mock.patch('hathor.client.HathorClient') as mock_class:
             with mock.patch('sys.stdout', new_callable=StringIO) as mock_out:
                 instance = mock_class.return_value

@@ -134,7 +134,7 @@ class ClientCLI(HathorCLI):
                 item_list.append(value)
             table.add_row(item_list)
         print(table.get_string(sortby=self.sort_key,
-                               reversesort=self.reverse_sort).encode('utf8'))
+                               reversesort=self.reverse_sort))
 
 
 def _podcast_args(sub_parser):

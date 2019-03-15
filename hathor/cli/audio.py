@@ -35,7 +35,7 @@ class AudioCLI(HathorCLI):
             table = HandsomeTable(["key", "value"], self.column_limit)
             for key, val in value.items():
                 table.add_row([key, val])
-            print(table.get_string(sortby='key', reversesort=self.reverse_sort).encode('utf-8'))
+            print(table.get_string(sortby='key', reversesort=self.reverse_sort))
             return
 
         # - Check if list of strings
