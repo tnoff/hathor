@@ -7,10 +7,7 @@ from mutagen.flac import FLAC, Picture
 from hathor.exc import AudioFileException
 
 def _generate_metadata(file_path):
-    try:
-        audio_file = mutagen.File(file_path, easy=True)
-    except mutagen.mp3.HeaderNotFoundError as e:
-        raise AudioFileException("Unable to generate audio headers:%s" % str(e))
+    audio_file = mutagen.File(file_path, easy=True)
     if audio_file is None:
         raise AudioFileException("Unsupported type for tags on file %s" % file_path)
     return audio_file
