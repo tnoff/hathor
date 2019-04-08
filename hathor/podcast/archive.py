@@ -180,6 +180,8 @@ class YoutubeManager(ArchiveInterface):
             url = urls.youtube_channel_get(broadcast_id, self.google_api_key, page_token=pagetoken)
             req = requests.get(url)
             if req.status_code == 400 or req.status_code == 403:
+                self.logger.error("Invalid status code:%s", req.status_code)
+                self.logger.error("Request data:%s", req.text)
                 raise HathorException("Invalid status code:%s" % req.status_code)
 
             data = json.loads(req.text)
