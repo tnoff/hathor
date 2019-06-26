@@ -45,8 +45,11 @@ class HathorCLI(object):
 
         self.reverse_sort = kwargs.pop('reverse_sort', False)
 
-        module = kwargs.pop('module')
-        command = kwargs.pop('command')
+        try:
+            module = kwargs.pop('module')
+            command = kwargs.pop('command')
+        except KeyError:
+            raise CLIException("Either module or command not supplied")
 
         function_name = '%s_%s' % (module, command)
         self.function_name = function_name.replace('-', '_')

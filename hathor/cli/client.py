@@ -390,8 +390,8 @@ def generate_args(command_line_args):
 def main():
     try:
         args = generate_args(sys.argv[1:])
+        command_line = ClientCLI(**args)
     except CLIException as error:
         print("CLI Exception:", str(error))
         return
-    command_line = ClientCLI(**args)
     command_line.run_command()
