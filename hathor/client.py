@@ -1,3 +1,4 @@
+import errno
 import os
 import logging
 from logging.handlers import RotatingFileHandler
@@ -232,7 +233,7 @@ class HathorClient(object):
             os.rmdir(directory_path)
             self.logger.info("Removed directory:%s", directory_path)
         except OSError as exc:
-            if exc.errno == os.errno.ENOENT:
+            if exc.errno == errno.ENOENT:
                 self.logger.warn("Unable to delete directory:%s, does not exist", directory_path)
             else:
                 raise
@@ -242,7 +243,7 @@ class HathorClient(object):
             os.remove(file_path)
             self.logger.info("Removed file:%s", file_path)
         except OSError as exc:
-            if exc.errno == os.errno.ENOENT:
+            if exc.errno == errno.ENOENT:
                 self.logger.warn("Unable to delete file:%s, does not exist", file_path)
             else:
                 raise
