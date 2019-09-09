@@ -35,18 +35,19 @@ def load_plugins():
                 continue
             # load py files
             plugin_path = os.path.join(dir_name, file_name)
-            relative_path = plugin_path[len(DIR_PATH) + 1:]
-            import_name = 'hathor.%s' % relative_path.replace('/', '.')[:-3]
+            relative_path = os.path.join('hathor', os.path.relpath(plugin_path, DIR_PATH))
+            import_name = os.path.splitext(relative_path)[0]
+            # Remove for *nix systems and windows
+            import_name = import_name.replace(os.sep, ".")
+            # Now import
             imported = __import__(import_name)
-            # needed this odd logic to load again, probably a better
-            # way to do this, but this works for now
-            class_obj = imported
-            for name in relative_path.split('/'):
+            for name in relative_path.split(os.sep)[1:]:
                 if name.endswith('.py'):
                     name = name[:-3]
-                class_obj = getattr(class_obj, name)
-            # check for functions in class
-            for key, value in vars(class_obj).items():
+                imported = getattr(imported, name)
+            # needed this odd logic to load again, probably a better
+            # way to do this, but this works for now
+            for key, value in vars(imported).items():
                 if isinstance(value, FunctionType):
                     plugin_list.append((key, value))
     return plugin_list
