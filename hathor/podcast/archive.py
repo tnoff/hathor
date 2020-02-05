@@ -224,7 +224,6 @@ class YoutubeManager(ArchiveInterface):
         options = {
             'outtmpl' : output_path,
             'noplaylist' : True,
-            'format': 'best',
             'progress_hooks' : [self.__check_filename_hook],
             'logger' : self.logger,
         }
