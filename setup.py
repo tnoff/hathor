@@ -4,7 +4,7 @@ setuptools.setup(
     name='hathor',
     description='Hathor Audio File Manager',
     author='Tyler D. North',
-    author_email='tylernorth18@gmail.com',
+    author_email='ty_north@yahoo.com',
     install_requires=[
         'beautifulsoup4 >= 4.7.1',
         'mutagen >= 1.42.0',
