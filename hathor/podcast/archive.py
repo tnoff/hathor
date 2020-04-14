@@ -1,7 +1,7 @@
 from datetime import datetime
 import json
 import os
-
+import re
 
 from dateutil import parser
 import requests
@@ -11,6 +11,19 @@ import youtube_dl.YoutubeDL
 from hathor.exc import FunctionUndefined, HathorException
 from hathor.podcast import urls
 from hathor import utils
+
+def clean_title(title):
+    '''
+    Remove any emojis from title
+    '''
+    # https://stackoverflow.com/questions/33404752/removing-emojis-from-a-string-in-python
+    emoji_pattern = re.compile("["
+            u"\U0001F600-\U0001F64F"  # emoticons
+            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+            u"\U0001F680-\U0001F6FF"  # transport & map symbols
+            u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                               "]+", flags=re.UNICODE)
+    return emoji_pattern.sub(r'', title) # no emoji
 
 def curl_download(episode_url, output_path):
     req = requests.get(episode_url, stream=True)
@@ -86,7 +99,7 @@ class RSSManager(ArchiveInterface):
 
             episode_data = {
                 'download_link' : utils.clean_string(url),
-                'title' : utils.clean_string(item.find('title').string),
+                'title' : clean_title(utils.clean_string(item.find('title').string)),
                 'date' : parser.parse(item.find('pubdate').string),
                 'description' : desc,
             }
@@ -134,7 +147,7 @@ class SoundcloudManager(ArchiveInterface):
                     continue
                 episode_data = {
                     'date' : datetime.strptime(item['created_at'], '%Y/%m/%d %H:%M:%S +0000'),
-                    'title' : utils.clean_string(item['title']),
+                    'title' : clean_title(utils.clean_string(item['title'])),
                     'download_link' : utils.clean_string(item['download_url']),
                     'description' : utils.clean_string(item['description']),
 
@@ -184,7 +197,7 @@ class YoutubeManager(ArchiveInterface):
                 if item['id']['kind'] != 'youtube#video':
                     self.logger.debug("Item %s is not a video, skipping" % str(item['id']))
                     continue
-                title = utils.clean_string(item['snippet']['title'])
+                title = clean_title(utils.clean_string(item['snippet']['title']))
                 if not verify_title_filters(filters, title):
                     self.logger.debug("Title:%s , does not pass filters, skipping",
                                       title)
