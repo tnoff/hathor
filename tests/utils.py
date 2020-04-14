@@ -24,13 +24,13 @@ def temp_audio_file(open_data=True, duration=2, suffix='.mp3', delete=True):
         audio_frames = lambda t: 2 *[np.sin(404 * 2 * np.pi * t)]
         audioclip = AudioClip(audio_frames, duration=duration)
         if suffix == '.mp3':
-            audioclip.write_audiofile(temp_file, verbose=False, logger=None)
+            audioclip.write_audiofile(temp_file, logger=None)
         else:
             image = ImageClip(np.random.rand(30, 30, 3) * 255)
             videoclip = image.set_audio(audioclip)
             videoclip.duration = duration
             videoclip.fps = 24
-            videoclip.write_videofile(temp_file, verbose=False, logger=None)
+            videoclip.write_videofile(temp_file, logger=None)
         try:
             if not open_data:
                 yield temp_file
