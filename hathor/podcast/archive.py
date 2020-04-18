@@ -204,8 +204,16 @@ class YoutubeManager(ArchiveInterface):
                     continue
 
                 download_url = 'https://www.youtube.com/watch?v=%s' % item['id']['videoId']
-                date = datetime.strptime(item['snippet']['publishedAt'],
-                                         '%Y-%m-%dT%H:%M:%S.000Z')
+                # Datetime format could differ
+                try:
+                    date = datetime.strptime(item['snippet']['publishedAt'],
+                                             '%Y-%m-%dT%H:%M:%S.000Z')
+                except ValueError:
+                    try:
+                        date = datetime.strptime(item['snippet']['publishedAt'],
+                                                 '%Y-%m-%dT%H:%M:%SZ')
+                    except ValueError:
+                        raise HathorException("Invalid date format:%s" % item['snippet']['publishedAt'])
                 episode_data = {
                     'title' : title,
                     'description' : utils.clean_string(item['snippet']['description']),
