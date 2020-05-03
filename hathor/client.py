@@ -21,6 +21,7 @@ FILE_PATH = os.path.abspath(__file__)
 DIR_PATH = os.path.dirname(FILE_PATH)
 PLUGIN_PATH = os.path.join(DIR_PATH, 'plugins')
 
+REJECT_TAG_UPDATE_FILE_TYPES = ['.mp4', '.mkv']
 
 def load_plugins():
     skip_list = ['__init__.py']
@@ -778,20 +779,23 @@ class HathorClient(object):
             episode.file_size = download_size
             self.db_session.commit()
 
-            # use artist name if possible
-            artist_name = podcast['artist_name'] or podcast['name']
-            audio_tags = {
-                'artist' : artist_name,
-                'albumartist' : artist_name,
-                'album' : podcast['name'],
-                'title' : episode.title,
-                'date' : episode.date.strftime(self.datetime_output_format),
-            }
-            try:
-                metadata.tags_update(output_path, audio_tags)
-                self.logger.debug("Updated database audio tags for episode %s", episode.id)
-            except AudioFileException as error:
-                self.logger.warn("Unable to update tags on file %s : %s", output_path, str(error))
+            # Do not update tags on vieo files
+            _, file_ext = os.path.splitext(output_path)
+            if file_ext not in REJECT_TAG_UPDATE_FILE_TYPES: 
+                # use artist name if possible
+                artist_name = podcast['artist_name'] or podcast['name']
+                audio_tags = {
+                    'artist' : artist_name,
+                    'albumartist' : artist_name,
+                    'album' : podcast['name'],
+                    'title' : episode.title,
+                    'date' : episode.date.strftime(self.datetime_output_format),
+                }
+                try:
+                    metadata.tags_update(output_path, audio_tags)
+                    self.logger.debug("Updated database audio tags for episode %s", episode.id)
+                except AudioFileException as error:
+                    self.logger.warn("Unable to update tags on file %s : %s", output_path, str(error))
             episodes_downloaded.append(episode.as_dict(self.datetime_output_format))
         return episodes_downloaded
 
