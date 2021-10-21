@@ -12,7 +12,7 @@ setuptools.setup(
         'requests >= 2.21.0',
         'SQLAlchemy >= 1.2.18',
         'prettytable >= 0.7.2',
-        'youtube-dl >= 2019.3.1',
+        'yt-dlp >= 2021.10.10',
     ],
     entry_points={
         'console_scripts' : [
@@ -21,5 +21,5 @@ setuptools.setup(
         ]
     },
     packages=setuptools.find_packages(exclude=['tests']),
-    version='1.0.10',
+    version='1.0.11',
 )

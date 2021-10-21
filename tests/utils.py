@@ -7,7 +7,7 @@ import httpretty
 from moviepy.editor import AudioClip, ImageClip
 import numpy as np
 from PIL import Image
-import youtube_dl
+import yt_dlp
 
 from hathor import client, utils
 
@@ -125,7 +125,7 @@ class YoutubeClass(object):
 
     def download(self, _):
         if self.raise_error:
-            raise youtube_dl.utils.DownloadError('error message')
+            raise yt_dlp.utils.DownloadError('error message')
         with temp_audio_file(suffix='.mp4') as mp4_body:
             with utils.temp_file(delete=False, suffix='.mp4') as temp_file:
                 with open(temp_file, 'wb') as write:
@@ -139,7 +139,7 @@ class YoutubeClass(object):
 
     def extract_info(self, _, **__):
         if self.raise_error:
-            raise youtube_dl.utils.DownloadError('error message')
+            raise yt_dlp.utils.DownloadError('error message')
         data = {
             'is_live' : self.is_live,
             'description' : 'foo',

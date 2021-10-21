@@ -6,7 +6,7 @@ import re
 from dateutil import parser
 import requests
 from bs4 import BeautifulSoup as i_like_soup
-import youtube_dl.YoutubeDL
+import yt_dlp.YoutubeDL
 
 from hathor.exc import FunctionUndefined, HathorException
 from hathor.podcast import urls
@@ -243,13 +243,13 @@ class YoutubeManager(ArchiveInterface):
             'logger' : self.logger,
         }
         try:
-            with youtube_dl.YoutubeDL(options) as yt:
+            with yt_dlp.YoutubeDL(options) as yt:
                 info_dict = yt.extract_info(download_url, download=False)
                 if info_dict['is_live']:
                     self.logger.error("Unable to download url:%s, is currently live", download_url)
                     return None, None
                 result = yt.download([download_url])
-        except youtube_dl.utils.DownloadError as e:
+        except yt_dlp.utils.DownloadError as e:
             self.logger.error('Error downloading youtube url:%s', download_url)
             self.logger.error("Youtube-dl error error:%s", str(e))
             return None, None

@@ -89,7 +89,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     def test_episode_sync_and_download_youtube(self):
         with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=8) as podcast:
             url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
-            with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock):
+            with mock.patch('yt_dlp.YoutubeDL', side_effect=test_utils.youtube_mock):
                 httpretty.register_uri(httpretty.GET, url1,
                                        body=json.dumps(youtube_archive1.DATA),
                                        content_type='application/json')
@@ -111,7 +111,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     def test_youtube_download_fails(self):
         with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=1) as podcast:
             url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
-            with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock_error):
+            with mock.patch('yt_dlp.YoutubeDL', side_effect=test_utils.youtube_mock_error):
                 httpretty.register_uri(httpretty.GET, url1,
                                        body=json.dumps(youtube_archive1.DATA),
                                        content_type='application/json')
@@ -132,7 +132,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     def test_download_youtube_skips_live(self):
         with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=1) as podcast:
             url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
-            with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock_live):
+            with mock.patch('yt_dlp.YoutubeDL', side_effect=test_utils.youtube_mock_live):
                 httpretty.register_uri(httpretty.GET, url1,
                                        body=json.dumps(youtube_archive1.DATA),
                                        content_type='application/json')
@@ -449,14 +449,14 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
     def test_sync_fails_doesnt_delete(self):
         with test_utils.temp_podcast(self.client, archive_type='youtube', max_allowed=1) as podcast:
             url1 = urls.youtube_channel_get(podcast['broadcast_id'], self.client.google_api_key)
-            with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock):
+            with mock.patch('yt_dlp.YoutubeDL', side_effect=test_utils.youtube_mock):
                 httpretty.register_uri(httpretty.GET, url1,
                                        body=json.dumps(youtube_archive1.DATA),
                                        content_type='application/json')
                 self.client.podcast_sync()
                 old_episodes = self.client.episode_list()
 
-            with mock.patch('youtube_dl.YoutubeDL', side_effect=test_utils.youtube_mock_error):
+            with mock.patch('yt_dlp.YoutubeDL', side_effect=test_utils.youtube_mock_error):
                 httpretty.register_uri(httpretty.GET, url1,
                                        body=json.dumps(youtube_archive1_new_item.DATA),
                                        content_type='application/json')
