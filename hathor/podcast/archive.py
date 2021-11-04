@@ -240,33 +240,21 @@ class YoutubeManager(ArchiveInterface):
         options = {
             'outtmpl' : output_path,
             'noplaylist' : True,
+            'format': 'best',
             'logger' : self.logger,
         }
         try:
             with yt_dlp.YoutubeDL(options) as yt:
-                info_dict = yt.extract_info(download_url, download=False)
+                info_dict = yt.extract_info(download_url, download=True)
                 if info_dict['is_live']:
                     self.logger.error("Unable to download url:%s, is currently live", download_url)
                     return None, None
-                result = yt.download([download_url])
+                file_name = yt.prepare_filename(info_dict)
+                return file_name, os.path.getsize(file_name)
         except yt_dlp.utils.DownloadError as e:
             self.logger.error('Error downloading youtube url:%s', download_url)
             self.logger.error("Youtube-dl error error:%s", str(e))
             return None, None
-        # This is a very silly hack but I cant figure out a good way to get the file name
-        # of the downloaded video after the post processor step
-        # So, look for a file that matches the expected prefix
-        expected_file = None
-        dir_name = os.path.dirname(output_prefix)
-        for file_name in os.listdir(dir_name):
-            full_path = os.path.join(dir_name, file_name)
-            if output_prefix in full_path:
-                expected_file = full_path
-                break
-        if expected_file is None:
-            self.logger.error("Not able to find expected download file %s" % output_prefix)
-            return None, None
-        return expected_file, os.path.getsize(expected_file)
 
 ARCHIVE_TYPES = {
     'rss' : RSSManager,
