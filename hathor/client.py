@@ -67,7 +67,7 @@ def run_plugins():
                     # Run plugin function with client class
                     # and result of original function
                     plugin_func = plugin[1]
-                    result = plugin_func(selfie, result)
+                    result = plugin_func(selfie, result, *args, **kwargs)
             return result
         return caller
     return decorator
