@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy import and_, desc, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
+
 from hathor.audio import metadata
 from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
@@ -558,6 +559,7 @@ class HathorClient(object):
             query = query.filter(and_(opts))
 
         new_episodes = []
+        podcast_episode_mapping = {}
         for podcast in query:
             if not automatic_sync and not podcast.automatic_episode_download:
                 self.logger.debug("Skipping episode sync on podcast:%s", podcast.id)
@@ -583,6 +585,22 @@ class HathorClient(object):
                                                         max_results=max_results,
                                                         filters=compiled_filters)
             for episode in current_episodes:
+                # Check if download link with same download link exists in podcast
+                episode_processed_url = utils.process_url(episode['download_link'])
+                try:
+                    podcast_episodes = podcast_episode_mapping[podcast.id]
+                except KeyError:
+                    podcast_episodes = self.episode_list(only_files=False, include_podcasts=[podcast.id])
+                    podcast_episode_mapping[podcast.id] = [i['download_url'] for i in podcast_episodes]
+                episode_exists = False
+                for existing_episode in podcast_episodes:
+                    if episode_processed_url == existing_episode:
+                        self.logger.debug(f'Episode {existing_episode["id"]} has same url, skipping saving episode')
+                        episode_exists = True
+                        break
+                if episode_exists:
+                    continue
+                podcast_episode_mapping[podcast.id].append(episode['download_link'])
                 episode_args = {
                     'title' : episode['title'],
                     'date' : episode['date'],

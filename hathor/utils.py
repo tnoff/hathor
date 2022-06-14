@@ -3,6 +3,12 @@ import os
 import random
 import string
 
+from urllib.parse  import urlparse
+
+def process_url(url):
+    processed_url = urlparse(url)
+    return f'{processed_url.scheme}://{processed_url.netloc}/{processed_url.path}'
+
 def random_string(prefix='', suffix='', length=10):
     chars = string.ascii_lowercase + string.digits
     tempy = ''.join(random.choice(chars) for _ in range(length))
