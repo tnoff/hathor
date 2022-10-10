@@ -12,7 +12,7 @@ setuptools.setup(
         'requests >= 2.21.0',
         'SQLAlchemy >= 1.2.18',
         'prettytable >= 0.7.2',
-        'yt-dlp >= 2021.10.10',
+        'yt-dlp >= 2022.10.4',
     ],
     entry_points={
         'console_scripts' : [

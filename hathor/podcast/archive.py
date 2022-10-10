@@ -247,7 +247,7 @@ class YoutubeManager(ArchiveInterface):
             with yt_dlp.YoutubeDL(options) as yt:
                 # First check if video is live before trying to download
                 info_dict = yt.extract_info(download_url, download=False)
-                if info_dict['is_live']:
+                if info_dict['live_status'] == 'is_live':
                     self.logger.error("Unable to download url:%s, is currently live", download_url)
                     return None, None
                 # Now actually try to download
