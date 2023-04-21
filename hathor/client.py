@@ -155,10 +155,10 @@ class HathorClient(object):
                                    console_logging_level=console_logging_level)
 
         if database_file is None:
-            engine = create_engine('sqlite:///', encoding='utf-8')
+            engine = create_engine('sqlite:///')
             self.logger.debug("Initializing hathor client in memory (no database file given")
         else:
-            engine = create_engine('sqlite:///%s' % database_file, encoding='utf-8')
+            engine = create_engine('sqlite:///%s' % database_file)
             self.logger.debug("Initializing hathor client with database file %s", database_file)
 
         BASE.metadata.create_all(engine)
