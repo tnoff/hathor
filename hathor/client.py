@@ -892,7 +892,8 @@ class HathorClient(object):
         # Find all episodes to attempt to download
         for podcast in podcast_query:
             episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
-                    filter(PodcastEpisode.podcast_id == podcast.id)
+                    filter(PodcastEpisode.podcast_id == podcast.id).\
+                    filter(PodcastEpisode.file_path == None)
 
             # Make sure you call limit, then do check for file path
             # If you add the check for file path is None first
@@ -901,9 +902,8 @@ class HathorClient(object):
             # then only download ones that arent downloaded
 
             if podcast.max_allowed:
-                episode_query = episode_query.limit(podcast.max_allowed).from_self()
-            for episode in episode_query.\
-                filter(PodcastEpisode.file_path == None): #pylint:disable=singleton-comparison
+                episode_query = episode_query.limit(podcast.max_allowed)
+            for episode in episode_query: #pylint:disable=singleton-comparison
                 download_episodes.append(episode)
 
         # Download episodes from query
@@ -919,14 +919,14 @@ class HathorClient(object):
         for podcast in podcast_query.filter(Podcast.max_allowed != None):
             episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
                     filter(PodcastEpisode.podcast_id == podcast.id).\
-                    filter(PodcastEpisode.file_path != None)
+                    filter(PodcastEpisode.file_path != None).\
+                    filter(PodcastEpisode.prevent_deletion == False).\
+                    offset(podcast.max_allowed)
                     # Make sure offset is called first, since you want to first limit
                     # then check if prevent deletion is false
                     # This way files that should be kept, but also have
                     # prevent delete will not count against files
                     # that should be deleted
-            episode_query = episode_query.offset(podcast.max_allowed).from_self().\
-                    filter(PodcastEpisode.prevent_deletion == False) #pylint:disable=singleton-comparison
 
             for episode in episode_query:
                 delete_episodes.append(episode)
