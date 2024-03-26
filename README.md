@@ -130,7 +130,7 @@ Alternatively, you can sync podcast episodes without downloading them:
 
 ```
 hathor episode sync
-``
+```
 
 To download podcast episodes individually:
 
