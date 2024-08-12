@@ -1,19 +1,23 @@
 import setuptools
+import os
+
+
+THIS_DIR = os.path.dirname(__file__)
+REQUIREMENTS_FILE = os.path.join(THIS_DIR, 'requirements.txt')
+
+required = []
+if os.path.exists(REQUIREMENTS_FILE):
+    with open(REQUIREMENTS_FILE) as f:
+        required += f.read().splitlines()
+
+print(required)
 
 setuptools.setup(
     name='hathor',
     description='Hathor Audio File Manager',
     author='Tyler D. North',
     author_email='ty_north@yahoo.com',
-    install_requires=[
-        'beautifulsoup4 >= 4.7.1',
-        'mutagen >= 1.42.0',
-        'python-dateutil >= 2.8.0',
-        'requests >= 2.21.0',
-        'SQLAlchemy >= 1.2.18',
-        'prettytable >= 0.7.2',
-        'yt-dlp >= 2022.10.4',
-    ],
+    install_requires=required,
     entry_points={
         'console_scripts' : [
             'hathor = hathor.cli.client:main',

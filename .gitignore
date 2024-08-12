@@ -3,3 +3,5 @@
 .coverage
 cover/
 hathor/plugins/
+build/
+*egg-info*
