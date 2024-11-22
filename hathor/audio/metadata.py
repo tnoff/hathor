@@ -1,32 +1,31 @@
-import os
+from mimetypes import guess_extension, guess_type
+from pathlib import Path
+from typing import List
 
-import mutagen
-import mutagen.id3 as mutagen_id3
+from mutagen import File as mutagen_file
+from mutagen.id3 import APIC, ID3
+from mutagen.id3._util import ID3NoHeaderError
 from mutagen.mp3 import HeaderNotFoundError
-from mutagen.flac import FLAC, Picture
 
 from hathor.exc import AudioFileException
 
-def _generate_metadata(file_path):
+def _generate_metadata(file_path: Path) -> mutagen_file:
     try:
-        audio_file = mutagen.File(file_path, easy=True)
+        audio_file = mutagen_file(file_path, easy=True)
     except HeaderNotFoundError as e:
-        raise AudioFileException(str(e))
+        raise AudioFileException(str(e)) from e
     if audio_file is None:
-        raise AudioFileException("Unsupported type for tags on file %s" % file_path)
+        raise AudioFileException(f'Unsupported type for tags on file {file_path}')
     return audio_file
 
-def _generate_id3(file_path):
+def _generate_id3(file_path: Path) -> ID3:
     try:
-        audio_file = mutagen_id3.ID3(file_path)
-    except mutagen_id3._util.ID3NoHeaderError as error: #pylint:disable=protected-access
-        raise AudioFileException("Invalid file %s type -- %s" % (file_path, str(error)))
+        audio_file = ID3(file_path)
+    except ID3NoHeaderError as error: #pylint:disable=protected-access
+        raise AudioFileException(f'Invalid file {file_path} type -- {str(error)}') from error
     return audio_file
 
-def _generate_flac(file_path):
-    return FLAC(file_path)
-
-def tags_update(input_file, key_values):
+def tags_update(input_file: Path, key_values: dict) -> mutagen_file:
     '''
     Reset the audio tags on the file assocatied with an epsiode
     input_file       :   Path to file
@@ -43,21 +42,21 @@ def tags_update(input_file, key_values):
             pass
         audio_file[key] = value
     audio_file.save()
-    return audio_file
+    return True
 
-def tags_show(input_file):
+def tags_show(input_file: Path) -> mutagen_file:
     '''
     Get dictionary of audio tags for file
     input_file  :   audio file to get tags from
     '''
     audio_file = _generate_metadata(input_file)
 
-    new_dict = dict()
+    new_dict = {}
     for key, value in audio_file.items():
         new_dict[key] = value[0]
     return new_dict
 
-def tags_delete(input_file, tag_list):
+def tags_delete(input_file: Path, tag_list: List[str]) -> mutagen_file:
     '''
     Attempt to delete all tags in args from audio file
     input_file  :   audio_file to delete tags
@@ -75,29 +74,28 @@ def tags_delete(input_file, tag_list):
     audio_file.save()
     return deleted_tags
 
-def picture_extract(input_file, output_file):
+def picture_extract(audio_file: Path, output_file: Path) -> dict:
     '''
     Extract picture from audio file to and output file
-    input_file      :   Input path of file you wish to extract picture from
+    audio_file      :   Input path of file you wish to extract picture from
     output_file     :   Output path of new picture file (will override file ending if necessary)
     '''
-    audio_file = _generate_id3(input_file)
+    audio_file = _generate_id3(audio_file)
 
     picture = None
     # sometimes keys can be weird and have suffixes, like "APIC:" or "APIC:png"
-    for key in audio_file.keys():
+    for key in audio_file:
         if key.startswith('APIC'):
             picture = audio_file[key]
             break
     if picture is None:
-        raise AudioFileException("Unable to find picture for file:%s" % input_file)
+        raise AudioFileException(f'Unable to find picture for file: {audio_file}')
 
-    _, ending = os.path.splitext(output_file)
+    if not isinstance(output_file, Path):
+        output_file = Path(output_file)
 
-    if picture.mime == 'image/jpeg' and ending != '.jpg':
-        output_file = '%s.jpg' % output_file
-    elif picture.mime == 'image/png' and ending != '.png':
-        output_file = '%s.png' % output_file
+    if guess_extension(picture.mime) != output_file.suffix:
+        raise AudioFileException(f'Invalid suffix {output_file.suffix} for mimetype {picture.mime}')
 
     with open(output_file, 'wb') as writer:
         writer.write(picture.data)
@@ -107,10 +105,12 @@ def picture_extract(input_file, output_file):
         'mime' : picture.mime,
         'type' : picture.type,
         'desc' : picture.desc,
-        'output_path' : output_file,
+        'output_path' : str(output_file.resolve()),
     }
 
-def picture_update(audio_file, picture_file, encoding=3, picture_type=3, description='cover'):
+def picture_update(audio_file: Path, picture_file: Path,
+                   encoding: int = 3, picture_type: int = 3,
+                   description: str = 'cover'):
     '''
     Update a picture for an audio file from a seperate image
     audio_file           :   Path of audio file you wish to update
@@ -119,34 +119,26 @@ def picture_update(audio_file, picture_file, encoding=3, picture_type=3, descrip
     picture_type         :   Type of picture, passed to mutagen. 3 is cover image
     description          :   Description of image
     '''
-    if picture_file.endswith('.png'):
-        mime = 'image/png'
-    elif picture_file.endswith('.jpg') or picture_file.endswith('.jpeg'):
-        mime = 'image/jpeg'
-    else:
-        raise AudioFileException("Unsupported image type:%s" % picture_file)
+    if not isinstance(picture_file, Path):
+        picture_file = Path(picture_file)
+    if not isinstance(audio_file, Path):
+        audio_file = Path(audio_file)
+
+    mime = guess_type(picture_file)[0]
+    if not mime:
+        raise AudioFileException(f'Unsupported image type: {picture_file}')
 
     with open(picture_file, 'rb') as reader:
         data = reader.read()
 
-    # Check if file is flac or mp3
-    if audio_file.endswith('.flac'):
-        generated_audio_file = _generate_flac(audio_file)
-        image = Picture()
-        image.type = encoding
-        image.desc = description
-        image.data = data
-        generated_audio_file.add_picture(image)
-        generated_audio_file.save(audio_file)
-    else:
-        generated_audio_file = _generate_id3(audio_file)
-        keys_to_delete = []
-        for key in generated_audio_file.keys():
-            if key.startswith('APIC'):
-                keys_to_delete.append(key)
-        for key in keys_to_delete:
-            del generated_audio_file[key]
-        generated_audio_file['APIC'] = mutagen_id3.APIC(encoding=encoding, mime=mime, #pylint:disable=no-member
-                                                        data=data, type=picture_type, desc=description)
-        generated_audio_file.save()
+    generated_audio_file = _generate_id3(audio_file)
+    keys_to_delete = []
+    for key in generated_audio_file.keys():
+        if key.startswith('APIC'):
+            keys_to_delete.append(key)
+    for key in keys_to_delete:
+        del generated_audio_file[key]
+    generated_audio_file['APIC'] = APIC(encoding=encoding, mime=mime,
+                                        data=data, type=picture_type, desc=description)
+    generated_audio_file.save()
     return True

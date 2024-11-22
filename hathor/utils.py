@@ -1,60 +1,107 @@
-from contextlib import contextmanager
-import os
-import random
-import string
+from logging import getLogger, Formatter, StreamHandler, RootLogger
+from logging.handlers import RotatingFileHandler
+from string import ascii_lowercase, ascii_uppercase, digits
 
+from pathlib import Path
 from urllib.parse  import urlparse
 
-def process_url(url):
+def process_url(url: str) -> str:
+    '''
+    Process url and remove extra options
+
+    url: Basic url string
+    '''
     processed_url = urlparse(url)
-    return f'{processed_url.scheme}://{processed_url.netloc}/{processed_url.path}'
+    return f'{processed_url.scheme}://{processed_url.netloc}{processed_url.path}'
 
-def random_string(prefix='', suffix='', length=10):
-    chars = string.ascii_lowercase + string.digits
-    tempy = ''.join(random.choice(chars) for _ in range(length))
-    return prefix + tempy + suffix
+def check_patreon(url: str) -> bool:
+    '''
+    Check if patreon url
 
-@contextmanager
-def temp_file(name=None, suffix='', delete=True):
-    if not name:
-        name = random_string(prefix='/tmp/', suffix=suffix)
-    try:
-        yield name
-    finally:
-        if delete:
-            try:
-                os.remove(name)
-            except OSError as exc:
-                if exc.errno == os.errno.ENOENT:
-                    pass
-                else:
-                    raise
+    url: Basic url string
+    '''
+    processed_url = urlparse(url)
+    return 'patreonusercontent' in processed_url.netloc
 
-def normalize_name(name):
-    valid_chars = string.ascii_lowercase + string.digits
-    valid_chars += string.ascii_uppercase + '_' + ' '
+def normalize_name(name: str) -> str:
+    '''
+    Remove non alpha numeric characters from string
+    name: original name
+    '''
+    valid_chars = ascii_lowercase + digits
+    valid_chars += ascii_uppercase + '_'
 
-    bad_chars = []
+    new_str = ''
     for char in name:
         if char not in valid_chars:
-            bad_chars.append(char)
-    for char in bad_chars:
-        name = name.replace(char, '_')
+            new_str = f'{new_str}_'
+            continue
+        new_str = f'{new_str}{char}'
 
     while True:
-        new_name = name.replace('__', '_')
-        if new_name == name:
+        new_name = new_str.replace('__', '_')
+        if new_name == new_str:
             break
-        name = new_name
+        new_str = new_name
 
-    name = name.lstrip('_')
-    name = name.rstrip('_')
-    return name
+    name_str = new_str.lstrip('_')
+    name_str = new_str.rstrip('_')
+    return name_str
 
-def clean_string(stringy):
+def clean_string(stringy: str) -> str:
+    '''
+    Clean string and remove extra bits
+    stringy: Original String
+    '''
     if stringy is None:
         return None
     s = stringy.lstrip(' ')
     s = s.rstrip(' ').rstrip('\n').rstrip(' ')
     s = s.replace('\n', ' ').replace('\r', '')
     return s
+
+def setup_logger(name: str,
+                 logging_file: Path = None,
+                 console_logging: bool = False,
+                 log_level: int = 20,
+                 logging_file_backup_count: int = 4,
+                 logging_file_max_bytes: int = (2 ** 20) * 10) -> RootLogger:
+    '''
+    Setup a generic python logger
+    name: Name of logger
+    log_level: level
+    logging_file: If given, writes to file name
+    console_logging: Defaults to true, logs to stdout
+    '''
+    logger = getLogger(name)
+    formatter = Formatter('%(asctime)s - %(levelname)s - %(message)s',
+                          datefmt='%Y-%m-%d %H:%M:%S')
+    logger.setLevel(log_level)
+    if logging_file is not None:
+        # Create logging dir if does not exist
+        log_path = Path(logging_file)
+        log_path.parent.mkdir(exist_ok=True)
+        fh = RotatingFileHandler(logging_file,
+                                 backupCount=logging_file_backup_count,
+                                 maxBytes=logging_file_max_bytes)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+    if console_logging:
+        sh = StreamHandler()
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+    return logger
+
+def rm_tree(pth: Path) -> bool:
+    '''
+    Remove all files in a tree
+    pth: Path to remove
+    '''
+    # https://stackoverflow.com/questions/50186904/pathlib-recursively-remove-directory
+    for child in pth.glob('*'):
+        if child.is_file():
+            child.unlink()
+        else:
+            rm_tree(child)
+    pth.rmdir()
+    return True

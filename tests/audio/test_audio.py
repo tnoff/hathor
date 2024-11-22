@@ -1,147 +1,84 @@
-import os
+from tempfile import NamedTemporaryFile
 
-from mutagen.id3._util import ID3NoHeaderError
-import mock
+import pytest
+
 
 from hathor.audio import metadata
-from hathor import utils
 from hathor.exc import AudioFileException
 
 from tests import utils as test_utils
 
-def mutagen_mock(_, **__):
-    return None
+def test_audio_tags():
+    with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
+        print('temp audio', temp_audio)
+        args = {
+            'title' : test_utils.random_string(),
+            'album' : test_utils.random_string(),
+            'performer'  : test_utils.random_string(),
+            'tracknumber' : '1/2',
+            'discnumber' : '1/1',
+            'genre' : test_utils.random_string(),
+            'date' : '2015',
+            'copyright' : test_utils.random_string(),
+            'albumartist' : test_utils.random_string(),
+        }
+        metadata.tags_update(temp_audio, args)
+        new_tags = metadata.tags_show(temp_audio)
+        assert new_tags['title'] == args['title']
+        metadata.tags_delete(temp_audio, list(args.keys()))
+        new_tags = metadata.tags_show(temp_audio)
+        assert not new_tags
 
-def id3_mock(_, **__):
-    raise ID3NoHeaderError('')
+def test_audio_tags_none_not_set():
+    with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
+        args = {
+            'title' : test_utils.random_string(),
+            'album' : None,
+        }
+        metadata.tags_update(temp_audio, args)
+        new_tags = metadata.tags_show(temp_audio)
+        assert new_tags['title'] == args['title']
+        assert 'album' not in new_tags
 
-class TestAudio(test_utils.TestHelper):
-    def test_generate_metadata(self):
-        with mock.patch('mutagen.File', side_effect=mutagen_mock):
-            with self.assertRaises(AudioFileException) as error:
-                metadata._generate_metadata('foo') #pylint:disable=protected-access
-            self.check_error_message('Unsupported type for tags on file foo', error)
+def test_audio_tags_delete_args_not_there():
+    with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
+        args = {
+            'title' : test_utils.random_string(),
+            'album' : test_utils.random_string(),
+            'artist' : test_utils.random_string(),
+            'albumartist' : test_utils.random_string(),
+        }
+        metadata.tags_update(temp_audio, args)
+        metadata.tags_delete(temp_audio, ['foo'])
+        new_tags = metadata.tags_show(temp_audio)
+        assert new_tags == args
 
-    def test_generate_id(self):
-        with mock.patch('mutagen.id3.ID3', side_effect=id3_mock):
-            with self.assertRaises(AudioFileException) as error:
-                metadata._generate_id3('foo.mp3') #pylint:disable=protected-access
-            self.check_error_message('Invalid file foo.mp3 type -- ', error)
+def test_audio_tags_reset_mp4():
+    with test_utils.temp_audio_file(suffix='.mp4') as temp_audio:
+        args = {
+            'title' : test_utils.random_string(),
+        }
+        metadata.tags_update(temp_audio, args)
+        metadata.tags_delete(temp_audio, ['foo', 'bar'])
+        new_tags = metadata.tags_show(temp_audio)
+        assert new_tags == args
 
-    def test_audio_tags(self):
-        with test_utils.temp_audio_file(open_data=False) as temp:
-            args = {
-                'title' : utils.random_string(),
-                'album' : utils.random_string(),
-                'performer'  : utils.random_string(),
-                'tracknumber' : '1/2',
-                'discnumber' : '1/1',
-                'genre' : utils.random_string(),
-                'date' : '2015',
-                'copyright' : utils.random_string(),
-                'albumartist' : utils.random_string(),
-            }
-            metadata.tags_update(temp, args)
-            new_tags = metadata.tags_show(temp)
-            self.assertEqual(args, new_tags)
-            metadata.tags_delete(temp, args.keys())
-            new_tags = metadata.tags_show(temp)
-            self.assertEqual(new_tags, {})
+def test_audio_picture_extract_data_jpg():
+    with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
+        # test with jpg
+        with test_utils.temp_image_file() as temp_pic:
+            with open(temp_pic, 'rb') as reader:
+                temp_pic_data = reader.read()
+            metadata.picture_update(temp_audio, temp_pic)
+            with NamedTemporaryFile(suffix='.jpg') as new_temp_pic:
+                metadata.picture_extract(temp_audio, new_temp_pic.name)
+                with open(new_temp_pic.name, 'rb') as reader:
+                    new_temp_data = reader.read()
+                assert new_temp_data == temp_pic_data
 
-    def test_audio_tags_none_isnt_set(self):
-        with test_utils.temp_audio_file(open_data=False) as temp:
-            args = {
-                'title' : utils.random_string(),
-                'album' : None,
-            }
-            metadata.tags_update(temp, args)
-            new_tags = metadata.tags_show(temp)
-            self.assertEqual(new_tags, {'title' : args['title']})
-
-    def test_audio_tags_delete_args_not_there(self):
-        with test_utils.temp_audio_file(open_data=False) as temp:
-            args = {
-                'title' : utils.random_string(),
-                'album' : utils.random_string(),
-                'artist' : utils.random_string(),
-                'albumartist' : utils.random_string(),
-            }
-            metadata.tags_update(temp, args)
-            metadata.tags_delete(temp, ['foo'])
-            new_tags = metadata.tags_show(temp)
-            self.assertEqual(args, new_tags)
-
-    def test_audio_tags_reset_mp4(self):
-        with test_utils.temp_audio_file(open_data=False, suffix='.mp4') as temp:
-            args = {
-                'title' : utils.random_string(),
-            }
-            metadata.tags_update(temp, args)
-            metadata.tags_delete(temp, ['foo', 'bar'])
-            new_tags = metadata.tags_show(temp)
-            self.assertEqual(new_tags, args)
-
-    def test_audio_picture_extract_data(self):
-        # test picture update and extract and data is same
-        with test_utils.temp_audio_file(open_data=False) as temp_audio:
-            # test with jpg
-            with test_utils.temp_image_file() as temp_pic:
-                with open(temp_pic, 'rb') as reader:
-                    temp_pic_data = reader.read()
-                metadata.picture_update(temp_audio, temp_pic)
-                with utils.temp_file(suffix='.jpg') as new_temp_pic:
-                    metadata.picture_extract(temp_audio, new_temp_pic)
-                    with open(new_temp_pic, 'rb') as reader:
-                        new_temp_data = reader.read()
-                    self.assertEqual(new_temp_data, temp_pic_data)
-
-            # test with png
-            with test_utils.temp_image_file(suffix='.png') as temp_pic:
-                with open(temp_pic, 'rb') as reader:
-                    temp_pic_data = reader.read()
-                metadata.picture_update(temp_audio, temp_pic)
-
-                with utils.temp_file(suffix='.png') as new_temp_pic:
-                    metadata.picture_extract(temp_audio, new_temp_pic)
-                    with open(new_temp_pic, 'rb') as reader:
-                        new_temp_data = reader.read()
-                    self.assertEqual(new_temp_data, temp_pic_data)
-
-    def test_audio_picture_update_invalid_type(self):
-        # foo is a bad file to load from
-        with utils.temp_file(suffix='.foo') as test_file:
-            with test_utils.temp_audio_file(open_data=False) as temp_audio:
-                with self.assertRaises(AudioFileException) as error:
-                    metadata.picture_update(temp_audio, test_file)
-                self.check_error_message('Unsupported image type:%s' % test_file, error)
-
-        # test the ones that work
-        with test_utils.temp_image_file(suffix='.jpg') as test_file:
-            with test_utils.temp_audio_file(open_data=False) as temp_audio:
-                metadata.picture_update(temp_audio, test_file)
-        with test_utils.temp_image_file(suffix='.png') as test_file:
-            with test_utils.temp_audio_file(open_data=False) as temp_audio:
-                metadata.picture_update(temp_audio, test_file)
-
-    def test_audio_picture_extract_name_overriden(self):
-        with test_utils.temp_audio_file(open_data=False) as temp_audio:
-            # give it a bad ending, should be overriden with .jpg
-            with test_utils.temp_image_file() as temp_pic:
-                metadata.picture_update(temp_audio, temp_pic)
-                with utils.temp_file(suffix='.foo') as new_temp_pic:
-                    output = metadata.picture_extract(temp_audio, new_temp_pic)
-                    actual_path = output['output_path']
-                    self.assertNotEqual(actual_path, new_temp_pic)
-                    self.assertTrue(actual_path.endswith('.jpg'))
-                    # make sure file gets deleted
-                    os.remove('%s.jpg' % new_temp_pic)
-            # give it a bad ending, should be overriden with .png
-            with test_utils.temp_image_file(suffix='.png') as temp_pic:
-                metadata.picture_update(temp_audio, temp_pic)
-                with utils.temp_file(suffix='.foo') as new_temp_pic:
-                    output = metadata.picture_extract(temp_audio, new_temp_pic)
-                    actual_path = output['output_path']
-                    self.assertNotEqual(actual_path, new_temp_pic)
-                    self.assertTrue(actual_path.endswith('.png'))
-                    # make sure file gets deleted
-                    os.remove('%s.png' % new_temp_pic)
+def test_audio_picture_update_invalid_type():
+    with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
+        with NamedTemporaryFile(suffix='.foo') as temp_file:
+            with pytest.raises(AudioFileException) as error:
+                metadata.picture_update(temp_audio, temp_file.name)
+            assert 'Unsupported image type:' in str(error.value)

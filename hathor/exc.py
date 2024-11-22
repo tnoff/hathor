@@ -1,11 +1,19 @@
 class HathorException(Exception):
-    pass
+    '''
+    Generic Hathor Exception
+    '''
 
 class AudioFileException(Exception):
-    pass
+    '''
+    Generic AudioFileException
+    '''
 
 class FunctionUndefined(Exception):
-    pass
+    '''
+    Throw error if function not inherited
+    '''
 
-class CLIException(HathorException):
-    pass
+class CliException(Exception):
+    '''
+    Generic Cli Exception
+    '''
