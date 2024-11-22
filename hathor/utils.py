@@ -14,22 +14,6 @@ def random_string(prefix='', suffix='', length=10):
     tempy = ''.join(random.choice(chars) for _ in range(length))
     return prefix + tempy + suffix
 
-@contextmanager
-def temp_file(name=None, suffix='', delete=True):
-    if not name:
-        name = random_string(prefix='/tmp/', suffix=suffix)
-    try:
-        yield name
-    finally:
-        if delete:
-            try:
-                os.remove(name)
-            except OSError as exc:
-                if exc.errno == os.errno.ENOENT:
-                    pass
-                else:
-                    raise
-
 def normalize_name(name):
     valid_chars = string.ascii_lowercase + string.digits
     valid_chars += string.ascii_uppercase + '_' + ' '

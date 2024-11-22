@@ -1,10 +1,12 @@
 from contextlib import contextmanager
 import logging
 import os
+from tempfile import NamedTemporaryFile
 import unittest
 
 import httpretty
-from moviepy.editor import AudioClip, ImageClip
+from moviepy.audio.AudioClip import AudioClip
+from moviepy.video.VideoClip import ImageClip
 import numpy as np
 from PIL import Image
 import yt_dlp
@@ -20,17 +22,17 @@ def mock_mp3_download(url, mp3_body):
 def temp_audio_file(open_data=True, duration=2, suffix='.mp3', delete=True):
     assert suffix in ['.mp3', '.mp4'], 'Invalid suffix type:%s' % suffix
     # logic taken from https://zulko.github.io/moviepy/ref/AudioClip.html?highlight=sin
-    with utils.temp_file(suffix=suffix, delete=delete) as temp_file:
+    with NamedTemporaryFile(suffix=suffix) as temp_file:
         audio_frames = lambda t: 2 *[np.sin(404 * 2 * np.pi * t)]
         audioclip = AudioClip(audio_frames, duration=duration)
         if suffix == '.mp3':
-            audioclip.write_audiofile(temp_file, logger=None)
+            audioclip.write_audiofile(temp_file.name, logger=None)
         else:
             image = ImageClip(np.random.rand(30, 30, 3) * 255)
             videoclip = image.set_audio(audioclip)
             videoclip.duration = duration
             videoclip.fps = 24
-            videoclip.write_videofile(temp_file, logger=None)
+            videoclip.write_videofile(temp_file.name, logger=None)
         try:
             if not open_data:
                 yield temp_file
@@ -169,30 +171,3 @@ def youtube_mock_error(options):
         yield YoutubeClass(options, raise_error=True)
     finally:
         pass
-
-class TestHelper(unittest.TestCase):
-
-    def assert_length(self, obj, length):
-        self.assertEqual(len(obj), length)
-
-    def assert_not_length(self, obj, length):
-        self.assertNotEqual(len(obj), length)
-
-    def assert_none(self, obj):
-        self.assertEqual(obj, None)
-
-    def assert_not_none(self, obj):
-        self.assertNotEqual(obj, None)
-
-    def assert_dictionary(self, dictionary, skip=None):
-        skips = skip or []
-        for key, value in dictionary.items():
-            if key in skips:
-                continue
-            if value is None:
-                self.fail("Key %s cannot be None" % key)
-            if value is []:
-                self.fail("Key %s cannot be empty list" % key)
-
-    def check_error_message(self, message, error):
-        self.assertEqual(message, str(error.exception))
