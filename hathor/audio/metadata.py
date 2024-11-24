@@ -1,26 +1,26 @@
 import os
 
-import mutagen
+from mutagen import File as mutagen_file
 import mutagen.id3 as mutagen_id3
 from mutagen.mp3 import HeaderNotFoundError
 from mutagen.flac import FLAC, Picture
 
 from hathor.exc import AudioFileException
 
-def _generate_metadata(file_path):
+def _generate_metadata(file_path: str) -> mutagen_file:
     try:
-        audio_file = mutagen.File(file_path, easy=True)
+        audio_file = mutagen_file(file_path, easy=True)
     except HeaderNotFoundError as e:
         raise AudioFileException(str(e))
     if audio_file is None:
-        raise AudioFileException("Unsupported type for tags on file %s" % file_path)
+        raise AudioFileException(f'Unsupported type for tags on file {file_path}')
     return audio_file
 
 def _generate_id3(file_path):
     try:
         audio_file = mutagen_id3.ID3(file_path)
     except mutagen_id3._util.ID3NoHeaderError as error: #pylint:disable=protected-access
-        raise AudioFileException("Invalid file %s type -- %s" % (file_path, str(error)))
+        raise AudioFileException(f'Invalid file {file_path} type -- {str(error)}')
     return audio_file
 
 def _generate_flac(file_path):
@@ -95,9 +95,9 @@ def picture_extract(input_file, output_file):
     _, ending = os.path.splitext(output_file)
 
     if picture.mime == 'image/jpeg' and ending != '.jpg':
-        output_file = '%s.jpg' % output_file
+        raise AudioFileException(f'Invalid suffix {suffix} for mimetype {picture.mime}')
     elif picture.mime == 'image/png' and ending != '.png':
-        output_file = '%s.png' % output_file
+        raise AudioFileException(f'Invalid suffix {suffix} for mimetype {picture.mime}')
 
     with open(output_file, 'wb') as writer:
         writer.write(picture.data)

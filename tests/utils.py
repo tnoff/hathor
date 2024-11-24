@@ -19,38 +19,30 @@ def mock_mp3_download(url, mp3_body):
     httpretty.register_uri(httpretty.GET, url, body=mp3_body, stream=True, content_type='audio/mpeg')
 
 @contextmanager
-def temp_audio_file(open_data=True, duration=2, suffix='.mp3', delete=True):
-    assert suffix in ['.mp3', '.mp4'], 'Invalid suffix type:%s' % suffix
+def temp_audio_file(duration=2, suffix='.mp3'):
     # logic taken from https://zulko.github.io/moviepy/ref/AudioClip.html?highlight=sin
     with NamedTemporaryFile(suffix=suffix) as temp_file:
+        print('tempfile', temp_file, temp_file.name)
         audio_frames = lambda t: 2 *[np.sin(404 * 2 * np.pi * t)]
         audioclip = AudioClip(audio_frames, duration=duration)
         if suffix == '.mp3':
-            audioclip.write_audiofile(temp_file.name, logger=None)
+            audioclip.write_audiofile(temp_file.name, fps=44100, logger=None)
         else:
             image = ImageClip(np.random.rand(30, 30, 3) * 255)
-            videoclip = image.set_audio(audioclip)
+            videoclip = image.with_audio(audioclip)
             videoclip.duration = duration
             videoclip.fps = 24
             videoclip.write_videofile(temp_file.name, logger=None)
-        try:
-            if not open_data:
-                yield temp_file
-            else:
-                with open(temp_file, 'rb') as f:
-                    data = f.read()
-                    yield data
-        finally:
-            pass
+        yield temp_file.name
 
 @contextmanager
 def temp_image_file(suffix='.jpg'):
     # stolen from http://stackoverflow.com/questions/10901049/create-set-of-random-jpgs
-    with utils.temp_file(suffix=suffix) as temp:
+    with NamedTemporaryFile(suffix=suffix) as temp_file:
         randoms = np.random.rand(30, 30, 3) * 255
         im_out = Image.fromarray(randoms.astype('uint8')).convert('RGB')
-        im_out.save(temp)
-        yield temp
+        im_out.save(temp_file.name)
+        yield temp_file.name
 
 @contextmanager
 def temp_dir(name=None, delete=True):
