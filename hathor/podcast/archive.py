@@ -51,9 +51,8 @@ def verify_title_filters(filters, title):
     return valid
 
 class ArchiveInterface(object):
-    def __init__(self, logger, soundcloud_client_id, google_api_key):
+    def __init__(self, logger, google_api_key):
         self.logger = logger
-        self.soundcloud_client_id = soundcloud_client_id
         self.google_api_key = google_api_key
         self.episode_format = None
 
@@ -64,8 +63,8 @@ class ArchiveInterface(object):
         raise FunctionUndefined("No episode download for class")
 
 class RSSManager(ArchiveInterface):
-    def __init__(self, logger, soundcloud_client_id, google_api_key):
-        ArchiveInterface.__init__(self, logger, soundcloud_client_id, google_api_key)
+    def __init__(self, logger, google_api_key):
+        ArchiveInterface.__init__(self, logger, google_api_key)
         self.episode_format = '.mp3'
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None):
@@ -203,4 +202,5 @@ ARCHIVE_TYPES = {
     'rss' : RSSManager,
     'youtube' : YoutubeManager,
 }
-ARCHIVE_KEYS = ARCHIVE_TYPES.keys()
+
+VALID_ARCHIVE_KEYS = list(ARCHIVE_TYPES.keys())

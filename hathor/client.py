@@ -1,10 +1,12 @@
-import errno
+from inspect import getmembers, isfunction
 import os
-import logging
-from logging.handlers import RotatingFileHandler
+from logging import RootLogger
 import re
 from types import FunctionType
+from typing import Literal, List
 
+
+from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy import and_, desc, or_
 from sqlalchemy.exc import IntegrityError
@@ -14,51 +16,87 @@ from hathor.audio import metadata
 from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
 from hathor.exc import AudioFileException, HathorException
-from hathor.podcast.archive import ARCHIVE_TYPES, ARCHIVE_KEYS
+from hathor.podcast.archive import ARCHIVE_TYPES, VALID_ARCHIVE_KEYS
 from hathor import  utils
 
 DEFAULT_DATETIME_FORMAT = '%Y-%m-%d'
 
-class HathorClient(object):
-    def __init__(self, podcast_directory=None, datetime_output_format=DEFAULT_DATETIME_FORMAT,
-                 logging_file=None, logging_file_level=logging.DEBUG,
-                 database_file=None, soundcloud_client_id=None, google_api_key=None,
-                 console_logging=True, console_logging_level=logging.INFO):
+FILE_PATH = os.path.abspath(__file__)
+
+def load_plugins():
+    '''
+    Loads plugins for dir, gets list of functions to run later
+    '''
+    parent_dir = Path(FILE_PATH).parent
+    plugins_dir = parent_dir / 'plugins'
+
+    functions = []
+    for path in plugins_dir.glob('**/*.py'):
+        if path.name == '__init__.py':
+            continue
+        relative_path = path.relative_to(parent_dir)
+        # Remove .py naming
+        relative_path = relative_path.parent / relative_path.stem
+        import_name = str(relative_path).replace(os.sep, '.')
+        # Import and get functions
+        imported = __import__(import_name)
+        for name, func in getmembers(import_name, isfunction):
+            functions.append((name, func))
+    return functions
+
+def run_plugins():
+    '''
+    Decorator to add to functions
+    Will add any plugin function that matches name
+    '''
+    def decorator(func):
+        def caller(*args, **kwargs):
+            result = func(*args, **kwargs)
+            # Assume first arg called is "self"
+            selfie = args[0]
+            # Look through plugins
+            for plugin in selfie.plugins:
+                # Plugins will be (name, func obj)
+                if plugin[0] == func.__name__:
+                    # Run plugin function with client class
+                    # and result of original function
+                    plugin_func = plugin[1]
+                    result = plugin_func(selfie, result, *args, **kwargs)
+            return result
+        return caller
+    return decorator
+
+ARCHIVE_TYPE = Literal(VALID_ARCHIVE_KEYS)
+
+class HathorClient():
+    def __init__(self, podcast_directory: Path = None,
+                 datetime_output_format: str = DEFAULT_DATETIME_FORMAT,
+                 logger: RootLogger = None,
+                 database_file: Path = None, google_api_key: str = None):
         '''
         Initialize the hathor client
         podcast_directory       :   Directory where new podcasts will be placed by default
         datetime_output_format  :   Python datetime output format
-        logging_file            :   Add logging handler for output file, will be rotational
-        logging_file_level      :   Level for file logging to use
         database_file           :   Sqlite database to use, if None db will be stored in memory
-        soundcloud_client_id    :   Client id for accessing soundcloud API
         google_api_key          :   Key for accessing google API for youtube
-        console_logging         :   Whether or not to set logging to console
-        console_logging_level   :   Level for console logging to use
+        logger                  :   Logger for client to use
         '''
         self.podcast_directory = None
-        if podcast_directory is not None:
-            self.podcast_directory = os.path.abspath(podcast_directory)
+        if podcast_directory:
+            self.podcast_directory = Path(podcast_directory)
         self.datetime_output_format = datetime_output_format
-
-        self.logger = setup_logger('hathor', logging_file_level, logging_file=logging_file,
-                                   console_logging=console_logging,
-                                   console_logging_level=console_logging_level)
+        self.logger = logger or utils.setup_logger('Hathor')
 
         if database_file is None:
             engine = create_engine('sqlite:///')
             self.logger.debug("Initializing hathor client in memory (no database file given")
         else:
-            engine = create_engine('sqlite:///%s' % database_file)
-            self.logger.debug("Initializing hathor client with database file %s", database_file)
+            engine = create_engine(f'sqlite:///{database_file}')
+            self.logger.debug(f'Initializing hathor client with database file {database_file}')
 
         BASE.metadata.create_all(engine)
         BASE.metadata.bind = engine
         self.db_session = sessionmaker(bind=engine)()
-
-        if not soundcloud_client_id:
-            self.logger.debug("No soundcloud client id given, will not be able to access soundcloud api")
-        self.soundcloud_client_id = soundcloud_client_id
 
         if not google_api_key:
             self.logger.debug("No google api key given, will not be to able to access google api")
@@ -83,46 +121,14 @@ class HathorClient(object):
         self.logger.error(message)
         raise HathorException(message)
 
-    def _check_argument_oneof(self, value, allowed_values, message):
-        if value not in allowed_values:
-            self._fail('%s - %s value given' % (message, value))
-
-    def _check_includers(self, include_args, exclude_args):
-        code, result = check_inputs(include_args)
-        if code is False:
-            self._fail(result)
-        elif code is True:
-            include_args = result
-        code, result = check_inputs(exclude_args)
-        if code is False:
-            self._fail(result)
-        elif code is True:
-            exclude_args = result
-        return include_args, exclude_args
-
-    def _check_input(self, user_input):
-        code, result = check_inputs(user_input)
-        if code is False:
-            self._fail(result)
-        elif code is True:
-            user_input = result
-        return user_input
-
-    def _check_arguement_type(self, user_input, types_allowed, message):
-        code, error_message = check_arguement_type(user_input, types_allowed)
-        if code is True:
-            return
-        else:
-            self._fail('%s - %s' % (message, error_message))
-
-    def _ensure_path(self, directory_path):
-        if not os.path.isdir(directory_path):
-            os.makedirs(directory_path)
-            self.logger.info("Created new directory:%s", directory_path)
-
     @run_plugins()
-    def podcast_create(self, archive_type, broadcast_id, podcast_name, max_allowed=None,
-                       file_location=None, artist_name=None, automatic_download=True):
+    def podcast_create(self, archive_type: ARCHIVE_KEYS,
+                       broadcast_id: str,
+                       podcast_name: str,
+                       max_allowed: int = None,
+                       file_location: Path = None,
+                       artist_name: str = None,
+                       automatic_download: bool = True) -> dict:
         '''
         Create new podcast
         archive_type         :   Where podcast is downloaded from (rss/soundcloud/youtube)
@@ -135,30 +141,20 @@ class HathorClient(object):
 
         Returns: Integer dict object representing created podcast
         '''
-        self._check_arguement_type(podcast_name, str, 'Podcast name must be string type')
-        self._check_arguement_type(broadcast_id, str, 'Brodcast ID must be string type')
-        self._check_arguement_type(archive_type, str, 'Archive Type must be string type')
-        self._check_arguement_type(automatic_download, bool, 'Automatic download must be boolean type')
-        self._check_arguement_type(max_allowed, [None, int], 'Max allowed must be None or int type')
-        self._check_arguement_type(file_location, [None, str], 'File location must be None or string type')
-        self._check_arguement_type(artist_name, [None, str], 'File location must be None or string type')
-
-        self._check_argument_oneof(archive_type, ARCHIVE_KEYS, 'Archive Type must be in accepted list of keys')
-
         if max_allowed is not None and max_allowed < 1:
             self._fail('Max allowed must be positive integer, %s given' % max_allowed)
 
         if file_location is None:
             if self.podcast_directory is None:
                 self._fail("No default podcast directory specified, will need specific file location to create podcast")
-            file_location = os.path.join(self.podcast_directory, utils.normalize_name(podcast_name))
+            file_location = Path(self.podcast_directory) / utils.normalize_name(podcast_name)    
 
         pod_args = {
             'name' : utils.clean_string(podcast_name),
             'archive_type' : archive_type,
             'broadcast_id' : utils.clean_string(broadcast_id),
             'max_allowed' : max_allowed,
-            'file_location' : os.path.abspath(file_location),
+            'file_location' : str(self.file_location.resolve()),
             'artist_name' : utils.clean_string(artist_name),
             'automatic_episode_download' : automatic_download,
         }
@@ -166,18 +162,17 @@ class HathorClient(object):
         try:
             self.db_session.add(new_pod)
             self.db_session.commit()
-            self.logger.info("Podcast created in database, id:%d, args %s",
-                             new_pod.id, ' -- '.join('%s-%s' % (k, v) for k, v in pod_args.items()))
+            self.logger.info(f'Podcast created, id: {new_pod.id}, name: {new_pod.name}')
         except IntegrityError:
             self.db_session.rollback()
-            self._fail('Cannot create podcast, name was %s' % pod_args['name'])
+            self._fail(f'Cannot create podcast, name was {pod_args["name"]}')
 
-        self.logger.debug("Ensuring podcast %d path exists %s", new_pod.id, file_location)
-        self._ensure_path(file_location)
+        self.logger.debug(f'Ensuring podcast {new_pod.id} path exists {str(self.file_location)}')
+        self.file_location.mkdir(exist_ok=True)
         return new_pod.as_dict(self.datetime_output_format)
 
     @run_plugins()
-    def podcast_list(self):
+    def podcast_list(self) -> List[dict]:
         '''
         List all podcasts
         Returns: List of dictionaries for all podcasts
@@ -189,7 +184,7 @@ class HathorClient(object):
         return podcast_data
 
     @run_plugins()
-    def podcast_show(self, podcast_input):
+    def podcast_show(self, podcast_input) -> dict:
         '''
         Get information on one or many podcasts
         podcast_input    :      Either single integer id, or list of integer ids

@@ -11,29 +11,7 @@ from hathor import utils
 from tests import utils as test_utils
 from tests.podcasts.data import rss_feed
 
-class MockLogging(object):
-    def __init__(self, command_list):
-        self.commands = command_list
-
-    def debug(self, message):
-        self.commands.append(message)
-
-    def info(self, message):
-        self.commands.append(message)
-
-    def warn(self, message):
-        self.commands.append(message)
-
-    def error(self, message):
-        self.commands.append(message)
-
 class TestClient(test_utils.TestHelper):
-    def test_logger_level(self):
-        with test_utils.temp_client(logging_level=logging.WARNING) as client_args:
-            client = client_args.pop('podcast_client')
-            level = client.logger.getEffectiveLevel()
-            self.assertEqual(level, 30)
-
     @httpretty.activate
     def test_plugins_loaded(self):
         def mock_plugin(self, result):
