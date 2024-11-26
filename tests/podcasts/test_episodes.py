@@ -10,8 +10,6 @@ from hathor.podcast import urls
 
 from tests import utils as test_utils
 from tests.podcasts.data import rss_feed
-from tests.podcasts.data import soundcloud_account
-from tests.podcasts.data import soundcloud_archive_page1, soundcloud_archive_page2
 from tests.podcasts.data import youtube_archive1, youtube_archive2
 from tests.podcasts.data import youtube_archive1_new_item
 
@@ -21,39 +19,6 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
             self.client = client_args.pop('podcast_client') #pylint:disable=attribute-defined-outside-init
             super(TestPodcastEpisodes, self).run(result)
 
-    @httpretty.activate
-    def test_episode_sync_soundcloud(self):
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud') as podcast:
-            account_url = urls.soundcloud_account(podcast['broadcast_id'],
-                                                  self.client.soundcloud_client_id)
-            real_id = soundcloud_account.DATA['id']
-            httpretty.register_uri(httpretty.GET, account_url, body=json.dumps(soundcloud_account.DATA),
-                                   content_type='application/json')
-            page1_url = urls.soundcloud_track_list(real_id, self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, page1_url, body=json.dumps(soundcloud_archive_page1.DATA),
-                                   content_type='application/json')
-            page2_url = soundcloud_archive_page1.DATA['next_href']
-            httpretty.register_uri(httpretty.GET, page2_url, body=json.dumps(soundcloud_archive_page2.DATA),
-                                   content_type='application/json')
-            self.client.episode_sync()
-            episode_list = self.client.episode_list(only_files=False)
-            self.assertEqual(len(episode_list), 4)
-
-    @httpretty.activate
-    def test_episode_sync_soundcloud_max_allowed(self):
-        # make sure you only get the one page from soundcloud pagination
-        with test_utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=2) as podcast:
-            account_url = urls.soundcloud_account(podcast['broadcast_id'],
-                                                  self.client.soundcloud_client_id)
-            real_id = soundcloud_account.DATA['id']
-            httpretty.register_uri(httpretty.GET, account_url, body=json.dumps(soundcloud_account.DATA),
-                                   content_type='application/json')
-            page1_url = urls.soundcloud_track_list(real_id, self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, page1_url, body=json.dumps(soundcloud_archive_page1.DATA),
-                                   content_type='application/json')
-            self.client.episode_sync()
-            episode_list = self.client.episode_list(only_files=False)
-            self.assertEqual(len(episode_list), 2)
 
     @httpretty.activate
     def test_episode_sync_maximum_episodes(self):
@@ -220,7 +185,7 @@ class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-publi
 
     @httpretty.activate
     def test_episode_download_curl(self):
-        # curl download used for rss and soundcloud
+        # curl download used for rss
         with test_utils.temp_podcast(self.client, archive_type='rss', broadcast_url=True) as podcast:
             httpretty.register_uri(httpretty.GET, podcast['broadcast_id'], body=rss_feed.DATA)
             self.client.episode_sync()

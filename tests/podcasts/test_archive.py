@@ -27,20 +27,6 @@ class TestArchive(test_utils.TestHelper):
         self.check_error_message('No episode download for class', error)
 
     @httpretty.activate
-    def test_soundcloud_error_status_not_200(self):
-        sound_id = '123'
-        broadcast = 'foo'
-        manager = SoundcloudManager(logging, sound_id, None)
-        url1 = urls.soundcloud_account(broadcast, sound_id)
-        broadcast_real_id = soundcloud_account.DATA['id']
-        url2 = urls.soundcloud_track_list(broadcast_real_id, sound_id)
-        httpretty.register_uri(httpretty.GET, url1, body=json.dumps(soundcloud_account.DATA))
-        httpretty.register_uri(httpretty.GET, url2, body=json.dumps(soundcloud_one_track.DATA), status=400)
-        with self.assertRaises(HathorException) as error:
-            manager.broadcast_update(broadcast)
-        self.assertTrue('Error getting soundcloud track list, request error:%s' % 400, error)
-
-    @httpretty.activate
     def test_youtube_error_is_400(self):
         google_key = '123'
         broadcast = 'foo'
@@ -70,19 +56,6 @@ class TestArchive(test_utils.TestHelper):
         with self.assertRaises(HathorException) as error:
             manager.broadcast_update(url)
         self.check_error_message('Getting invalid status code:400 for rss feed', error)
-
-    @httpretty.activate
-    def test_soundcloud_broadcast_update_skip_cant_download(self):
-        sound_id = '123'
-        broadcast = 'foo'
-        manager = SoundcloudManager(logging, sound_id, None)
-        url1 = urls.soundcloud_account(broadcast, sound_id)
-        broadcast_real_id = soundcloud_account.DATA['id']
-        url2 = urls.soundcloud_track_list(broadcast_real_id, sound_id)
-        httpretty.register_uri(httpretty.GET, url1, body=json.dumps(soundcloud_account.DATA))
-        httpretty.register_uri(httpretty.GET, url2, body=json.dumps(soundcloud_one_track_cant_download.DATA))
-        episodes = manager.broadcast_update(broadcast)
-        self.assert_length(episodes, 0)
 
     @httpretty.activate
     def test_youtube_do_not_download_non_videos(self):

@@ -15,121 +15,12 @@ from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
 from hathor.exc import AudioFileException, HathorException
 from hathor.podcast.archive import ARCHIVE_TYPES, ARCHIVE_KEYS
-from hathor import settings, utils
+from hathor import  utils
 
-
-FILE_PATH = os.path.abspath(__file__)
-DIR_PATH = os.path.dirname(FILE_PATH)
-PLUGIN_PATH = os.path.join(DIR_PATH, 'plugins')
-
-REJECT_TAG_UPDATE_FILE_TYPES = ['.mp4', '.mkv']
-
-def load_plugins():
-    skip_list = ['__init__.py']
-
-    plugin_list = []
-
-    # check plugin path for relevant py files
-    for dir_name, _, files in os.walk(PLUGIN_PATH):
-        for file_name in files:
-            if file_name in skip_list:
-                continue
-            if not file_name.endswith('.py'):
-                continue
-            # load py files
-            plugin_path = os.path.join(dir_name, file_name)
-            relative_path = os.path.join('hathor', os.path.relpath(plugin_path, DIR_PATH))
-            import_name = os.path.splitext(relative_path)[0]
-            # Remove for *nix systems and windows
-            import_name = import_name.replace(os.sep, ".")
-            # Now import
-            imported = __import__(import_name)
-            for name in relative_path.split(os.sep)[1:]:
-                if name.endswith('.py'):
-                    name = name[:-3]
-                imported = getattr(imported, name)
-            # needed this odd logic to load again, probably a better
-            # way to do this, but this works for now
-            for key, value in vars(imported).items():
-                if isinstance(value, FunctionType):
-                    plugin_list.append((key, value))
-    return plugin_list
-
-def run_plugins():
-    def decorator(func):
-        def caller(*args, **kwargs):
-            result = func(*args, **kwargs)
-            # Assume first arg called is "self"
-            selfie = args[0]
-            # Look through plugins
-            for plugin in selfie.plugins:
-                # Plugins will be (name, func obj)
-                if plugin[0] == func.__name__:
-                    # Run plugin function with client class
-                    # and result of original function
-                    plugin_func = plugin[1]
-                    result = plugin_func(selfie, result, *args, **kwargs)
-            return result
-        return caller
-    return decorator
-
-def setup_logger(name, log_file_level, logging_file=None,
-                 console_logging=True, console_logging_level=logging.INFO):
-    logger = logging.getLogger(name)
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s',
-                                  datefmt='%Y-%m-%d %H:%M:%S')
-    logger.setLevel(log_file_level)
-    if logging_file is not None:
-        fh = RotatingFileHandler(logging_file,
-                                 backupCount=4,
-                                 maxBytes=((2 ** 20) * 10))
-        fh.setLevel(log_file_level)
-        fh.setFormatter(formatter)
-        logger.addHandler(fh)
-    if console_logging:
-        sh = logging.StreamHandler()
-        sh.setLevel(console_logging_level)
-        sh.setFormatter(formatter)
-        logger.addHandler(sh)
-    return logger
-
-def check_inputs(user_input):
-    if user_input is None:
-        return None, 'No input given'
-    # if not list, check is int
-    if not isinstance(user_input, list):
-        if isinstance(user_input, bool):
-            return False, 'Input must be int type, %s given' % user_input
-        if not isinstance(user_input, int):
-            return False, 'Input must be int type, %s given' % user_input
-        user_input = [user_input]
-    else:
-        # if it is a list, check each item in list
-        for inputty in user_input:
-            if isinstance(inputty, bool):
-                return False, 'Input must be int type, %s given' % inputty
-            if not isinstance(inputty, int):
-                return False, 'Input must be int type, %s given' % inputty
-    return True, user_input
-
-def check_arguement_type(value, types_allowed):
-    if not isinstance(types_allowed, list):
-        types_allowed = [types_allowed]
-    valid = False
-    for typer in types_allowed:
-        if typer is None:
-            if value is None:
-                valid = True
-                break
-        elif isinstance(value, typer):
-            valid = True
-            break
-    if not valid:
-        return False, '%s type given' % str(value.__class__.__name__)
-    return True, 'Valid input'
+DEFAULT_DATETIME_FORMAT = '%Y-%m-%d'
 
 class HathorClient(object):
-    def __init__(self, podcast_directory=None, datetime_output_format=settings.DEFAULT_DATETIME_FORMAT,
+    def __init__(self, podcast_directory=None, datetime_output_format=DEFAULT_DATETIME_FORMAT,
                  logging_file=None, logging_file_level=logging.DEBUG,
                  database_file=None, soundcloud_client_id=None, google_api_key=None,
                  console_logging=True, console_logging_level=logging.INFO):
@@ -180,7 +71,6 @@ class HathorClient(object):
 
     def _archive_manager(self, archive_type):
         return ARCHIVE_TYPES[archive_type](self.logger,
-                                           self.soundcloud_client_id,
                                            self.google_api_key)
 
     def _database_select(self, table, given_input):
@@ -229,26 +119,6 @@ class HathorClient(object):
         if not os.path.isdir(directory_path):
             os.makedirs(directory_path)
             self.logger.info("Created new directory:%s", directory_path)
-
-    def _remove_directory(self, directory_path):
-        try:
-            os.rmdir(directory_path)
-            self.logger.info("Removed directory:%s", directory_path)
-        except OSError as exc:
-            if exc.errno == errno.ENOENT:
-                self.logger.warn("Unable to delete directory:%s, does not exist", directory_path)
-            else:
-                raise
-
-    def _remove_file(self, file_path):
-        try:
-            os.remove(file_path)
-            self.logger.info("Removed file:%s", file_path)
-        except OSError as exc:
-            if exc.errno == errno.ENOENT:
-                self.logger.warn("Unable to delete file:%s, does not exist", file_path)
-            else:
-                raise
 
     @run_plugins()
     def podcast_create(self, archive_type, broadcast_id, podcast_name, max_allowed=None,

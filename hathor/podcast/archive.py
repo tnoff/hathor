@@ -114,66 +114,6 @@ class RSSManager(ArchiveInterface):
         output_path = '%s%s' % (output_prefix, self.episode_format)
         return output_path, curl_download(download_url, output_path)
 
-class SoundcloudManager(ArchiveInterface):
-    def __init__(self, logger, soundcloud_client_id, google_api_key):
-        ArchiveInterface.__init__(self, logger, soundcloud_client_id, google_api_key)
-        self.episode_format = 'mp3'
-
-    def broadcast_update(self, broadcast_id, max_results=None, filters=None):
-        archive_data = []
-        filters = filters or []
-
-        self.logger.debug("Getting account id for soundcloud channel name:%s", broadcast_id)
-        account_url = urls.soundcloud_account(broadcast_id, self.soundcloud_client_id)
-        req = requests.get(account_url)
-        if req.status_code != 200:
-            raise HathorException("Error getting soundcloud account id, request error:%s" % req.status_code)
-        data = json.loads(req.text)
-        account_id = data['id']
-
-        self.logger.debug("Getting episodes from soundcloud account id:%s", account_id)
-        url = urls.soundcloud_track_list(account_id, self.soundcloud_client_id)
-
-        while True:
-            req = requests.get(url)
-            if req.status_code != 200:
-                raise HathorException("Error getting soundcloud track list, request error:%s" % req.status_code)
-            data = json.loads(req.text)
-
-            for item in data['collection']:
-                # if not downloadable, skip
-                if not item['downloadable']:
-                    self.logger.debug("Item with title:%s not downloadable, skipping", item['title'])
-                    continue
-                episode_data = {
-                    'date' : datetime.strptime(item['created_at'], '%Y/%m/%d %H:%M:%S +0000'),
-                    'title' : clean_title(utils.clean_string(item['title'])),
-                    'download_link' : utils.clean_string(item['download_url']),
-                    'description' : utils.clean_string(item['description']),
-
-                }
-                if not verify_title_filters(filters, episode_data['title']):
-                    self.logger.debug("Title:%s , does not pass filters, skipping",
-                                      episode_data['title'])
-                    continue
-                archive_data.append(episode_data)
-                if max_results and max_results <= len(archive_data):
-                    self.logger.debug("At max results limit:%s, exiting early", len(archive_data))
-                    return archive_data
-            # check if another page is there
-            try:
-                url = data['next_href']
-            except KeyError:
-                self.logger.debug("No more soundcloud episodes found, exiting")
-                break
-
-        return archive_data
-
-    def episode_download(self, download_url, output_prefix, **_):
-        download_url = "%s?client_id=%s" % (download_url, self.soundcloud_client_id)
-        output_path = '%s.%s' % (output_prefix, self.episode_format)
-        return output_path, curl_download(download_url, output_path)
-
 class YoutubeManager(ArchiveInterface):
     def __init__(self, logger, soundcloud_client_id, google_api_key):
         ArchiveInterface.__init__(self, logger, soundcloud_client_id, google_api_key)
@@ -261,7 +201,6 @@ class YoutubeManager(ArchiveInterface):
 
 ARCHIVE_TYPES = {
     'rss' : RSSManager,
-    'soundcloud' : SoundcloudManager,
     'youtube' : YoutubeManager,
 }
 ARCHIVE_KEYS = ARCHIVE_TYPES.keys()

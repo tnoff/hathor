@@ -15,8 +15,11 @@ from hathor import client, utils
 
 DATETIME_FORMAT = '%Y-%m-%d'
 
-def mock_mp3_download(url, mp3_body):
-    httpretty.register_uri(httpretty.GET, url, body=mp3_body, stream=True, content_type='audio/mpeg')
+
+def random_string(prefix: str = '', suffix: str = '', length: int = 10):
+    chars = string.ascii_lowercase + string.digits
+    tempy = ''.join(random.choice(chars) for _ in range(length))
+    return prefix + tempy + suffix
 
 @contextmanager
 def temp_audio_file(duration=2, suffix='.mp3'):

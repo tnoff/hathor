@@ -70,10 +70,8 @@ class TestClient(test_utils.TestHelper):
             return MockLogging(commands)
 
         with mock.patch('hathor.client.setup_logger', side_effect=mock_logging):
-            with test_utils.temp_client(soundcloud_client_id=False,
-                                        google_api_key=False):
+            with test_utils.temp_client(google_api_key=False):
                 pass
-        self.assertTrue('No soundcloud client id given, will not be able to access soundcloud api' in commands)
         self.assertTrue('No google api key given, will not be to able to access google api' in commands)
 
     def test_logger_file(self):
@@ -121,61 +119,3 @@ class TestClient(test_utils.TestHelper):
                 self.assertTrue(podcast['file_location'].startswith(dir_temp))
                 os.rmdir(podcast['file_location'])
                 client.podcast_delete(podcast['id'])
-
-    def test_check_user_input(self):
-        # make sure only takes in single int or list of ints
-        with test_utils.temp_client() as client_args:
-            client = client_args.pop('podcast_client')
-            inc, exc = client._check_includers(2, 3) #pylint:disable=protected-access
-            self.assertEqual(inc, [2])
-            self.assertEqual(exc, [3])
-
-            inc, exc = client._check_includers([2, 5], [3, 6]) #pylint:disable=protected-access
-            self.assertEqual(inc, [2, 5])
-            self.assertEqual(exc, [3, 6])
-
-            inc, exc = client._check_includers([2, 5], 6) #pylint:disable=protected-access
-            self.assertEqual(inc, [2, 5])
-            self.assertEqual(exc, [6])
-
-            # make sure breaks with invalid args
-            with self.assertRaises(HathorException) as error:
-                client._check_includers('foo', 2) #pylint:disable=protected-access
-            self.check_error_message('Input must be int type, foo given', error)
-
-            with self.assertRaises(HathorException) as error:
-                client._check_includers(3, True) #pylint:disable=protected-access
-            self.check_error_message('Input must be int type, True given', error)
-
-            with self.assertRaises(HathorException) as error:
-                client._check_includers(3, [True]) #pylint:disable=protected-access
-            self.check_error_message('Input must be int type, True given', error)
-
-            with self.assertRaises(HathorException) as error:
-                client._check_includers(['foo', 2, 3], 3) #pylint:disable=protected-access
-            self.check_error_message('Input must be int type, foo given', error)
-
-    def test_arguement_type(self):
-        # test sme basic args that work
-        code, mess = client_class.check_arguement_type(True, bool)
-        self.assertTrue(code)
-        self.assertEqual(mess, 'Valid input')
-
-        code, mess = client_class.check_arguement_type('foo', str)
-        self.assertTrue(code)
-        self.assertEqual(mess, 'Valid input')
-
-        code, mess = client_class.check_arguement_type(3, int)
-        self.assertTrue(code)
-        self.assertEqual(mess, 'Valid input')
-
-        code, mess = client_class.check_arguement_type(3, str)
-        self.assertFalse(code)
-        self.assertEqual(mess, 'int type given')
-
-    def test_arguemnt_type_fails(self):
-        with test_utils.temp_client() as client_args:
-            client = client_args.pop('podcast_client')
-            with self.assertRaises(HathorException) as error:
-                client._check_arguement_type(3, str, 'pls no whyd you do this') #pylint:disable=protected-access
-            self.check_error_message("pls no whyd you do this - int type given", error)

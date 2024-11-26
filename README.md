@@ -25,8 +25,6 @@ The ``hathor`` python module will be installed, as well as 2 cli scripts:
 
 ``hathor``
     Used for downloading and managing podcast media files
-``audio-tool``
-    A general use tool for editing audio tags and cover pictures for mp3 files.
 
 ## The Hathor Client
 

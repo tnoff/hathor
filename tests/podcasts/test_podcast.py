@@ -9,9 +9,6 @@ from hathor.podcast import urls
 
 from tests import utils
 from tests.podcasts.data import rss_feed
-from tests.podcasts.data import soundcloud_account
-from tests.podcasts.data import soundcloud_one_track
-from tests.podcasts.data import soundcloud_two_tracks
 
 class TestPodcast(utils.TestHelper):
     def run(self, result=None):
@@ -49,17 +46,6 @@ class TestPodcast(utils.TestHelper):
         self.client.podcast_delete([podcasts[0]['id'], podcasts[1]['id']])
         pod_list = self.client.podcast_list()
         self.assert_length(pod_list, 0)
-
-    def test_podcast_update_archive_type(self):
-        with self.assertRaises(HathorException) as error:
-            with utils.temp_podcast(self.client, archive_type='foo') as podcast:
-                pass
-        self.check_error_message('Archive Type must be in accepted list of keys - foo value given', error)
-        with utils.temp_podcast(self.client) as podcast:
-            self.client.podcast_update(podcast['id'], archive_type='soundcloud')
-            with self.assertRaises(HathorException) as error:
-                self.client.podcast_update(podcast['id'], archive_type='bar')
-            self.check_error_message('Archive Type must be in accepted list - bar value given', error)
 
     def test_podcast_duplicates(self):
         # make sure duplicate name, or archive type and broadcast id not allowed

@@ -1,44 +1,85 @@
-from contextlib import contextmanager
-import os
+import logging
+from logging import INFO, getLogger, Formatter, StreamHandler
+from logging.handlers import RotatingFileHandler
 import random
 import string
 
+from pathlib import Path
 from urllib.parse  import urlparse
 
-def process_url(url):
+def process_url(url: str) -> str:
+    '''
+    Process url and remove extra options
+
+    url: Basic url string
+    '''
     processed_url = urlparse(url)
     return f'{processed_url.scheme}://{processed_url.netloc}/{processed_url.path}'
 
-def random_string(prefix='', suffix='', length=10):
-    chars = string.ascii_lowercase + string.digits
-    tempy = ''.join(random.choice(chars) for _ in range(length))
-    return prefix + tempy + suffix
-
-def normalize_name(name):
+def normalize_name(name: str) -> str:
+    '''
+    Remove non alpha numeric characters from string
+    name: original name
+    '''
     valid_chars = string.ascii_lowercase + string.digits
     valid_chars += string.ascii_uppercase + '_' + ' '
 
-    bad_chars = []
+    new_str = ''
     for char in name:
         if char not in valid_chars:
-            bad_chars.append(char)
-    for char in bad_chars:
-        name = name.replace(char, '_')
+            new_str = f'{new_str}_'
+            continue
+        new_str = f'{new_str}{char}'
 
     while True:
-        new_name = name.replace('__', '_')
-        if new_name == name:
+        new_name = new_str.replace('__', '_')
+        if new_name == new_str:
             break
-        name = new_name
+        new_str = new_name
 
-    name = name.lstrip('_')
-    name = name.rstrip('_')
-    return name
+    name_str = new_str.lstrip('_')
+    name_str = new_str.rstrip('_')
+    return new_str
 
-def clean_string(stringy):
+def clean_string(stringy: str) -> str:
+    '''
+    Clean string and remove extra bits
+    stringy: Original String
+    '''
     if stringy is None:
         return None
     s = stringy.lstrip(' ')
     s = s.rstrip(' ').rstrip('\n').rstrip(' ')
     s = s.replace('\n', ' ').replace('\r', '')
     return s
+
+def setup_logger(name: str,
+                 logging_file: Path = None,
+                 console_logging: bool = True,
+                 console_logging_level: int = 20,
+                 log_file_level: int = 20):
+    '''
+    Setup a generic python logger
+    name: Name of logger
+    log_file_level: level
+    logging_file: If given, writes to file name
+    console_logging: Defaults to true, logs to stdout
+    console_logging_level: Level for console logging
+    '''
+    logger = getLogger(name)
+    formatter = Formatter('%(asctime)s - %(levelname)s - %(message)s',
+                          datefmt='%Y-%m-%d %H:%M:%S')
+    logger.setLevel(log_file_level)
+    if logging_file is not None:
+        fh = RotatingFileHandler(logging_file,
+                                 backupCount=4,
+                                 maxBytes=((2 ** 20) * 10))
+        fh.setLevel(log_file_level)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+    if console_logging:
+        sh = StreamHandler()
+        sh.setLevel(console_logging_level)
+        sh.setFormatter(formatter)
+        logger.addHandler(sh)
+    return logger
