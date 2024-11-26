@@ -66,7 +66,7 @@ def run_plugins():
         return caller
     return decorator
 
-ARCHIVE_TYPE = Literal(VALID_ARCHIVE_KEYS)
+ARCHIVE_TYPE = Literal[VALID_ARCHIVE_KEYS]
 
 class HathorClient():
     def __init__(self, podcast_directory: Path = None,
@@ -122,7 +122,7 @@ class HathorClient():
         raise HathorException(message)
 
     @run_plugins()
-    def podcast_create(self, archive_type: ARCHIVE_KEYS,
+    def podcast_create(self, archive_type: ARCHIVE_TYPE,
                        broadcast_id: str,
                        podcast_name: str,
                        max_allowed: int = None,
@@ -198,8 +198,13 @@ class HathorClient():
         return podcast_data
 
     @run_plugins()
-    def podcast_update(self, podcast_id, podcast_name=None, broadcast_id=None, archive_type=None,
-                       max_allowed=None, artist_name=None, automatic_download=None):
+    def podcast_update(self, podcast_id: int,
+                       podcast_name: str = None,
+                       broadcast_id: str = None,
+                       archive_type: ARCHIVE_TYPES = None,
+                       max_allowed: int = None,
+                       artist_name: str = None,
+                       automatic_download: bool = None) -> dict:
         '''
         Update a single podcast
         podcast_id           :   ID of podcast to edit
@@ -212,48 +217,40 @@ class HathorClient():
 
         Returns: dict object representing updated podcast
         '''
-        self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
         pod = self.db_session.query(Podcast).get(podcast_id)
         if not pod:
-            self._fail("Podcast not found for ID:%s" % podcast_id)
+            self._fail(f'Podcast not found for ID: {podcast_id}')
 
         if podcast_name is not None:
-            self._check_arguement_type(podcast_name, str, 'Podcast name must be string type or None')
-            self.logger.debug("Updating podcast name to %s for podcast %s", podcast_name, podcast_id)
+            self.logger.debug(f'Updating podcast name to {podcast_name} for podcast {podcast_id}"')
             pod.name = utils.clean_string(podcast_name)
         if artist_name is not None:
-            self._check_arguement_type(artist_name, str, 'Podcast name must be string type or None')
-            self.logger.debug("Updating artist name to %s for podcast %s", artist_name, podcast_id)
+            self.logger.debug(f'Updating artist name to {artist_name} for podcast {podcast_id}')
             pod.artist_name = utils.clean_string(artist_name)
         if archive_type is not None:
-            self._check_arguement_type(archive_type, str, 'Archive Type must be string type or None')
-            self._check_argument_oneof(archive_type, ARCHIVE_KEYS, 'Archive Type must be in accepted list')
-            self.logger.debug("Updating archive to %s for podcast %s", archive_type, podcast_id)
+            self.logger.debug(f'Updating archive to {archive_type} for podcast {podcast_id}')
             pod.archive_type = archive_type
         if broadcast_id is not None:
-            self._check_arguement_type(broadcast_id, str, 'Broadcast ID must be string type or None')
-            self.logger.debug("Updating broadcast id to %s for podcast %s", broadcast_id, podcast_id)
+            self.logger.debug(f'Updating broadcast id to {broadcast_id} for podcast {podcast_id}')
             pod.broadcast_id = utils.clean_string(broadcast_id)
         if max_allowed is not None:
-            self._check_arguement_type(max_allowed, int, 'Max allowed must be int type or None')
             if max_allowed < 0:
                 self._fail('Max allowed must be positive integer or 0')
             if max_allowed == 0:
                 pod.max_allowed = None
             else:
                 pod.max_allowed = max_allowed
-            self.logger.debug("Updating max allowed to %s for podcast %s", max_allowed, podcast_id)
+            self.logger.debug(f'Updating max allowed to {max_allowed} for podcast {podcast_id}')
         if automatic_download is not None:
-            self._check_arguement_type(automatic_download, bool, 'Automatic download must be bool type')
-            self.logger.debug("Updating automatic download to %s for podcast %s", automatic_download, podcast_id)
+            self.logger.debug(f'Updating automatic download to {automatic_download} for podcast {podcast_id}')
             pod.automatic_episode_download = automatic_download
 
         try:
             self.db_session.commit()
-            self.logger.info("Podcast %s update commited", pod.id)
+            self.logger.info(f'Podcast {pod.id} update commited')
         except IntegrityError:
             self.db_session.rollback()
-            self._fail('Cannot update podcast id:%s' % podcast_id)
+            self._fail(f'Cannot update podcast id: {podcast_id}')
         return pod.as_dict(self.datetime_output_format)
 
 

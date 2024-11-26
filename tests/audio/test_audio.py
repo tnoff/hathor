@@ -15,15 +15,15 @@ def test_audio_tags():
     with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
         print('temp audio', temp_audio)
         args = {
-            'title' : utils.random_string(),
-            'album' : utils.random_string(),
-            'performer'  : utils.random_string(),
+            'title' : test_utils.random_string(),
+            'album' : test_utils.random_string(),
+            'performer'  : test_utils.random_string(),
             'tracknumber' : '1/2',
             'discnumber' : '1/1',
-            'genre' : utils.random_string(),
+            'genre' : test_utils.random_string(),
             'date' : '2015',
-            'copyright' : utils.random_string(),
-            'albumartist' : utils.random_string(),
+            'copyright' : test_utils.random_string(),
+            'albumartist' : test_utils.random_string(),
         }
         metadata.tags_update(temp_audio, args)
         new_tags = metadata.tags_show(temp_audio)
@@ -36,7 +36,7 @@ def test_audio_tags_none_not_set():
     with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
         print('temp audio', temp_audio)
         args = {
-            'title' : utils.random_string(),
+            'title' : test_utils.random_string(),
             'album' : None,
         }
         metadata.tags_update(temp_audio, args)
@@ -47,10 +47,10 @@ def test_audio_tags_none_not_set():
 def test_audio_tags_delete_args_not_there():
     with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
         args = {
-            'title' : utils.random_string(),
-            'album' : utils.random_string(),
-            'artist' : utils.random_string(),
-            'albumartist' : utils.random_string(),
+            'title' : test_utils.random_string(),
+            'album' : test_utils.random_string(),
+            'artist' : test_utils.random_string(),
+            'albumartist' : test_utils.random_string(),
         }
         metadata.tags_update(temp_audio, args)
         metadata.tags_delete(temp_audio, ['foo'])
@@ -60,7 +60,7 @@ def test_audio_tags_delete_args_not_there():
 def test_audio_tags_reset_mp4():
     with test_utils.temp_audio_file(suffix='.mp4') as temp_audio:
         args = {
-            'title' : utils.random_string(),
+            'title' : test_utils.random_string(),
         }
         metadata.tags_update(temp_audio, args)
         metadata.tags_delete(temp_audio, ['foo', 'bar'])

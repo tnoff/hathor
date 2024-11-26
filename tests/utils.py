@@ -2,6 +2,8 @@ from contextlib import contextmanager
 import logging
 import os
 from tempfile import NamedTemporaryFile
+import random
+import string
 import unittest
 
 import httpretty
@@ -50,7 +52,7 @@ def temp_image_file(suffix='.jpg'):
 @contextmanager
 def temp_dir(name=None, delete=True):
     if name is None:
-        name = utils.random_string(prefix='/tmp/')
+        name = random_string(prefix='/tmp/')
     name = os.path.abspath(name)
     try:
         os.makedirs(name)
@@ -71,9 +73,9 @@ def temp_client(database_file=None, soundcloud_client_id=True, google_api_key=Tr
     soundcloud = None
     google = None
     if soundcloud_client_id:
-        soundcloud = utils.random_string()
+        soundcloud = random_string()
     if google:
-        google = utils.random_string()
+        google = random_string()
     pod_client = client.HathorClient(podcast_directory=podcast_directory,
                                      logging_file=log_file,
                                      logging_file_level=logging_level,
@@ -93,13 +95,13 @@ def temp_client(database_file=None, soundcloud_client_id=True, google_api_key=Tr
 @contextmanager
 def temp_podcast(pod_client, broadcast_url=False, delete=True, **kwargs):
     archive_type = kwargs.pop('archive_type', 'rss')
-    podcast_name = kwargs.pop('podcast_name', utils.random_string())
+    podcast_name = kwargs.pop('podcast_name', random_string())
     broadcast_id = kwargs.pop('broadcast_id', None)
     if broadcast_id is None:
         if broadcast_url:
-            broadcast_id = 'http://example.%s.com' % utils.random_string()
+            broadcast_id = 'http://example.%s.com' % random_string()
         else:
-            broadcast_id = utils.random_string()
+            broadcast_id = random_string()
     with temp_dir() as temp:
         podcast = pod_client.podcast_create(archive_type, broadcast_id,
                                             podcast_name,
