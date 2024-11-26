@@ -1,15 +1,31 @@
 import os
 import logging
+from tempfile import TemporaryDirectory
 
-import httpretty
-import mock
+from mock import patch
+import pytest
 
-from hathor import client as client_class
+from hathor.client import HathorClient
 from hathor.exc import HathorException
 from hathor.database.tables import PodcastEpisode
 from hathor import utils
 from tests import utils as test_utils
 from tests.podcasts.data import rss_feed
+
+def mock_plugin(self, result, *args, **kwargs):
+    episode = self.db_session.query(PodcastEpisode).get(result[0]['id'])
+    episode.description = "foo-description"
+    self.db_session.commit()
+    return result
+
+
+def test_plugins():
+    client = HathorClient()
+    client.plugins = ([('episode_download', mock_plugin)])
+    with TemporaryDirectory() as tmp_dir:
+        client.podcast_create('rss', 'https://example.foo', 'temp', file_location=tmp_dir)
+        client.episode_sync()
+
 
 '''
 class TestClient(test_utils.TestHelper):

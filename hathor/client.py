@@ -44,26 +44,25 @@ def load_plugins():
             functions.append((name, func))
     return functions
 
-def run_plugins():
+def run_plugins(func):
     '''
     Decorator to add to functions
     Will add any plugin function that matches name
     '''
-    def decorator(func):
-        def caller(*args, **kwargs):
-            result = func(*args, **kwargs)
-            # Assume first arg called is "self"
-            selfie = args[0]
-            # Look through plugins
-            for plugin in selfie.plugins:
-                # Plugins will be (name, func obj)
-                if plugin[0] == func.__name__:
-                    # Run plugin function with client class
-                    # and result of original function
-                    plugin_func = plugin[1]
-                    result = plugin_func(selfie, result, *args, **kwargs)
-            return result
-        return caller
+    def decorator(*args, **kwargs):
+        func_name = func.__name__
+        result = func(*args, **kwargs)
+        # Assume first arg called is "self"
+        selfie = args[0]
+        # Look through plugins
+        for plugin in selfie.plugins:
+            # Plugins will be (name, func obj)
+            if plugin[0] == func_name:
+                # Run plugin function with client class
+                # and result of original function
+                plugin_func = plugin[1]
+                result = plugin_func(selfie, result, *args, **kwargs)
+        return result
     return decorator
 
 ARCHIVE_TYPE = Literal[VALID_ARCHIVE_KEYS]
@@ -121,7 +120,7 @@ class HathorClient():
         self.logger.error(message)
         raise HathorException(message)
 
-    @run_plugins()
+    @run_plugins
     def podcast_create(self, archive_type: ARCHIVE_TYPE,
                        broadcast_id: str,
                        podcast_name: str,
@@ -147,7 +146,10 @@ class HathorClient():
         if file_location is None:
             if self.podcast_directory is None:
                 self._fail("No default podcast directory specified, will need specific file location to create podcast")
-            file_location = Path(self.podcast_directory) / utils.normalize_name(podcast_name)    
+            self.file_location = Path(self.podcast_directory) / utils.normalize_name(podcast_name)    
+        else:
+            self.file_location = Path(file_location)
+
 
         pod_args = {
             'name' : utils.clean_string(podcast_name),
@@ -171,7 +173,7 @@ class HathorClient():
         self.file_location.mkdir(exist_ok=True)
         return new_pod.as_dict(self.datetime_output_format)
 
-    @run_plugins()
+    @run_plugins
     def podcast_list(self) -> List[dict]:
         '''
         List all podcasts
@@ -183,7 +185,7 @@ class HathorClient():
             podcast_data.append(podcast.as_dict(self.datetime_output_format))
         return podcast_data
 
-    @run_plugins()
+    @run_plugins
     def podcast_show(self, podcast_input) -> dict:
         '''
         Get information on one or many podcasts
@@ -197,7 +199,7 @@ class HathorClient():
             podcast_data.append(podcast.as_dict(self.datetime_output_format))
         return podcast_data
 
-    @run_plugins()
+    @run_plugins
     def podcast_update(self, podcast_id: int,
                        podcast_name: str = None,
                        broadcast_id: str = None,
@@ -254,8 +256,10 @@ class HathorClient():
         return pod.as_dict(self.datetime_output_format)
 
 
-    @run_plugins()
-    def podcast_update_file_location(self, podcast_id, file_location, move_files=True):
+    @run_plugins
+    def podcast_update_file_location(self, podcast_id: int,
+                                     file_location: Path,
+                                     move_files: bool = True):
         '''
         Update file location of podcast files
         podcast_id       :   ID of podcast to edit
@@ -264,15 +268,13 @@ class HathorClient():
 
         Returns: null
         '''
-        self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
-        self._check_arguement_type(file_location, str, 'File location must be None or string type')
         pod = self.db_session.query(Podcast).get(podcast_id)
         if not pod:
-            self._fail("Podcast not found for ID:%s" % podcast_id)
-        old_podcast_dir = pod.file_location
-        pod.file_location = os.path.abspath(file_location)
+            self._fail(f'Podcast not found for ID: {podcast_id}')
+        old_podcast_dir = Path(pod.file_location)
+        pod.file_location = Path(file_location)
         self.db_session.commit()
-        self.logger.info("Updated podcast id:%s file location to %s", podcast_id, file_location)
+        self.logger.info(f'Updated podcast id: {podcast_id} file location to {str(file_location)}')
 
         if move_files:
             self.logger.info("Moving files from old dir:%s to new dir:%s", old_podcast_dir, pod.file_location)
@@ -290,7 +292,7 @@ class HathorClient():
             self._remove_directory(old_podcast_dir)
         return pod.as_dict(self.datetime_output_format)
 
-    @run_plugins()
+    @run_plugins
     def podcast_delete(self, podcast_input, delete_files=True):
         '''
         Delete podcasts and their episodes
@@ -302,7 +304,7 @@ class HathorClient():
         query = self._database_select(Podcast, podcast_input)
         return self.__podcast_delete_input(query, delete_files)
 
-    @run_plugins()
+    @run_plugins
     def __podcast_delete_input(self, podcast_input, delete_files):
         podcasts_deleted = []
         for podcast in podcast_input:
@@ -322,7 +324,7 @@ class HathorClient():
             podcasts_deleted.append(podcast.id)
         return podcasts_deleted
 
-    @run_plugins()
+    @run_plugins
     def filter_create(self, podcast_id, regex_string):
         '''
         Add a new title filter to podcast. When running an episode sync, if a title in the archive does
@@ -351,7 +353,7 @@ class HathorClient():
                          new_filter.id, podcast.id, regex_string)
         return new_filter.as_dict(self.datetime_output_format)
 
-    @run_plugins()
+    @run_plugins
     def filter_list(self, include_podcasts=None, exclude_podcasts=None):
         '''
         List podcast title filters
@@ -360,7 +362,6 @@ class HathorClient():
 
         Returns: list of dictionaries representing the podcast title filters
         '''
-        include_podcasts, exclude_podcasts = self._check_includers(include_podcasts, exclude_podcasts)
         query = self.db_session.query(PodcastTitleFilter)
         if include_podcasts:
             opts = (PodcastTitleFilter.podcast_id == pod for pod in include_podcasts)
@@ -373,7 +374,7 @@ class HathorClient():
             filters.append(title_filter.as_dict(self.datetime_output_format))
         return filters
 
-    @run_plugins()
+    @run_plugins
     def filter_delete(self, filter_input):
         '''
         Delete one or many title filters
@@ -384,7 +385,7 @@ class HathorClient():
         query = self._database_select(PodcastTitleFilter, filter_input)
         return self.__podcast_title_filter_delete_input(query)
 
-    @run_plugins()
+    @run_plugins
     def __podcast_title_filter_delete_input(self, filter_input):
         filters_deleted = []
         for title_filter in filter_input:
@@ -394,7 +395,7 @@ class HathorClient():
             self.logger.info("Deleted podcast title filter:%s", title_filter.id)
         return filters_deleted
 
-    @run_plugins()
+    @run_plugins
     def episode_sync(self, include_podcasts=None, exclude_podcasts=None, max_episode_sync=None):
         '''
         Sync podcast episode data with the interwebs. Will not download episode files
@@ -405,11 +406,10 @@ class HathorClient():
 
         Returns: list of dictionaries representing new episodes added
         '''
-        include_podcasts, exclude_podcasts = self._check_includers(include_podcasts, exclude_podcasts)
         self._check_arguement_type(max_episode_sync, [None, int], 'Max episode sync must be None or int type')
         return self.__episode_sync_cluders(include_podcasts, exclude_podcasts, max_episode_sync=max_episode_sync)
 
-    @run_plugins()
+    @run_plugins
     def __episode_sync_cluders(self, include_podcasts, exclude_podcasts,
                                max_episode_sync=None, automatic_sync=True):
         query = self.db_session.query(Podcast)
@@ -486,7 +486,7 @@ class HathorClient():
                     self.logger.debug("Podcast episode is duplicate, title was %s", episode_args['title'])
         return new_episodes
 
-    @run_plugins()
+    @run_plugins
     def episode_list(self, only_files=True, sort_date=False, include_podcasts=None, exclude_podcasts=None):
         '''
         List Podcast Episodes
@@ -499,7 +499,6 @@ class HathorClient():
         '''
         self._check_arguement_type(only_files, bool, 'Only Files must be boolean type')
         self._check_arguement_type(sort_date, bool, 'Sort date must be boolean type')
-        include_podcasts, exclude_podcasts = self._check_includers(include_podcasts, exclude_podcasts)
 
         query = self.db_session.query(PodcastEpisode)
         if only_files:
@@ -518,7 +517,7 @@ class HathorClient():
             episode_data.append(episode.as_dict(self.datetime_output_format))
         return episode_data
 
-    @run_plugins()
+    @run_plugins
     def episode_show(self, episode_input):
         '''
         Get information about one or many podcast episodes
@@ -532,7 +531,7 @@ class HathorClient():
             episode_list.append(episode.as_dict(self.datetime_output_format))
         return episode_list
 
-    @run_plugins()
+    @run_plugins
     def episode_update(self, episode_id, prevent_delete=None):
         '''
         Update episode information
@@ -553,7 +552,7 @@ class HathorClient():
         self.logger.info("Episode updated:%s", episode.id)
         return episode.as_dict(self.datetime_output_format)
 
-    @run_plugins()
+    @run_plugins
     def episode_update_file_path(self, episode_id, file_path):
         '''
         Update episode file path
@@ -585,7 +584,7 @@ class HathorClient():
         self.db_session.commit()
         return episode.as_dict(self.datetime_output_format)
 
-    @run_plugins()
+    @run_plugins
     def episode_delete(self, episode_input, delete_files=True):
         '''
         Delete one or many podcast episodes
@@ -597,7 +596,7 @@ class HathorClient():
         query = self._database_select(PodcastEpisode, episode_input)
         return self.__episode_delete_input(query, delete_files=delete_files)
 
-    @run_plugins()
+    @run_plugins
     def __episode_delete_input(self, query_input, delete_files=True):
         # delete episode files to make it one call and a bit more simple
         if delete_files:
@@ -611,7 +610,7 @@ class HathorClient():
             episodes_deleted.append(episode.id)
         return episodes_deleted
 
-    @run_plugins()
+    @run_plugins
     def episode_download(self, episode_input):
         '''
         Download episode(s) to local machine
@@ -622,7 +621,7 @@ class HathorClient():
         query = self._database_select(PodcastEpisode, episode_input)
         return self.__episode_download_input(query)
 
-    @run_plugins()
+    @run_plugins
     def __episode_download_input(self, episode_input):
         def build_episode_path(episode, podcast):
             pod_path = podcast['file_location']
@@ -679,7 +678,7 @@ class HathorClient():
             episodes_downloaded.append(episode.as_dict(self.datetime_output_format))
         return episodes_downloaded
 
-    @run_plugins()
+    @run_plugins
     def episode_delete_file(self, episode_input):
         '''
         Delete media files for one or many podcast episodes
@@ -688,7 +687,7 @@ class HathorClient():
         query = self._database_select(PodcastEpisode, episode_input)
         return self.__episode_delete_file_input(query)
 
-    @run_plugins()
+    @run_plugins
     def __episode_delete_file_input(self, query_input):
         episodes_deleted = []
         for episode in query_input:
@@ -703,7 +702,7 @@ class HathorClient():
                 episodes_deleted.append(episode.id)
         return episodes_deleted
 
-    @run_plugins()
+    @run_plugins
     def episode_cleanup(self):
         '''
         Delete all podcast episode entries without a media file associated with them in order to clear room.
@@ -715,7 +714,7 @@ class HathorClient():
         self.logger.info("Database cleaned of uneeded episodes")
         return True
 
-    @run_plugins()
+    @run_plugins
     def podcast_sync(self, include_podcasts=None, exclude_podcasts=None,
                      sync_web_episodes=True, download_episodes=True):
         '''
@@ -727,8 +726,6 @@ class HathorClient():
 
         Returns: null
         '''
-        include_podcasts, exclude_podcasts = self._check_includers(include_podcasts, exclude_podcasts)
-
         if sync_web_episodes:
             self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
                                         automatic_sync=False)
@@ -736,7 +733,7 @@ class HathorClient():
             self._podcast_download_episodes(include_podcasts, exclude_podcasts)
         return None
 
-    @run_plugins()
+    @run_plugins
     def _podcast_download_episodes(self, include_podcasts, exclude_podcasts):
         delete_episodes = []
         download_episodes = []

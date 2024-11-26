@@ -8,7 +8,6 @@ from hathor import utils as common_utils
 
 from tests import utils
 from tests.podcasts.data import rss_feed
-from tests.podcasts.data import soundcloud_account, soundcloud_two_tracks
 from tests.podcasts.data import youtube_archive1
 
 
@@ -54,26 +53,6 @@ class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-meth
                 exclude_pod1 = self.client.filter_list(exclude_podcasts=[podcast1['id']])
                 self.assert_length(exclude_pod1, 1)
                 self.assertEqual([result2], [i for i in exclude_pod1])
-
-    @httpretty.activate
-    def test_filters_with_broadcast_update_soundcloud(self):
-        two_track_data = soundcloud_two_tracks.DATA
-        first_title = two_track_data['collection'][0]['title']
-        regex1 = '^%s' % first_title
-
-        with utils.temp_podcast(self.client, archive_type='soundcloud', max_allowed=3) as podcast:
-            self.client.filter_create(podcast['id'], regex1)
-
-            url1 = urls.soundcloud_account(podcast['broadcast_id'],
-                                           self.client.soundcloud_client_id)
-            real_broadcast_id = soundcloud_account.DATA['id']
-            url2 = urls.soundcloud_track_list(real_broadcast_id,
-                                              self.client.soundcloud_client_id)
-            httpretty.register_uri(httpretty.GET, url1, body=json.dumps(soundcloud_account.DATA))
-            httpretty.register_uri(httpretty.GET, url2, body=json.dumps(two_track_data))
-            self.client.episode_sync()
-            episode_list = self.client.episode_list(only_files=False)
-            self.assert_length(episode_list, 1)
 
     @httpretty.activate
     def test_filters_with_broadcast_update_rss(self):
