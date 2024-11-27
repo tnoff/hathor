@@ -83,3 +83,16 @@ def setup_logger(name: str,
         sh.setFormatter(formatter)
         logger.addHandler(sh)
     return logger
+
+def rm_tree(pth):
+    '''
+    Remove all files in a tree
+    pth: Path to remove
+    '''
+    # https://stackoverflow.com/questions/50186904/pathlib-recursively-remove-directory
+    for child in pth.glob('*'):
+        if child.is_file():
+            child.unlink()
+        else:
+            rm_tree(child)
+    pth.rmdir()

@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy import and_, desc, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Query
 
 from hathor.audio import metadata
 from hathor.database.tables import BASE, Podcast
@@ -259,7 +259,7 @@ class HathorClient():
     @run_plugins
     def podcast_update_file_location(self, podcast_id: int,
                                      file_location: Path,
-                                     move_files: bool = True):
+                                     move_files: bool = True) -> dict:
         '''
         Update file location of podcast files
         podcast_id       :   ID of podcast to edit
@@ -272,31 +272,32 @@ class HathorClient():
         if not pod:
             self._fail(f'Podcast not found for ID: {podcast_id}')
         old_podcast_dir = Path(pod.file_location)
-        pod.file_location = Path(file_location)
+        new_podcast_dir = Path(file_location)
+        pod.file_location = str(new_podcast_dir.resolve())
         self.db_session.commit()
-        self.logger.info(f'Updated podcast id: {podcast_id} file location to {str(file_location)}')
+        self.logger.info(f'Updated podcast id: {podcast_id} file location to {str(new_podcast_dir.resolve())}')
 
         if move_files:
-            self.logger.info("Moving files from old dir:%s to new dir:%s", old_podcast_dir, pod.file_location)
+            self.logger.info(f'Moving files from old dir: {str(old_podcast_dir)} to new dir: {pod.file_location}')
             self._ensure_path(pod.file_location)
 
             episodes = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.podcast_id == podcast_id)
             episodes = episodes.filter(PodcastEpisode.file_path != None)
             for episode in episodes:
-                episode_name_path = os.path.basename(episode.file_path)
-                new_path = os.path.join(pod.file_location, episode_name_path)
-                os.rename(episode.file_path, new_path)
-                episode.file_path = new_path
-                self.logger.info("Updating episode %s to path %s in db", episode.id, episode.file_path)
+                episode_path = Path(episode.file_path)
+                new_path = new_podcast_dir / episode_path.name
+                episode_path.rename(new_path)
+                episode.file_path = str(new_path.resolve())
+                self.logger.info(f'Updating episode {episode.id} to path {str(new_path.resolve())} in db')
                 self.db_session.commit()
-            self._remove_directory(old_podcast_dir)
+            utils.rm_tree(old_podcast_dir)
         return pod.as_dict(self.datetime_output_format)
 
     @run_plugins
-    def podcast_delete(self, podcast_input, delete_files=True):
+    def podcast_delete(self, podcast_input: List[int], delete_files: bool = True) -> List[int]:
         '''
         Delete podcasts and their episodes
-        podcast_input           :   Either a single integer id, or list of integer ids
+        podcast_input           :   List of integer ids
         delete_files            :   Delete episode media files along with database entries
 
         Returns: List of integers IDs of podcasts deleted
@@ -305,7 +306,7 @@ class HathorClient():
         return self.__podcast_delete_input(query, delete_files)
 
     @run_plugins
-    def __podcast_delete_input(self, podcast_input, delete_files):
+    def __podcast_delete_input(self, podcast_input: List[int], delete_files: bool) -> List[int]:
         podcasts_deleted = []
         for podcast in podcast_input:
             # first delete all episodes
@@ -317,15 +318,15 @@ class HathorClient():
             # delete record
             self.db_session.delete(podcast)
             self.db_session.commit()
-            self.logger.info("Deleted podcast record:%s", podcast.id)
+            self.logger.info(f'Deleted podcast record: {podcast.id}')
             # delete files if needed
             if delete_files:
-                self._remove_directory(podcast.file_location)
+                utils.rm_tree(podcast.file_location)
             podcasts_deleted.append(podcast.id)
         return podcasts_deleted
 
     @run_plugins
-    def filter_create(self, podcast_id, regex_string):
+    def filter_create(self, podcast_id: int, regex_string: str) -> dict:
         '''
         Add a new title filter to podcast. When running an episode sync, if a title in the archive does
         not match the regex string, it will be ignored.
@@ -335,12 +336,9 @@ class HathorClient():
 
         Returns: dict object representing new podcast filter
         '''
-        self._check_arguement_type(podcast_id, int, 'Podcast ID must be int type')
-        self._check_arguement_type(regex_string, str, 'Regex string must be string type')
-
         podcast = self.db_session.query(Podcast).get(podcast_id)
         if not podcast:
-            self._fail("Unable to find podcast with id:%s" % podcast_id)
+            self._fail(f'Unable to find podcast with id: {podcast_id}')
 
         new_args = {
             'podcast_id' : podcast.id,
@@ -349,12 +347,11 @@ class HathorClient():
         new_filter = PodcastTitleFilter(**new_args)
         self.db_session.add(new_filter)
         self.db_session.commit()
-        self.logger.info("Created new podcast filter:%s, podcast_id:%s and regex:%s",
-                         new_filter.id, podcast.id, regex_string)
+        self.logger.info(f'Created new podcast filter: {new_filter.id}, podcast_id: {podcast.id} and regex: {regex_string}')
         return new_filter.as_dict(self.datetime_output_format)
 
     @run_plugins
-    def filter_list(self, include_podcasts=None, exclude_podcasts=None):
+    def filter_list(self, include_podcasts: List[int] = None, exclude_podcasts: List[int] = None) -> List[dict]:
         '''
         List podcast title filters
         include_podcasts     :       Include only certain podcasts in results
@@ -375,7 +372,7 @@ class HathorClient():
         return filters
 
     @run_plugins
-    def filter_delete(self, filter_input):
+    def filter_delete(self, filter_input: List[int]) -> List[int]:
         '''
         Delete one or many title filters
         filter_input    :   Either a single int id, or a list of int ids
@@ -386,17 +383,18 @@ class HathorClient():
         return self.__podcast_title_filter_delete_input(query)
 
     @run_plugins
-    def __podcast_title_filter_delete_input(self, filter_input):
+    def __podcast_title_filter_delete_input(self, filter_input: List[int]) -> List[int]:
         filters_deleted = []
         for title_filter in filter_input:
             self.db_session.delete(title_filter)
             self.db_session.commit()
             filters_deleted.append(title_filter.id)
-            self.logger.info("Deleted podcast title filter:%s", title_filter.id)
+            self.logger.info(f'Deleted podcast title filter: {title_filter.id}')
         return filters_deleted
 
     @run_plugins
-    def episode_sync(self, include_podcasts=None, exclude_podcasts=None, max_episode_sync=None):
+    def episode_sync(self, include_podcasts: List[int] = None, exclude_podcasts: List[int] = None,
+                     max_episode_sync: int = None) -> List[dict]:
         '''
         Sync podcast episode data with the interwebs. Will not download episode files
         include_podcasts     :       Include only certain podcasts in sync
@@ -406,12 +404,11 @@ class HathorClient():
 
         Returns: list of dictionaries representing new episodes added
         '''
-        self._check_arguement_type(max_episode_sync, [None, int], 'Max episode sync must be None or int type')
         return self.__episode_sync_cluders(include_podcasts, exclude_podcasts, max_episode_sync=max_episode_sync)
 
     @run_plugins
-    def __episode_sync_cluders(self, include_podcasts, exclude_podcasts,
-                               max_episode_sync=None, automatic_sync=True):
+    def __episode_sync_cluders(self, include_podcasts: List[int], exclude_podcasts: List[int],
+                               max_episode_sync: int = None, automatic_sync: bool = True) -> List[dict]:
         query = self.db_session.query(Podcast)
         if include_podcasts:
             opts = (Podcast.id == pod for pod in include_podcasts)
@@ -424,16 +421,16 @@ class HathorClient():
         podcast_episode_mapping = {}
         for podcast in query:
             if not automatic_sync and not podcast.automatic_episode_download:
-                self.logger.debug("Skipping episode sync on podcast:%s", podcast.id)
+                self.logger.debug(f'Skipping episode sync on podcast: {podcast.id}')
                 continue
 
-            self.logger.debug("Running episode sync on podcast %s", podcast.id)
+            self.logger.debug(f'Running episode sync on podcast: {podcast.id}')
             manager = self._archive_manager(podcast.archive_type)
 
             # if sync all episodes, give no max results so all episodes returned
             if max_episode_sync is None:
                 max_results = podcast.max_allowed
-            elif max_episode_sync is 0:
+            elif max_episode_sync == 0:
                 max_results = None
             else:
                 max_results = max_episode_sync
@@ -449,18 +446,9 @@ class HathorClient():
             for episode in current_episodes:
                 # Check if download link with same download link exists in podcast
                 episode_processed_url = utils.process_url(episode['download_link'])
-                try:
-                    podcast_episodes = podcast_episode_mapping[podcast.id]
-                except KeyError:
-                    podcast_episodes = self.episode_list(only_files=False, include_podcasts=[podcast.id])
-                    podcast_episode_mapping[podcast.id] = [i['download_url'] for i in podcast_episodes]
-                episode_exists = False
-                for existing_episode in podcast_episodes:
-                    if episode_processed_url == existing_episode:
-                        self.logger.debug(f'Episode {existing_episode["id"]} has same url, skipping saving episode')
-                        episode_exists = True
-                        break
-                if episode_exists:
+                existing_episode = self.db_session(PodcastEpisode).filter(PodcastEpisode.download_url == episode['download_link']).first()
+                if existing_episode:
+                    self.logger.debug(f'Episode {existing_episode["id"]} has same url, skipping saving episode')
                     continue
                 podcast_episode_mapping[podcast.id].append(episode['download_link'])
                 episode_args = {
@@ -475,19 +463,19 @@ class HathorClient():
                 try:
                     self.db_session.add(new_episode)
                     self.db_session.commit()
-                    self.logger.debug("Created new podcast episode %s with args %s", new_episode.id,
-                                      ' -- '.join('%s-%s' % (k, v) for k, v in episode_args.items()))
+                    self.logger.debug(f'Created new podcast episode: {new_episode.id} from url: {new_episode.download_url}')
                     new_episodes.append(new_episode.as_dict(self.datetime_output_format))
                 except IntegrityError:
                     # if you attempt to add another episode with the same
                     # url, it will fail here, thats expected, we dont want
                     # duplicate episodes
                     self.db_session.rollback()
-                    self.logger.debug("Podcast episode is duplicate, title was %s", episode_args['title'])
+                    self.logger.debug(f'Podcast episode is duplicate, title was {episode_args["title"]}')
         return new_episodes
 
     @run_plugins
-    def episode_list(self, only_files=True, sort_date=False, include_podcasts=None, exclude_podcasts=None):
+    def episode_list(self, only_files: bool = True, sort_date: bool = False,
+                     include_podcasts: List[int] = None, exclude_podcasts: List[int] = None) -> List[dict]:
         '''
         List Podcast Episodes
         only_files           :   Indicates you only want to list episodes with a file_path
@@ -497,9 +485,6 @@ class HathorClient():
 
         Returns: List of dictionaries for all episodes requested
         '''
-        self._check_arguement_type(only_files, bool, 'Only Files must be boolean type')
-        self._check_arguement_type(sort_date, bool, 'Sort date must be boolean type')
-
         query = self.db_session.query(PodcastEpisode)
         if only_files:
             query = query.filter(PodcastEpisode.file_path != None)
@@ -518,10 +503,10 @@ class HathorClient():
         return episode_data
 
     @run_plugins
-    def episode_show(self, episode_input):
+    def episode_show(self, episode_input: List[int]) -> List[dict]:
         '''
         Get information about one or many podcast episodes
-        episode_input    :   Either a single integer id or list of integer ids
+        episode_input    :  List of integer ids
 
         Returns: List of dictionaries for all episodes requested
         '''
@@ -532,7 +517,7 @@ class HathorClient():
         return episode_list
 
     @run_plugins
-    def episode_update(self, episode_id, prevent_delete=None):
+    def episode_update(self, episode_id: int, prevent_delete: bool = None) -> dict:
         '''
         Update episode information
         episode_id           :   ID of episode to update
@@ -542,18 +527,16 @@ class HathorClient():
         '''
         episode = self.db_session.query(PodcastEpisode).get(episode_id)
         if not episode:
-            self._fail("Podcast Episode not found for ID:%s" % episode_id)
+            self._fail(f'Podcast Episode not found for ID: {episode_id}')
 
-        self._check_arguement_type(prevent_delete, [None, bool], 'Prevent delete must be None or boolean type')
         if prevent_delete is not None:
-            self.logger.debug("Updating prevent delete to %s for episode %s", prevent_delete, episode_id)
+            self.logger.debug(f'Updating prevent delete to {prevent_delete} for episode {episode_id}')
             episode.prevent_deletion = prevent_delete
         self.db_session.commit()
-        self.logger.info("Episode updated:%s", episode.id)
         return episode.as_dict(self.datetime_output_format)
 
     @run_plugins
-    def episode_update_file_path(self, episode_id, file_path):
+    def episode_update_file_path(self, episode_id: int, file_path: Path) -> dict:
         '''
         Update episode file path
         episode_id          : ID of episode
@@ -563,32 +546,26 @@ class HathorClient():
         '''
         episode = self.db_session.query(PodcastEpisode).get(episode_id)
         if not episode:
-            self._fail("Podcast Episode not found for ID:%s" % episode_id)
-        self._check_arguement_type(file_path, [str], 'File path must be string type')
-        file_path = os.path.abspath(file_path)
-        path_directory, basename = os.path.split(file_path)
-        # File cannot move out of podcast file location
+            self._fail(f'Podcast Episode not found for ID: {episode_id}')
         podcast = self.db_session.query(Podcast).get(episode.podcast_id)
-        if path_directory != podcast.file_location:
-            self._fail("Podcast Episode cannot be moved out of"
-                       " podcast file location:%s" % podcast.file_location)
-        # Make sure file extension has not changed
-        _, ext = os.path.splitext(basename)
-        _, original_ext = os.path.splitext(episode.file_path)
-        if ext != original_ext:
-            self._fail("New file path for episode:%s must use"
-                       " extension:%s" % (episode.id, original_ext))
-        os.rename(episode.file_path, file_path)
-        episode.file_path = utils.clean_string(file_path)
-        self.logger.info("Update episode:%s file path to:%s", episode.id, file_path)
+        file_path = Path(file_path)
+        pod_path = Path(podcast.file_location)
+        existing_path = Path(episode.file_path)
+        if file_path.parent != pod_path:
+            self._fail(f'Podcast Episode cannot be moved out of podcast file location: {str(podcast.file_location)}')
+        if existing_path.suffix != file_path.suffix:
+            self._fail(f'New path {str(file_path)} suffix must match original suffix {str(existing_path)}')
+        existing_path.rename(file_path)
+        episode.file_path = str(file_path.resolve())
+        self.logger.info(f'Update episode: {episode.id} file path to: {str(file_path)}')
         self.db_session.commit()
         return episode.as_dict(self.datetime_output_format)
 
     @run_plugins
-    def episode_delete(self, episode_input, delete_files=True):
+    def episode_delete(self, episode_input: List[int], delete_files: bool = True) -> List[int]:
         '''
         Delete one or many podcast episodes
-        episode_input    :   Either a single integer id or list of integer ids
+        episode_input    :   List of integer Ids
         delete_files     :   Delete media files along with database entries
 
         Returns: List of integer IDs of episodes deleted
@@ -597,113 +574,107 @@ class HathorClient():
         return self.__episode_delete_input(query, delete_files=delete_files)
 
     @run_plugins
-    def __episode_delete_input(self, query_input, delete_files=True):
+    def __episode_delete_input(self, query_input: List[int], delete_files: bool = True) -> List[int]:
         # delete episode files to make it one call and a bit more simple
         if delete_files:
             self.__episode_delete_file_input(query_input)
         # now delete episode records
         episodes_deleted = []
         for episode in query_input:
-            self.logger.info("Deleting podcast episode:%s from database", episode.id)
+            self.logger.info(f'Deleting podcast episode: {episode.id} from database')
             self.db_session.delete(episode)
             self.db_session.commit()
             episodes_deleted.append(episode.id)
         return episodes_deleted
 
     @run_plugins
-    def episode_download(self, episode_input):
+    def episode_download(self, episode_input: List[int]) -> List[dict]:
         '''
         Download episode(s) to local machine
-        episode_input    :   Either a single integer id or list of integer ids
+        episode_input    :  List of integer ids
 
         Returns: List of dictionaries of episodes downloaded
         '''
-        query = self._database_select(PodcastEpisode, episode_input)
+        query = self.db_session.query(PodcastEpisode, Podcast).\
+            filter(PodcastEpisode.podcast_id == Podcast.id).\
+            filter(filter(PodcastEpisode.id.in_(episode_input)))
         return self.__episode_download_input(query)
 
     @run_plugins
-    def __episode_download_input(self, episode_input):
+    def __episode_download_input(self, episode_input: Query) -> List[dict]:
         def build_episode_path(episode, podcast):
-            pod_path = podcast['file_location']
-            title = utils.normalize_name(episode.title)
-            date = utils.normalize_name(episode.date.strftime(self.datetime_output_format))
-            file_name = '%s.%s' % (date, title)
-            return os.path.join(pod_path, file_name)
+            return Path(podcast.file_location) / f'{utils.normalize_name{episode.title}}'
 
         podcast_cache = dict()
 
         episodes_downloaded = []
 
-        for episode in episode_input:
-            try:
-                podcast = podcast_cache[episode.podcast_id]
-            except KeyError:
-                podcast = self.db_session.query(Podcast).get(episode.podcast_id).as_dict(self.datetime_output_format)
-                podcast_cache[episode.podcast_id] = podcast
+        for query_data in episode_input:
+            episode = query_data[0]
+            podcast = query_data[1]
 
             manager = self._archive_manager(podcast['archive_type'])
 
-            self.logger.debug("Downloading data from url:%s", episode.download_url)
+            self.logger.debug(f'Downloading episode: {episode.id} data from url: {episode.download_url}')
 
             episode_path_prefix = build_episode_path(episode, podcast)
 
             output_path, download_size = manager.episode_download(episode.download_url,
                                                                   episode_path_prefix)
-            if output_path is None or (download_size is None or download_size is 0):
-                self.logger.error("Unable to download episode:%s, skipping", episode.id)
+            if output_path is None or (download_size is None or download_size == 0):
+                self.logger.error(f'Unable to download episode: {episode.id}')
                 continue
-            self.logger.info("Downloaded episode %s data to file %s", episode.id, output_path)
+            self.logger.info(f'Downloaded episode {episode.id} data to file {str(output_path)}')
 
-            episode.file_path = utils.clean_string(output_path)
+            episode.file_path = str(output_path.resolve())
             episode.file_size = download_size
             self.db_session.commit()
 
-            # Do not update tags on vieo files
-            _, file_ext = os.path.splitext(output_path)
-            if file_ext not in REJECT_TAG_UPDATE_FILE_TYPES: 
-                # use artist name if possible
-                artist_name = podcast['artist_name'] or podcast['name']
-                audio_tags = {
-                    'artist' : artist_name,
-                    'albumartist' : artist_name,
-                    'album' : podcast['name'],
-                    'title' : episode.title,
-                    'date' : episode.date.strftime(self.datetime_output_format),
-                }
-                try:
-                    metadata.tags_update(output_path, audio_tags)
-                    self.logger.debug("Updated database audio tags for episode %s", episode.id)
-                except AudioFileException as error:
-                    self.logger.warn("Unable to update tags on file %s : %s", output_path, str(error))
+            # Update metadata tags
+            # use artist name if possible
+            artist_name = podcast['artist_name'] or podcast['name']
+            audio_tags = {
+                'artist' : artist_name,
+                'albumartist' : artist_name,
+                'album' : podcast['name'],
+                'title' : episode.title,
+                'date' : episode.date.strftime(self.datetime_output_format),
+            }
+            try:
+                metadata.tags_update(output_path, audio_tags)
+                self.logger.debug(f'Updated database audio tags for episode {episode.id}')
+            except AudioFileException as error:
+                self.logger.warn(f'Unable to update tags on file {str(output_path)} : {str(error)}')
             episodes_downloaded.append(episode.as_dict(self.datetime_output_format))
         return episodes_downloaded
 
     @run_plugins
-    def episode_delete_file(self, episode_input):
+    def episode_delete_file(self, episode_input: List[int]) -> List[int]:
         '''
         Delete media files for one or many podcast episodes
-        episode_input    :  Either a single ID, a list of IDs
+        episode_input    :  List of ids
         '''
         query = self._database_select(PodcastEpisode, episode_input)
         return self.__episode_delete_file_input(query)
 
     @run_plugins
-    def __episode_delete_file_input(self, query_input):
+    def __episode_delete_file_input(self, query_input: Query) -> List[int]:
         episodes_deleted = []
         for episode in query_input:
             if episode.file_path is not None:
-                self._remove_file(episode.file_path)
+                file_path = Path(episode.file_path)
+                file_path.unlink()
                 episode.file_path = None
                 episode.file_size = None
                 # Make sure prevent delete is turned off
                 episode.prevent_deletion = False
                 self.db_session.commit()
-                self.logger.info("Removed file and updated record for episode %s", episode.id)
+                self.logger.info(f'Removed file and updated record for episode {episode.id}')
                 episodes_deleted.append(episode.id)
         return episodes_deleted
 
     @run_plugins
-    def episode_cleanup(self):
+    def episode_cleanup(self) -> bool:
         '''
         Delete all podcast episode entries without a media file associated with them in order to clear room.
         Also runs the "VACUUM" command to recreate the database in order to shrink its file size
@@ -715,8 +686,8 @@ class HathorClient():
         return True
 
     @run_plugins
-    def podcast_sync(self, include_podcasts=None, exclude_podcasts=None,
-                     sync_web_episodes=True, download_episodes=True):
+    def podcast_sync(self, include_podcasts: List[int] = None, exclude_podcasts: List[int] = None,
+                     sync_web_episodes: bool = True, download_episodes: bool = True):
         '''
         Updates the media files for podcasts. First sync with interwebs to check for newer episodes, then check to see if any need to be downloaded.
         include_podcasts     :   Only include these podcasts. Single ID or lists of IDs
@@ -734,7 +705,7 @@ class HathorClient():
         return None
 
     @run_plugins
-    def _podcast_download_episodes(self, include_podcasts, exclude_podcasts):
+    def _podcast_download_episodes(self, include_podcasts: List[int], exclude_podcasts: List[int]):
         delete_episodes = []
         download_episodes = []
 
@@ -763,12 +734,11 @@ class HathorClient():
             if podcast.max_allowed:
                 episode_query = episode_query.limit(podcast.max_allowed)
             for episode in episode_query: #pylint:disable=singleton-comparison
-                download_episodes.append(episode)
+                download_episodes.append((episode, podcast))
 
         # Download episodes from query
         if download_episodes:
-            self.logger.debug("Episodes %s set for download from file sync",
-                              [i.id for i in download_episodes])
+            self.logger.debug(f'Episodes {[i.id for i in download_episodes]} set for download from file sync')
             self.__episode_download_input(download_episodes)
 
         # Find episodes to delete if there is max allowed on the podcast
@@ -791,7 +761,6 @@ class HathorClient():
                 delete_episodes.append(episode)
 
         if delete_episodes:
-            self.logger.debug("Episodes %s set for deletion for max allowed from file sync",
-                              [i.id for i in delete_episodes])
+            self.logger.debug(f'Episodes {[i.id for i in delete_episodes]} set for deletion for max allowed from file sync')
             self.__episode_delete_file_input(delete_episodes)
         return None
