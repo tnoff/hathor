@@ -446,11 +446,10 @@ class HathorClient():
             for episode in current_episodes:
                 # Check if download link with same download link exists in podcast
                 episode_processed_url = utils.process_url(episode['download_link'])
-                existing_episode = self.db_session(PodcastEpisode).filter(PodcastEpisode.download_url == episode['download_link']).first()
+                existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode['download_link']).first()
                 if existing_episode:
                     self.logger.debug(f'Episode {existing_episode["id"]} has same url, skipping saving episode')
                     continue
-                podcast_episode_mapping[podcast.id].append(episode['download_link'])
                 episode_args = {
                     'title' : episode['title'],
                     'date' : episode['date'],
@@ -597,7 +596,7 @@ class HathorClient():
         '''
         query = self.db_session.query(PodcastEpisode, Podcast).\
             filter(PodcastEpisode.podcast_id == Podcast.id).\
-            filter(filter(PodcastEpisode.id.in_(episode_input)))
+            filter(PodcastEpisode.id.in_(episode_input))
         return self.__episode_download_input(query)
 
     @run_plugins
@@ -613,7 +612,7 @@ class HathorClient():
             episode = query_data[0]
             podcast = query_data[1]
 
-            manager = self._archive_manager(podcast['archive_type'])
+            manager = self._archive_manager(podcast.archive_type)
 
             self.logger.debug(f'Downloading episode: {episode.id} data from url: {episode.download_url}')
 
@@ -632,11 +631,11 @@ class HathorClient():
 
             # Update metadata tags
             # use artist name if possible
-            artist_name = podcast['artist_name'] or podcast['name']
+            artist_name = podcast.artist_name or podcast.name
             audio_tags = {
                 'artist' : artist_name,
                 'albumartist' : artist_name,
-                'album' : podcast['name'],
+                'album' : podcast.name,
                 'title' : episode.title,
                 'date' : episode.date.strftime(self.datetime_output_format),
             }

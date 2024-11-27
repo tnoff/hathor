@@ -93,7 +93,7 @@ class RSSManager(ArchiveInterface):
         filters = filters or []
 
         episodes = []
-        for item in d['entries']:
+        for item in data['entries']:
             if max_results and len(episodes) >= max_results:
                 self.logger.debug(f'Exiting rss update early, at max results: {max_results}')
                 return episodes
