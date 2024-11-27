@@ -5,3 +5,4 @@ cover/
 hathor/plugins/
 build/
 *egg-info*
+.tox/
