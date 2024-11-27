@@ -108,7 +108,7 @@ class HathorClient():
 
     def _archive_manager(self, archive_type):
         return ARCHIVE_TYPES[archive_type](self.logger,
-                                           self.google_api_key)
+                                           **{'google_api_key' : self.google_api_key})
 
     def _database_select(self, table, given_input):
         given_input = self._check_input(given_input)
@@ -603,7 +603,7 @@ class HathorClient():
     @run_plugins
     def __episode_download_input(self, episode_input: Query) -> List[dict]:
         def build_episode_path(episode, podcast):
-            return Path(podcast.file_location) / f'{utils.normalize_name{episode.title}}'
+            return Path(podcast.file_location) / f'{utils.normalize_name(episode.title)}'
 
         podcast_cache = dict()
 

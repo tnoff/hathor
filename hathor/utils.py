@@ -1,5 +1,5 @@
 import logging
-from logging import INFO, getLogger, Formatter, StreamHandler
+from logging import INFO, getLogger, Formatter, StreamHandler, RootLogger
 from logging.handlers import RotatingFileHandler
 import random
 import string
@@ -57,7 +57,7 @@ def setup_logger(name: str,
                  logging_file: Path = None,
                  console_logging: bool = True,
                  console_logging_level: int = 20,
-                 log_file_level: int = 20):
+                 log_file_level: int = 20) -> RootLogger:
     '''
     Setup a generic python logger
     name: Name of logger
@@ -84,7 +84,7 @@ def setup_logger(name: str,
         logger.addHandler(sh)
     return logger
 
-def rm_tree(pth):
+def rm_tree(pth: Path) -> bool:
     '''
     Remove all files in a tree
     pth: Path to remove
@@ -96,3 +96,4 @@ def rm_tree(pth):
         else:
             rm_tree(child)
     pth.rmdir()
+    return True

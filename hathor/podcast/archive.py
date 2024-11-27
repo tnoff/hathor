@@ -1,20 +1,28 @@
 from datetime import datetime
 import json
+from logging import RootLogger
 import os
 import re
 from time import mktime
+from typing import Literal, List
 
 from dateutil import parser
 from feedparser import parse
 import googleapiclient.discovery
 import mimetypes
+from pathlib import Path
 import requests
 import yt_dlp.YoutubeDL
 
 from hathor.exc import FunctionUndefined, HathorException
 from hathor import utils
 
-def curl_download(episode_url, output_path):
+def curl_download(episode_url: str, output_path: Path) -> int:
+    '''
+    Download url to file
+    episode_url : Episode url
+    output_path : Path to output file
+    '''
     req = requests.get(episode_url, stream=True)
 
     content_type = req.headers['content-type']
@@ -28,14 +36,20 @@ def curl_download(episode_url, output_path):
         track_download_size = True
         download_size = 0
     chunk_size = 16 * 1024
-    with open(output_path, 'wb') as file_output:
+    with open(str(output_path), 'wb') as file_output:
         for chunk in req.iter_content(chunk_size=chunk_size):
             file_output.write(chunk)
             if track_download_size:
                 download_size += len(chunk)
-    return download_size
+    return output_path, download_size
 
-def verify_title_filters(filters, title):
+def verify_title_filters(filters: List[str], title: str) -> bool:
+    '''
+    Verify title matches filters given
+
+    filters: Regex filters
+    title: Title to check
+    '''
     valid = True
     for filty in filters:
         matches = filty.match(title)
@@ -45,7 +59,7 @@ def verify_title_filters(filters, title):
     return valid
 
 class ArchiveInterface(object):
-    def __init__(self, logger, **kwargs):
+    def __init__(self, logger: RootLogger, **kwargs):
         self.logger = logger
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None, **kwargs): #pylint:disable=unused-argument,no-self-use
@@ -55,13 +69,22 @@ class ArchiveInterface(object):
         raise FunctionUndefined("No episode download for class")
 
 class RSSManager(ArchiveInterface):
-    def __init__(self, logger, **kwargs):
+    def __init__(self, logger: RootLogger, **kwargs):
+        '''
+        RSS Podcast manager
+        logger: logger instance
+        '''
         ArchiveInterface.__init__(self, logger)
-        self.default_episode_format = '.mp3'
 
-    def broadcast_update(self, broadcast_id, max_results=None, filters=None):
+    def broadcast_update(self, broadcast_id: str, max_results: int = None, filters: List[str] = None):
+        '''
+        Get latest episodes from broadcast
+        broadcast_id : URL to generate episodes from
+        max_results  : Only return N results
+        filters      : Regex filters to match against titles
+        '''
         self.logger.debug(f'Getting episode info from RSS feed: {broadcast_id}')
-        data = parser(broadcast_id)
+        data = parse(broadcast_id)
         try:
             data['feed']['link']
         except KeyError:
@@ -101,15 +124,26 @@ class RSSManager(ArchiveInterface):
             episodes.append(episode_data)
         return episodes
 
-    def episode_download(self, download_url, output_prefix, **_):
-        output_path = '%s%s' % (output_prefix, self.episode_format)
-        return output_path, curl_download(download_url, output_path)
+    def episode_download(self, download_url: str, output_prefix: str, **_) -> (Path, int):
+        '''
+        Download episode from url
+        download_url    : URL to download from
+        output_prefix   : Name of file, should not include suffix
+        '''
+        return curl_download(download_url, output_prefix)
 
 class YoutubeManager(ArchiveInterface):
-    def __init__(self, logger, google_api_key):
-        ArchiveInterface.__init__(self, logger, google_api_key)
+    def __init__(self, logger, **kwargs):
+        ArchiveInterface.__init__(self, logger)
+        self.google_api_key = kwargs.get('google_api_key', None)
 
-    def broadcast_update(self, broadcast_id, max_results=None, filters=None):
+    def broadcast_update(self, broadcast_id, max_results=None, filters=None, **_):
+        '''
+        Get latest episodes from broadcast
+        broadcast_id    : Youtube channel id
+        max_results     : Return max N results
+        filters         : List of regex filters
+        '''
         self.logger.debug(f'Getting episodes for youtube broadcast: {broadcast_id}')
         pagetoken = None
         archive_data = []
@@ -159,25 +193,24 @@ class YoutubeManager(ArchiveInterface):
                 self.logger.debug("No key 'pagetoken' in youtube data, exiting")
                 return archive_data
 
-    def episode_download(self, download_url, output_path, **_):
-        output_path = f'{output_path}.%(ext)s'
+    def episode_download(self, download_url: str, output_prefix: str, **_) -> (Path, int):
+        '''
+        Download episode from url
+        download_url    : URL to download from
+        output_prefix   : Name of file, should not include suffix
+        '''
         options = {
-            'outtmpl' : output_path,
+            'outtmpl' : f'{output_prefix}.%(ext)s',
             'noplaylist' : True,
             'format': 'best',
             'logger' : self.logger,
         }
         try:
             with yt_dlp.YoutubeDL(options) as yt:
-                # First check if video is live before trying to download
-                info_dict = yt.extract_info(download_url, download=False)
-                if info_dict['live_status'] == 'is_live':
-                    self.logger.error(f'Unable to download url: {download_url}, is currently live')
-                    return None, None
-                # Now actually try to download
-                info_dict = yt.extract_info(download_url, download=True)
-                file_name = yt.prepare_filename(info_dict)
-                return file_name, os.path.getsize(file_name)
+                data = yt.extract_info(download_url, download=True)
+                data = data['entries'][0]
+                file_path = Path(data['requested_downloads'][0]['filepath'])
+                return file_name, file_path.stat().st_size
         except yt_dlp.utils.DownloadError as e:
             self.logger.error(f'Error downloading youtube url: {download_url}, {str(e)}')
             return None, None
