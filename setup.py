@@ -16,7 +16,7 @@ setuptools.setup(
     name='hathor',
     description='Hathor Audio File Manager',
     author='Tyler D. North',
-    author_email='ty_north@yahoo.com',
+    author_email='ne@tyler-north.com',
     install_requires=required,
     entry_points={
         'console_scripts' : [
