@@ -6,8 +6,6 @@ from hathor.exc import HathorException
 from hathor import utils as common_utils
 
 from tests import utils
-from tests.podcasts.data import rss_feed
-from tests.podcasts.data import youtube_archive1
 
 '''
 class TestPodcastFilters(utils.TestHelper): #pylint:disable=too-many-public-methods

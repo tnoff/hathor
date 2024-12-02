@@ -13,7 +13,6 @@ from hathor.exc import HathorException
 from hathor.database.tables import PodcastEpisode
 from hathor import utils
 from tests import utils as test_utils
-from tests.podcasts.data import rss_feed
 
 def mock_plugin(self, result, *args, **kwargs):
     episode = self.db_session.query(PodcastEpisode).get(result[0]['id'])

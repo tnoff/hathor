@@ -8,9 +8,6 @@ import mock
 from hathor.exc import HathorException
 
 from tests import utils as test_utils
-from tests.podcasts.data import rss_feed
-from tests.podcasts.data import youtube_archive1, youtube_archive2
-from tests.podcasts.data import youtube_archive1_new_item
 
 '''
 class TestPodcastEpisodes(test_utils.TestHelper): #pylint:disable=too-many-public-methods

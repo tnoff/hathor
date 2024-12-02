@@ -9,7 +9,6 @@ from hathor.client import HathorClient
 from hathor.exc import HathorException
 
 from tests import utils
-from tests.podcasts.data import rss_feed
 
 def test_podcast_create():
     with TemporaryDirectory() as tmp_dir:

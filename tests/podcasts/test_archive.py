@@ -16,9 +16,6 @@ from hathor.podcast.archive import curl_download, verify_title_filters
 from hathor import utils
 
 from tests import utils as test_utils
-from tests.podcasts.data import rss_feed
-from tests.podcasts.data import youtube_archive1
-from tests.podcasts.data import youtube_one_item_not_video
 
 class RequestsMockObject():
     def __init__(self, headers, audio_file):
