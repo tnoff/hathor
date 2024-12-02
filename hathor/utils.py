@@ -22,7 +22,7 @@ def normalize_name(name: str) -> str:
     name: original name
     '''
     valid_chars = string.ascii_lowercase + string.digits
-    valid_chars += string.ascii_uppercase + '_' + ' '
+    valid_chars += string.ascii_uppercase + '_'
 
     new_str = ''
     for char in name:

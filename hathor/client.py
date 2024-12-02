@@ -103,17 +103,15 @@ class HathorClient():
 
         self.plugins = load_plugins()
 
-    def __exit__(self, _exc_type, _exc_value, _traceback):
-        self.db_session.close()
-
     def _archive_manager(self, archive_type):
         return ARCHIVE_TYPES[archive_type](self.logger,
                                            **{'google_api_key' : self.google_api_key})
 
     def _database_select(self, table, given_input):
-        given_input = self._check_input(given_input)
         if not given_input:
             return []
+        if not isinstance(given_input, list):
+            given_input = [given_input]
         return self.db_session.query(table).filter(table.id.in_(given_input))
 
     def _fail(self, message):
@@ -146,9 +144,9 @@ class HathorClient():
         if file_location is None:
             if self.podcast_directory is None:
                 self._fail("No default podcast directory specified, will need specific file location to create podcast")
-            self.file_location = Path(self.podcast_directory) / utils.normalize_name(podcast_name)    
+            file_location = Path(self.podcast_directory) / utils.normalize_name(podcast_name)    
         else:
-            self.file_location = Path(file_location)
+            file_location = Path(file_location)
 
 
         pod_args = {
@@ -156,21 +154,17 @@ class HathorClient():
             'archive_type' : archive_type,
             'broadcast_id' : utils.clean_string(broadcast_id),
             'max_allowed' : max_allowed,
-            'file_location' : str(self.file_location.resolve()),
+            'file_location' : str(file_location.resolve()),
             'artist_name' : utils.clean_string(artist_name),
             'automatic_episode_download' : automatic_download,
         }
         new_pod = Podcast(**pod_args)
-        try:
-            self.db_session.add(new_pod)
-            self.db_session.commit()
-            self.logger.info(f'Podcast created, id: {new_pod.id}, name: {new_pod.name}')
-        except IntegrityError:
-            self.db_session.rollback()
-            self._fail(f'Cannot create podcast, name was {pod_args["name"]}')
+        self.db_session.add(new_pod)
+        self.db_session.commit()
+        self.logger.info(f'Podcast created, id: {new_pod.id}, name: {new_pod.name}')
 
-        self.logger.debug(f'Ensuring podcast {new_pod.id} path exists {str(self.file_location)}')
-        self.file_location.mkdir(exist_ok=True)
+        self.logger.debug(f'Ensuring podcast {new_pod.id} path exists {str(file_location)}')
+        file_location.mkdir(exist_ok=True)
         return new_pod.as_dict(self.datetime_output_format)
 
     @run_plugins
@@ -186,7 +180,7 @@ class HathorClient():
         return podcast_data
 
     @run_plugins
-    def podcast_show(self, podcast_input) -> dict:
+    def podcast_show(self, podcast_input) -> List[dict]:
         '''
         Get information on one or many podcasts
         podcast_input    :      Either single integer id, or list of integer ids
@@ -247,12 +241,8 @@ class HathorClient():
             self.logger.debug(f'Updating automatic download to {automatic_download} for podcast {podcast_id}')
             pod.automatic_episode_download = automatic_download
 
-        try:
-            self.db_session.commit()
-            self.logger.info(f'Podcast {pod.id} update commited')
-        except IntegrityError:
-            self.db_session.rollback()
-            self._fail(f'Cannot update podcast id: {podcast_id}')
+        self.db_session.commit()
+        self.logger.info(f'Podcast {pod.id} update commited')
         return pod.as_dict(self.datetime_output_format)
 
 

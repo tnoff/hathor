@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+from datetime import datetime, timezone
 import json
 import logging
 from tempfile import TemporaryDirectory
@@ -5,6 +7,7 @@ from time import time
 
 from pathlib import Path
 import pytest
+from yt_dlp.utils import DownloadError
 
 from hathor.client import HathorClient
 from hathor.exc import HathorException, FunctionUndefined
@@ -58,7 +61,7 @@ def test_curl_download(mocker):
             requests_mock = mocker.patch('hathor.podcast.archive.get', side_effect=requests_get_mock('https://example.foo/download1', temp_audio_file))
             client.episode_download([episode_list[0]['id']])
             episode_list = client.episode_list()
-            assert 'Episode 0.mp3' in episode_list[0]['file_path']
+            assert 'Episode_0.mp3' in episode_list[0]['file_path']
             path = Path(episode_list[0]['file_path'])
             assert path.exists()
 
@@ -210,7 +213,26 @@ class MockYoutubeRequest():
     def execute(self):
         return {
             'items': [
-                'foo'
+                {
+                    'snippet': {
+                        'title': 'Episode 0',
+                        'publishedAt': datetime.now(timezone.utc).isoformat(),
+                        'description': 'foo bar'
+                    },
+                    'id': {
+                        'videoId': '1234ABC',
+                    }
+                },
+                {
+                    'snippet': {
+                        'title': 'Episode 1',
+                        'publishedAt': datetime.now(timezone.utc).isoformat(),
+                        'description': 'foo bar 2'
+                    },
+                    'id': {
+                        'videoId': '1234ABCDEFG',
+                    }
+                },
             ]
         }
 
@@ -220,6 +242,9 @@ class MockYoutubeSearch():
     
     def list(self, **kwargs):
         return MockYoutubeRequest()
+    
+    def list_next(self, *args, **kwargs):
+        return None
 
 class MockYoutube():
     def __init__(self):
@@ -231,59 +256,67 @@ def google_api_build(typer, version, developerKey=None):
 def test_youtube_brodcast_update(mocker):
     manager = YoutubeManager(logging, google_api_key='derp')
     mocker.patch('hathor.podcast.archive.build', side_effect=google_api_build)
-    manager.broadcast_update('foo')
+    episode_list = manager.broadcast_update('foo')
+    assert len(episode_list) == 2
 
-'''
-class TestArchive(test_utils.TestHelper):
-    def test_archive_interface(self):
-        manager = ArchiveInterface(logging, None, None)
-        with self.assertRaises(FunctionUndefined) as error:
-            manager.broadcast_update('foo')
-        self.check_error_message('No broadcast update for class', error)
-        with self.assertRaises(FunctionUndefined) as error:
-            manager.episode_download('foo', 'bar')
-        self.check_error_message('No episode download for class', error)
+def test_youtube_brodcast_update_max_results(mocker):
+    manager = YoutubeManager(logging, google_api_key='derp')
+    mocker.patch('hathor.podcast.archive.build', side_effect=google_api_build)
+    episode_list = manager.broadcast_update('foo', max_results=1)
+    assert len(episode_list) == 1
+    assert episode_list[0]['title'] == 'Episode 0'
 
-    @httpretty.activate
-    def test_youtube_error_is_400(self):
-        google_key = '123'
-        broadcast = 'foo'
-        manager = YoutubeManager(logging, None, google_key)
-        url = urls.youtube_channel_get(broadcast, google_key)
-        code = 400
-        httpretty.register_uri(httpretty.GET, url, body=json.dumps(youtube_archive1.DATA), status=code)
-        with self.assertRaises(HathorException) as error:
-            manager.broadcast_update(broadcast)
-        self.check_error_message('Invalid status code:%s' % code, error)
+def test_youtube_brodcast_update_filters(mocker):
+    manager = YoutubeManager(logging, google_api_key='derp')
+    mocker.patch('hathor.podcast.archive.build', side_effect=google_api_build)
+    episode_list = manager.broadcast_update('foo', filters=[r'^Episode 1'])
+    assert len(episode_list) == 1
+    assert episode_list[0]['title'] == 'Episode 1'
 
-    @httpretty.activate
-    def test_rss_feed(self):
-        url = 'http://example.%s.com' % utils.random_string()
-        manager = RSSManager(logging, None, None)
-        httpretty.register_uri(httpretty.GET, url, body=rss_feed.DATA)
-        episodes = manager.broadcast_update(url)
-        self.assert_length(episodes, 6)
-        for ep in episodes:
-            self.assert_dictionary(ep)
+class MockYoutubeDL():
+    def __init__(self, temp_audio_file):
+        self.temp_audio_file = temp_audio_file
 
-    @httpretty.activate
-    def test_rss_feed_non_200(self):
-        url = 'http://example1.%s.com' % utils.random_string()
-        manager = RSSManager(logging, None, None)
-        httpretty.register_uri(httpretty.GET, url, body=rss_feed.DATA, status=400)
-        with self.assertRaises(HathorException) as error:
-            manager.broadcast_update(url)
-        self.check_error_message('Getting invalid status code:400 for rss feed', error)
+    def extract_info(self, download_url, download=True):
+        return {
+            'entries': [
+                {
+                    'requested_downloads': [
+                        {
+                            'filepath': Path(self.temp_audio_file),
+                        },
+                    ],
+                },
+            ]
+        }
 
-    @httpretty.activate
-    def test_youtube_do_not_download_non_videos(self):
-        broadcast = utils.random_string()
-        google_key = utils.random_string()
-        manager = YoutubeManager(logging, None, google_key)
-        url = urls.youtube_channel_get(broadcast,
-                                       google_key)
-        httpretty.register_uri(httpretty.GET, url, body=json.dumps(youtube_one_item_not_video.DATA),
-                               content_type='application/json')
-        episodes = manager.broadcast_update(broadcast)
-        self.assert_length(episodes, 0)
-'''
+def generate_mock_youtube(temp_audio_file):
+    @contextmanager
+    def mock_youtube_client(options):
+        yield MockYoutubeDL(temp_audio_file)
+    return mock_youtube_client
+
+class MockYoutubeError():
+    def __init__(self):
+        pass
+    
+    def extract_info(self, *args, **kwargs):
+        raise DownloadError('issue downloading file')
+
+@contextmanager
+def mock_youtube_error(options):
+    yield MockYoutubeError()
+
+def test_youtube_broadcast_download(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    with test_utils.temp_audio_file(suffix='.mp4') as temp_audio_file:
+        mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=generate_mock_youtube(temp_audio_file))
+        file_path, size = manager.episode_download('foo', 'bar')
+        assert size == Path(temp_audio_file).stat().st_size
+
+def test_youtube_broadcast_download_error(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_youtube_error)
+    file_path, size = manager.episode_download('foo', 'bar')
+    assert file_path == None
+    assert size == None

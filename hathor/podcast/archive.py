@@ -12,7 +12,8 @@ from googleapiclient.discovery import build
 import mimetypes
 from pathlib import Path
 from requests import get
-import yt_dlp.YoutubeDL
+from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
 from hathor.exc import FunctionUndefined, HathorException
 from hathor import utils
@@ -162,7 +163,7 @@ class YoutubeManager(ArchiveInterface):
         req = youtube_api.search.list(**data_inputs)
         while req is not None:
             response = req.execute()
-            for item in data['items']:
+            for item in response['items']:
                 title = utils.clean_string(item['snippet']['title'])
                 if not verify_title_filters(filters, title):
                     self.logger.debug(f'Title: {title} , does not pass filters, skipping')
@@ -181,6 +182,7 @@ class YoutubeManager(ArchiveInterface):
                     self.logger.debug(f'At max results: {max_results}, exiting early')
                     return archive_data
             req = youtube_api.search.list_next(req, response)
+        return archive_data
 
     def episode_download(self, download_url: str, output_prefix: str, **_) -> (Path, int):
         '''
@@ -195,12 +197,12 @@ class YoutubeManager(ArchiveInterface):
             'logger' : self.logger,
         }
         try:
-            with yt_dlp.YoutubeDL(options) as yt:
+            with YoutubeDL(options) as yt:
                 data = yt.extract_info(download_url, download=True)
                 data = data['entries'][0]
                 file_path = Path(data['requested_downloads'][0]['filepath'])
-                return file_name, file_path.stat().st_size
-        except yt_dlp.utils.DownloadError as e:
+                return file_path, file_path.stat().st_size
+        except DownloadError as e:
             self.logger.error(f'Error downloading youtube url: {download_url}, {str(e)}')
             return None, None
 
