@@ -4,7 +4,6 @@ Hathor is a python package that is designed to help users download and maintain 
 
 Includes support for the following feed types:
 - RSS
-- Soundcloud
 - Youtube
 
 
