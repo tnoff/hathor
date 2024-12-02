@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import List
 
@@ -14,7 +13,7 @@ def _generate_metadata(file_path: Path) -> mutagen_file:
     try:
         audio_file = mutagen_file(file_path, easy=True)
     except HeaderNotFoundError as e:
-        raise AudioFileException(str(e))
+        raise AudioFileException(str(e)) from e
     if audio_file is None:
         raise AudioFileException(f'Unsupported type for tags on file {file_path}')
     return audio_file
@@ -23,7 +22,7 @@ def _generate_id3(file_path: Path) -> ID3:
     try:
         audio_file = ID3(file_path)
     except ID3NoHeaderError as error: #pylint:disable=protected-access
-        raise AudioFileException(f'Invalid file {file_path} type -- {str(error)}')
+        raise AudioFileException(f'Invalid file {file_path} type -- {str(error)}') from error
     return audio_file
 
 def tags_update(input_file: Path, key_values: dict) -> mutagen_file:
@@ -52,7 +51,7 @@ def tags_show(input_file: Path) -> mutagen_file:
     '''
     audio_file = _generate_metadata(input_file)
 
-    new_dict = dict()
+    new_dict = {}
     for key, value in audio_file.items():
         new_dict[key] = value[0]
     return new_dict
@@ -85,7 +84,7 @@ def picture_extract(input_file: Path, output_file: Path) -> dict:
 
     picture = None
     # sometimes keys can be weird and have suffixes, like "APIC:" or "APIC:png"
-    for key in audio_file.keys():
+    for key in audio_file:
         if key.startswith('APIC'):
             picture = audio_file[key]
             break
@@ -97,7 +96,7 @@ def picture_extract(input_file: Path, output_file: Path) -> dict:
 
     if picture.mime == 'image/jpeg' and output_file.suffix != '.jpg':
         raise AudioFileException(f'Invalid suffix {output_file.suffix} for mimetype {picture.mime}')
-    elif picture.mime == 'image/png' and output_file.suffix != '.png':
+    if picture.mime == 'image/png' and output_file.suffix != '.png':
         raise AudioFileException(f'Invalid suffix {output_file.suffix} for mimetype {picture.mime}')
 
     with open(output_file, 'wb') as writer:
@@ -139,7 +138,7 @@ def picture_update(audio_file: Path, picture_file: Path,
 
     # Check if file is flac or mp3
     if audio_file.suffix == '.flac':
-        generated_audio_file = FLAC(file_path)
+        generated_audio_file = FLAC(str(audio_file))
         image = Picture()
         image.type = encoding
         image.desc = description

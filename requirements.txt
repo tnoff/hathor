@@ -2,7 +2,6 @@ click==8.1.7
 feedparser==6.0.11
 google-api-python-client==2.154.0
 mutagen==1.42.0
-python-dateutil==2.8.0
 SQLAlchemy==1.2.18
 yt-dlp>=2022.10.4
 requests==2.32.3

@@ -1,8 +1,6 @@
-import logging
-from logging import INFO, getLogger, Formatter, StreamHandler, RootLogger
+from logging import getLogger, Formatter, StreamHandler, RootLogger
 from logging.handlers import RotatingFileHandler
-import random
-import string
+from string import ascii_lowercase, ascii_uppercase, digits
 
 from pathlib import Path
 from urllib.parse  import urlparse
@@ -21,8 +19,8 @@ def normalize_name(name: str) -> str:
     Remove non alpha numeric characters from string
     name: original name
     '''
-    valid_chars = string.ascii_lowercase + string.digits
-    valid_chars += string.ascii_uppercase + '_'
+    valid_chars = ascii_lowercase + digits
+    valid_chars += ascii_uppercase + '_'
 
     new_str = ''
     for char in name:
@@ -39,7 +37,7 @@ def normalize_name(name: str) -> str:
 
     name_str = new_str.lstrip('_')
     name_str = new_str.rstrip('_')
-    return new_str
+    return name_str
 
 def clean_string(stringy: str) -> str:
     '''
@@ -73,7 +71,7 @@ def setup_logger(name: str,
     if logging_file is not None:
         fh = RotatingFileHandler(logging_file,
                                  backupCount=4,
-                                 maxBytes=((2 ** 20) * 10))
+                                 maxBytes=(2 ** 20) * 10)
         fh.setLevel(log_file_level)
         fh.setFormatter(formatter)
         logger.addHandler(fh)

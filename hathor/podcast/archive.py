@@ -1,16 +1,13 @@
 from datetime import datetime
-import json
 from logging import RootLogger
-import os
+from mimetypes import guess_extension
 from re import match
-from time import mktime
-from typing import Literal, List
+from pathlib import Path
+from typing import List
 
-from dateutil import parser
 from feedparser import parse
 from googleapiclient.discovery import build
-import mimetypes
-from pathlib import Path
+
 from requests import get
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
@@ -24,10 +21,10 @@ def curl_download(episode_url: str, output_path: Path) -> int:
     episode_url : Episode url
     output_path : Path to output file
     '''
-    req = get(episode_url, stream=True)
+    req = get(episode_url, timeout=120, stream=True)
 
     content_type = req.headers['content-type']
-    extension = mimetypes.guess_extension(content_type)
+    extension = guess_extension(content_type)
     output_path = Path(f'{output_path}{extension}')
     track_download_size = False
 
@@ -60,24 +57,23 @@ def verify_title_filters(filters: List[str], title: str) -> bool:
     return valid
 
 class ArchiveInterface(object):
-    def __init__(self, logger: RootLogger, **kwargs):
+    def __init__(self, logger: RootLogger, **_):
         self.logger = logger
 
-    def broadcast_update(self, broadcast_id, max_results=None, filters=None, **kwargs): #pylint:disable=unused-argument,no-self-use
+    def broadcast_update(self, broadcast_id, max_results=None, filters=None, **kwargs):
         raise FunctionUndefined("No broadcast update for class")
 
-    def episode_download(self, download_url, **kwargs): #pylint:disable=unused-argument,no-self-use
+    def episode_download(self, download_url, output_prefix, **kwargs):
         raise FunctionUndefined("No episode download for class")
 
 class RSSManager(ArchiveInterface):
+    '''
+    RSS Archive Manager
+    '''
     def __init__(self, logger: RootLogger, **kwargs):
-        '''
-        RSS Podcast manager
-        logger: logger instance
-        '''
         ArchiveInterface.__init__(self, logger)
 
-    def broadcast_update(self, broadcast_id: str, max_results: int = None, filters: List[str] = None):
+    def broadcast_update(self, broadcast_id: str, max_results: int = None, filters: List[str] = None, **_):
         '''
         Get latest episodes from broadcast
         broadcast_id : URL to generate episodes from
@@ -88,8 +84,8 @@ class RSSManager(ArchiveInterface):
         data = parse(broadcast_id)
         try:
             data['feed']['link']
-        except KeyError:
-            raise HathorException(f'Invalid data from rss feed {broadcast_id}')
+        except KeyError as error:
+            raise HathorException(f'Invalid data from rss feed {broadcast_id}') from error
 
         filters = filters or []
 
@@ -134,6 +130,9 @@ class RSSManager(ArchiveInterface):
         return curl_download(download_url, output_prefix)
 
 class YoutubeManager(ArchiveInterface):
+    '''
+    Youtube Archive Manager
+    '''
     def __init__(self, logger, **kwargs):
         ArchiveInterface.__init__(self, logger)
         self.google_api_key = kwargs.get('google_api_key', None)
@@ -148,7 +147,6 @@ class YoutubeManager(ArchiveInterface):
         filters         : List of regex filters
         '''
         self.logger.debug(f'Getting episodes for youtube broadcast: {broadcast_id}')
-        pagetoken = None
         archive_data = []
         filters = filters or []
         youtube_api = build('youtube', 'v3', developerKey=self.google_api_key)

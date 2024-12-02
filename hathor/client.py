@@ -39,7 +39,7 @@ def load_plugins():
         relative_path = relative_path.parent / relative_path.stem
         import_name = str(relative_path).replace(os.sep, '.')
         # Import and get functions
-        imported = __import__(import_name)
+        __import__(import_name)
         for name, func in getmembers(import_name, isfunction):
             functions.append((name, func))
     return functions
@@ -144,7 +144,7 @@ class HathorClient():
         if file_location is None:
             if self.podcast_directory is None:
                 self._fail("No default podcast directory specified, will need specific file location to create podcast")
-            file_location = Path(self.podcast_directory) / utils.normalize_name(podcast_name)    
+            file_location = Path(self.podcast_directory) / utils.normalize_name(podcast_name)
         else:
             file_location = Path(file_location)
 
