@@ -13,3 +13,6 @@ disable=line-too-long,
         missing-module-docstring,
         too-few-public-methods,
         logging-fstring-interpolation,
+        too-many-arguments,
+        too-many-positional-arguments,
+        too-many-locals

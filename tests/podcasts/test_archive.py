@@ -76,7 +76,7 @@ def test_archive_interface():
         manager.broadcast_update('foo')
     assert 'No broadcast update for class' in str(error.value)
     with pytest.raises(FunctionUndefined) as error:
-        manager.episode_download('foo')
+        manager.episode_download('foo', 'bar')
     assert 'No episode download for class' in str(error.value)
 
 def test_rss_interface_broadcast_update(mocker):

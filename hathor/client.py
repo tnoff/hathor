@@ -2,7 +2,6 @@ from inspect import getmembers, isfunction
 import os
 from logging import RootLogger
 import re
-from types import FunctionType
 from typing import Literal, List
 
 
@@ -65,7 +64,7 @@ def run_plugins(func):
         return result
     return decorator
 
-ARCHIVE_TYPE = Literal[VALID_ARCHIVE_KEYS]
+ArchiveType = Literal[VALID_ARCHIVE_KEYS]
 
 class HathorClient():
     def __init__(self, podcast_directory: Path = None,
@@ -119,7 +118,7 @@ class HathorClient():
         raise HathorException(message)
 
     @run_plugins
-    def podcast_create(self, archive_type: ARCHIVE_TYPE,
+    def podcast_create(self, archive_type: ArchiveType,
                        broadcast_id: str,
                        podcast_name: str,
                        max_allowed: int = None,
@@ -139,7 +138,7 @@ class HathorClient():
         Returns: Integer dict object representing created podcast
         '''
         if max_allowed is not None and max_allowed < 1:
-            self._fail('Max allowed must be positive integer, %s given' % max_allowed)
+            self._fail(f'Max allowed must be positive integer, {max_allowed} given')
 
         if file_location is None:
             if self.podcast_directory is None:
@@ -197,7 +196,7 @@ class HathorClient():
     def podcast_update(self, podcast_id: int,
                        podcast_name: str = None,
                        broadcast_id: str = None,
-                       archive_type: ARCHIVE_TYPES = None,
+                       archive_type: ArchiveType = None,
                        max_allowed: int = None,
                        artist_name: str = None,
                        automatic_download: bool = None) -> dict:
@@ -269,10 +268,10 @@ class HathorClient():
 
         if move_files:
             self.logger.info(f'Moving files from old dir: {str(old_podcast_dir)} to new dir: {pod.file_location}')
-            self._ensure_path(pod.file_location)
+            new_podcast_dir.mkdir(exist_ok=True)
 
             episodes = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.podcast_id == podcast_id)
-            episodes = episodes.filter(PodcastEpisode.file_path != None)
+            episodes = episodes.filter(PodcastEpisode.file_path is not None)
             for episode in episodes:
                 episode_path = Path(episode.file_path)
                 new_path = new_podcast_dir / episode_path.name
@@ -408,7 +407,6 @@ class HathorClient():
             query = query.filter(and_(opts))
 
         new_episodes = []
-        podcast_episode_mapping = {}
         for podcast in query:
             if not automatic_sync and not podcast.automatic_episode_download:
                 self.logger.debug(f'Skipping episode sync on podcast: {podcast.id}')
@@ -436,7 +434,7 @@ class HathorClient():
             for episode in current_episodes:
                 # Check if download link with same download link exists in podcast
                 episode_processed_url = utils.process_url(episode['download_link'])
-                existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode['download_link']).first()
+                existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode_processed_url).first()
                 if existing_episode:
                     self.logger.debug(f'Episode {existing_episode["id"]} has same url, skipping saving episode')
                     continue
@@ -444,7 +442,7 @@ class HathorClient():
                     'title' : episode['title'],
                     'date' : episode['date'],
                     'description' : episode['description'],
-                    'download_url' : episode['download_link'],
+                    'download_url' : episode_processed_url,
                     'podcast_id' : podcast.id,
                     'prevent_deletion' : False,
                 }
@@ -476,7 +474,7 @@ class HathorClient():
         '''
         query = self.db_session.query(PodcastEpisode)
         if only_files:
-            query = query.filter(PodcastEpisode.file_path != None)
+            query = query.filter(PodcastEpisode.file_path is not None)
         if sort_date:
             query = query.order_by(desc(PodcastEpisode.date))
         if include_podcasts:
@@ -594,8 +592,6 @@ class HathorClient():
         def build_episode_path(episode, podcast):
             return Path(podcast.file_location) / f'{utils.normalize_name(episode.title)}'
 
-        podcast_cache = dict()
-
         episodes_downloaded = []
 
         for query_data in episode_input:
@@ -691,7 +687,6 @@ class HathorClient():
                                         automatic_sync=False)
         if download_episodes:
             self._podcast_download_episodes(include_podcasts, exclude_podcasts)
-        return None
 
     @run_plugins
     def _podcast_download_episodes(self, include_podcasts: List[int], exclude_podcasts: List[int]):
@@ -700,7 +695,7 @@ class HathorClient():
 
         # Built podcast query to iterate through
         podcast_query = self.db_session.query(Podcast).\
-            filter(Podcast.automatic_episode_download == True) #pylint:disable=singleton-comparison
+            filter(Podcast.automatic_episode_download is True) #pylint:disable=singleton-comparison
         if include_podcasts:
             opts = (Podcast.id == pod for pod in include_podcasts)
             podcast_query = podcast_query.filter(or_(opts))
@@ -712,7 +707,7 @@ class HathorClient():
         for podcast in podcast_query:
             episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
                     filter(PodcastEpisode.podcast_id == podcast.id).\
-                    filter(PodcastEpisode.file_path == None)
+                    filter(PodcastEpisode.file_path is None)
 
             # Make sure you call limit, then do check for file path
             # If you add the check for file path is None first
@@ -734,11 +729,11 @@ class HathorClient():
         # Not all episodes may have been downloaded, so this should use
         # another episode query, since that will check if "file_path" is defined
         # that way you dont delete episodes pre-maturely
-        for podcast in podcast_query.filter(Podcast.max_allowed != None):
+        for podcast in podcast_query.filter(Podcast.max_allowed is not None):
             episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
                     filter(PodcastEpisode.podcast_id == podcast.id).\
-                    filter(PodcastEpisode.file_path != None).\
-                    filter(PodcastEpisode.prevent_deletion == False).\
+                    filter(PodcastEpisode.file_path is not None).\
+                    filter(not PodcastEpisode.prevent_deletion).\
                     offset(podcast.max_allowed)
                     # Make sure offset is called first, since you want to first limit
                     # then check if prevent deletion is false
@@ -752,4 +747,3 @@ class HathorClient():
         if delete_episodes:
             self.logger.debug(f'Episodes {[i.id for i in delete_episodes]} set for deletion for max allowed from file sync')
             self.__episode_delete_file_input(delete_episodes)
-        return None

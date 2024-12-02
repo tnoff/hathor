@@ -70,7 +70,7 @@ class RSSManager(ArchiveInterface):
     '''
     RSS Archive Manager
     '''
-    def __init__(self, logger: RootLogger, **kwargs):
+    def __init__(self, logger: RootLogger, **_):
         ArchiveInterface.__init__(self, logger)
 
     def broadcast_update(self, broadcast_id: str, max_results: int = None, filters: List[str] = None, **_):
