@@ -2,16 +2,16 @@ from datetime import datetime
 import json
 from logging import RootLogger
 import os
-import re
+from re import match
 from time import mktime
 from typing import Literal, List
 
 from dateutil import parser
 from feedparser import parse
-import googleapiclient.discovery
+from googleapiclient.discovery import build
 import mimetypes
 from pathlib import Path
-import requests
+from requests import get
 import yt_dlp.YoutubeDL
 
 from hathor.exc import FunctionUndefined, HathorException
@@ -23,11 +23,11 @@ def curl_download(episode_url: str, output_path: Path) -> int:
     episode_url : Episode url
     output_path : Path to output file
     '''
-    req = requests.get(episode_url, stream=True)
+    req = get(episode_url, stream=True)
 
     content_type = req.headers['content-type']
     extension = mimetypes.guess_extension(content_type)
-    output_path = f'{output_path}{extension}'
+    output_path = Path(f'{output_path}{extension}')
     track_download_size = False
 
     try:
@@ -52,7 +52,7 @@ def verify_title_filters(filters: List[str], title: str) -> bool:
     '''
     valid = True
     for filty in filters:
-        matches = filty.match(title)
+        matches = match(filty, title)
         if not matches:
             valid = False
             break
@@ -107,7 +107,7 @@ class RSSManager(ArchiveInterface):
             # Check for URL
             try:
                 url = item['link']
-            except AttributeError:
+            except (KeyError, AttributeError):
                 # Ignore entry if url not found
                 self.logger.error(f'Ignoring item: {item}, url not found')
                 continue
@@ -136,6 +136,8 @@ class YoutubeManager(ArchiveInterface):
     def __init__(self, logger, **kwargs):
         ArchiveInterface.__init__(self, logger)
         self.google_api_key = kwargs.get('google_api_key', None)
+        if not self.google_api_key:
+            raise HathorException('Google API Key not passed')
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None, **_):
         '''
@@ -148,7 +150,7 @@ class YoutubeManager(ArchiveInterface):
         pagetoken = None
         archive_data = []
         filters = filters or []
-        youtube_api = googleapiclient.discovery.build('youtube', 'v3', developerKey=self.google_api_key)
+        youtube_api = build('youtube', 'v3', developerKey=self.google_api_key)
 
 
         data_inputs = {
@@ -157,11 +159,9 @@ class YoutubeManager(ArchiveInterface):
             'type': 'video',
             'fields': 'nextPageToken,items(id(videoId),snippet(publishedAt,title,description))'
         }
-
-        while True:
-            req = youtube_api.search.list(**data_inputs)
+        req = youtube_api.search.list(**data_inputs)
+        while req is not None:
             response = req.execute()
-            req = requests.get(url)
             for item in data['items']:
                 title = utils.clean_string(item['snippet']['title'])
                 if not verify_title_filters(filters, title):
@@ -169,14 +169,7 @@ class YoutubeManager(ArchiveInterface):
                     continue
 
                 download_url = f'https://www.youtube.com/watch?v={item["id"]["videoId"]}'
-                # Datetime format could differ
-                try:
-                    date = datetime.strptime(item['snippet']['publishedAt'], '%Y-%m-%dT%H:%M:%S.000Z')
-                except ValueError:
-                    try:
-                        date = datetime.strptime(item['snippet']['publishedAt'], '%Y-%m-%dT%H:%M:%SZ')
-                    except ValueError:
-                        raise HathorException(f'Invalid date format: {item["snipppet"]["publishedAt"]}')
+                date = datetime.fromisoformat(item['snippet']['publishedAt'])
                 episode_data = {
                     'title' : title,
                     'description' : utils.clean_string(item['snippet']['description']),
@@ -187,11 +180,7 @@ class YoutubeManager(ArchiveInterface):
                 if max_results and len(archive_data) >= max_results:
                     self.logger.debug(f'At max results: {max_results}, exiting early')
                     return archive_data
-            try:
-                data_inputs['pageToken'] = data['nextPageToken']
-            except KeyError:
-                self.logger.debug("No key 'pagetoken' in youtube data, exiting")
-                return archive_data
+            req = youtube_api.search.list_next(req, response)
 
     def episode_download(self, download_url: str, output_prefix: str, **_) -> (Path, int):
         '''
