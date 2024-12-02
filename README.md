@@ -64,7 +64,6 @@ logging_level = debug
 
 [podcasts]
 podcast_directory = /home/user/podcasts/
-soundcloud_client_id = foo-bar
 google_api_key = bar-foo
 ```
 
@@ -72,16 +71,13 @@ google_api_key = bar-foo
 When creating a new podcast record, users will need to specify where the podcast will be downloaded
 from, we call that the "archive". The following archives are supported:
 
-- Soundcloud
 - Youtube
 - RSS Feeds
 
-#### Soundcloud and Google API Keys
+#### Google API Keys
 
-To download podcasts from soundcloud and youtube, users will need to create credentials
+To download podcasts from youtube, users will need to create credentials
 that can be used for their APIs.
-
-For soundcloud users will need a `client id <https://developers.soundcloud.com/>`_.
 
 For youtube users will need a `google api secret key <https://console.developers.google.com>`_.
 
@@ -93,11 +89,10 @@ These can be either placed in the settings file, or specified when initializing 
 The broadcast ID for a podcast is the unique identifier for that podcast when downloading
 it from its archive.
 
-For Soundcloud, if given the following url `https://soundcloud.com/themonday-morning-podcast/`,
-the broadcast id will be the last portion of the url, in this case `themonday-morning-podcast`.
+For Youtube, if given the following url `https://www.youtube.com/channel/UC27vDmUZpQjuJFFkUz8ujtg`,
+the broadcast id will be the last portion of the url, in this case `UC27vDmUZpQjuJFFkUz8ujtg`.
 
-For Youtube, if given the following url `https://www.youtube.com/channel/UCzQUP1qoWDoEbmsQxvdjxgQ`,
-the broadcast id will be the last portion of the url, in this case ``UCzQUP1qoWDoEbmsQxvdjxgQ``.
+You may need to use 3rd party tools to find the channel ID of a particular uploader, such as [ytlarge](https://ytlarge.com/youtube/channel-id-finder/).
 
 
 ### Downloading Podcasts
@@ -105,7 +100,7 @@ the broadcast id will be the last portion of the url, in this case ``UCzQUP1qoWD
 With a archive type and broadcast id, users can then create a new podcast record using the cli:
 
 ```
-hathor podcast create 'podcast-name' "rss" "http://feeds.podtrac.com/xUnmFXZLuavF"
+hathor podcast create 'podcast-name' "rss" "http://example.foo/rss/feed"
 ```
 
 After the podcast has been created, users can then run a podcast sync, which will check the web
@@ -204,37 +199,3 @@ Take the following plugin function for example:
 
 This will change the title of new episodes for certain podcasts. Note that for the change
 to be permanent, you'll have to change the episodes in the database.
-
-
-## Tests
-
-To run the tests install the additional packages in
-``tests/requirements.txt``.
-
-### Moviepy Issue
-
-
-The current issue of moviepy (only used in tests), has a bug where fps is not defined.
-To get around this use this patch:
-
-```
-
-diff --git a/moviepy/audio/AudioClip.py b/moviepy/audio/AudioClip.py
-index 8572407..6089b2a 100644
---- a/moviepy/audio/AudioClip.py
-+++ b/moviepy/audio/AudioClip.py
-@@ -188,8 +188,11 @@ class AudioClip(Clip):
-    
-            """
-            if not fps:
--            if not self.fps:
--                fps = 44100
-+            try:
-+                if not self.fps:
-+                    fps = 44100
-+            except AttributeError:
-+                    fps = 44100
-                else:
-                    fps = self.fps
-     
-```
