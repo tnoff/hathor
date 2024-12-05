@@ -1,12 +1,9 @@
-import os
 from tempfile import NamedTemporaryFile
 
-from mutagen.id3._util import ID3NoHeaderError
 import pytest
 
 
 from hathor.audio import metadata
-from hathor import utils
 from hathor.exc import AudioFileException
 
 from tests import utils as test_utils
@@ -30,7 +27,7 @@ def test_audio_tags():
         assert new_tags['title'] == args['title']
         metadata.tags_delete(temp_audio, list(args.keys()))
         new_tags = metadata.tags_show(temp_audio)
-        assert new_tags == {}
+        assert not new_tags
 
 def test_audio_tags_none_not_set():
     with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:
@@ -42,7 +39,7 @@ def test_audio_tags_none_not_set():
         metadata.tags_update(temp_audio, args)
         new_tags = metadata.tags_show(temp_audio)
         assert new_tags['title'] == args['title']
-        assert 'album' not in list(new_tags.keys())
+        assert 'album' not in new_tags
 
 def test_audio_tags_delete_args_not_there():
     with test_utils.temp_audio_file(suffix='.mp3') as temp_audio:

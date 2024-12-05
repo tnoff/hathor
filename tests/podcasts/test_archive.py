@@ -14,13 +14,14 @@ from hathor.podcast.archive import ArchiveInterface, RSSManager, YoutubeManager
 from hathor.podcast.archive import verify_title_filters
 
 from tests import utils as test_utils
+from tests.data.rss_feed import SIMPLE_RSS_FEED
 
 class RequestsMockObject():
     def __init__(self, headers, audio_file):
         self.headers = headers
         self.audio_file = audio_file
 
-    def iter_content(self, chunk_size: None):
+    def iter_content(self, chunk_size: None): #pylint:disable=unused-argument
         return [Path(self.audio_file).read_bytes()]
 
 
@@ -36,18 +37,7 @@ def test_curl_download(mocker):
     client = HathorClient()
     with TemporaryDirectory() as tmp_dir:
         parse_mock = mocker.patch('hathor.podcast.archive.parse')
-        parse_mock.return_value = {
-            'feed': {
-                'link': 'https://example.foo'
-            },
-            'entries': [
-                {
-                    'link': 'https://example.foo/download1',
-                    'title': 'Episode 0',
-                    'published_parsed': time(),
-                },
-            ]
-        }
+        parse_mock.return_value = SIMPLE_RSS_FEED
         client.podcast_create('rss', 'https://example.foo', 'temp', file_location=tmp_dir)
         client.episode_sync()
         episode_list = client.episode_list(only_files=False)
@@ -79,41 +69,14 @@ def test_archive_interface():
 def test_rss_interface_broadcast_update(mocker):
     manager = RSSManager(logging)
     parse_mock = mocker.patch('hathor.podcast.archive.parse')
-    parse_mock.return_value = {
-        'feed': {
-            'link': 'https://example.foo'
-        },
-        'entries': [
-            {
-                'link': 'https://example.foo/download1',
-                'title': 'Episode 0',
-                'published_parsed': time(),
-            },
-        ]
-    }
+    parse_mock.return_value = SIMPLE_RSS_FEED
     episode_list = manager.broadcast_update('https://example.foo')
     assert episode_list[0]['title'] == 'Episode 0'
 
 def test_rss_interface_broadcast_update_max_results(mocker):
     manager = RSSManager(logging)
     parse_mock = mocker.patch('hathor.podcast.archive.parse')
-    parse_mock.return_value = {
-        'feed': {
-            'link': 'https://example.foo'
-        },
-        'entries': [
-            {
-                'link': 'https://example.foo/download1',
-                'title': 'Episode 0',
-                'published_parsed': time(),
-            },
-            {
-                'link': 'https://example.foo/download2',
-                'title': 'Episode 1',
-                'published_parsed': time(),
-            },
-        ]
-    }
+    parse_mock.return_value = SIMPLE_RSS_FEED
     episode_list = manager.broadcast_update('https://example.foo', max_results=1)
     assert episode_list[0]['title'] == 'Episode 0'
     assert len(episode_list) == 1
@@ -121,23 +84,7 @@ def test_rss_interface_broadcast_update_max_results(mocker):
 def test_rss_interface_broadcast_update_filters(mocker):
     manager = RSSManager(logging)
     parse_mock = mocker.patch('hathor.podcast.archive.parse')
-    parse_mock.return_value = {
-        'feed': {
-            'link': 'https://example.foo'
-        },
-        'entries': [
-            {
-                'link': 'https://example.foo/download1',
-                'title': 'Episode 0',
-                'published_parsed': time(),
-            },
-            {
-                'link': 'https://example.foo/download2',
-                'title': 'Episode 1',
-                'published_parsed': time(),
-            },
-        ]
-    }
+    parse_mock.return_value = SIMPLE_RSS_FEED
     episode_list = manager.broadcast_update('https://example.foo', filters=[r'^Episode 1'])
     assert episode_list[0]['title'] == 'Episode 1'
     assert len(episode_list) == 1
@@ -189,7 +136,7 @@ def test_rss_invalid_link(mocker):
 def test_ress_interface_episode_download(mocker):
     manager = RSSManager(logging)
     with test_utils.temp_audio_file() as temp_audio_file:
-        requests_mock = mocker.patch('hathor.podcast.archive.get', side_effect=requests_get_mock('https://example.foo/download1', temp_audio_file))
+        mocker.patch('hathor.podcast.archive.get', side_effect=requests_get_mock('https://example.foo/download1', temp_audio_file))
         with TemporaryDirectory() as temp_dir:
             path, size = manager.episode_download('https://example.foo/download1', f'{temp_dir}/episode0')
             assert size == Path(path).stat().st_size
@@ -234,10 +181,10 @@ class MockYoutubeSearch():
     def __init__(self):
         pass
 
-    def list(self, **kwargs):
+    def list(self, **_):
         return MockYoutubeRequest()
 
-    def list_next(self, *args, **kwargs):
+    def list_next(self, *_, **__):
         return None
 
 
@@ -248,7 +195,7 @@ class MockYoutube():
     def search(self):
         return MockYoutubeSearch()
 
-def google_api_build(typer, version, developerKey=None):
+def google_api_build(_typer, _version, developerKey=None): #pylint:disable=invalid-name,unused-argument
     return MockYoutube()
 
 def test_youtube_brodcast_update(mocker):
@@ -275,7 +222,7 @@ class MockYoutubeDL():
     def __init__(self, temp_audio_file):
         self.temp_audio_file = temp_audio_file
 
-    def extract_info(self, download_url, download=True):
+    def extract_info(self, _download_url, download=True): #pylint:disable=unused-argument
         return {
             'entries': [
                 {
@@ -290,7 +237,7 @@ class MockYoutubeDL():
 
 def generate_mock_youtube(temp_audio_file):
     @contextmanager
-    def mock_youtube_client(options):
+    def mock_youtube_client(_options):
         yield MockYoutubeDL(temp_audio_file)
     return mock_youtube_client
 
@@ -302,19 +249,19 @@ class MockYoutubeError():
         raise DownloadError('issue downloading file')
 
 @contextmanager
-def mock_youtube_error(options):
+def mock_youtube_error(_options):
     yield MockYoutubeError()
 
 def test_youtube_broadcast_download(mocker):
     manager = YoutubeManager(logging, google_api_key='foo123')
     with test_utils.temp_audio_file(suffix='.mp4') as temp_audio_file:
         mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=generate_mock_youtube(temp_audio_file))
-        file_path, size = manager.episode_download('foo', 'bar')
+        _file_path, size = manager.episode_download('foo', 'bar')
         assert size == Path(temp_audio_file).stat().st_size
 
 def test_youtube_broadcast_download_error(mocker):
     manager = YoutubeManager(logging, google_api_key='foo123')
     mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_youtube_error)
     file_path, size = manager.episode_download('foo', 'bar')
-    assert file_path == None
-    assert size == None
+    assert file_path is None
+    assert size is None

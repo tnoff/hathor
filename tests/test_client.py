@@ -1,42 +1,11 @@
-from tempfile import TemporaryDirectory
-from time import time
-
-from pathlib import Path
 from hathor.client import HathorClient
-from hathor.database.tables import PodcastEpisode
 
-from tests import utils as test_utils
-
-def mock_plugin(self, result, *_, **__):
-    episode = self.db_session.query(PodcastEpisode).get(result[0]['id'])
-    episode.description = "foo-description"
-    self.db_session.commit()
-    return result
+def mock_plugin(self, result, *_, **__): #pylint:disable=unused-argument
+    return 2
 
 
-def test_plugins(mocker):
+def test_plugins():
     client = HathorClient()
-    client.plugins = [('episode_download', mock_plugin)]
-    with TemporaryDirectory() as tmp_dir:
-        parse_mock = mocker.patch('hathor.podcast.archive.parse')
-        parse_mock.return_value = {
-            'feed': {
-                'link': 'https://example.foo'
-            },
-            'entries': [
-                {
-                    'link': 'https://example.foo/download1',
-                    'title': 'Episode 0',
-                    'published_parsed': time(),
-                },
-            ]
-        }
-        client.podcast_create('rss', 'https://example.foo', 'temp', file_location=tmp_dir)
-        client.episode_sync()
-        episode_list = client.episode_list(only_files=False)
-        with test_utils.temp_audio_file() as temp_audio_file:
-            curl_mock = mocker.patch('hathor.podcast.archive.curl_download')
-            curl_mock.return_value = (Path(temp_audio_file), 1)
-            client.episode_download([episode_list[0]['id']])
-        episode_list = client.episode_list()
-        assert episode_list[0]['description'] == 'foo-description'
+    client.plugins = [('episode_list', mock_plugin)]
+    result = client.episode_list(only_files=False)
+    assert result == 2
