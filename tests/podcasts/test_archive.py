@@ -1,6 +1,5 @@
 from contextlib import contextmanager
 from datetime import datetime, timezone
-import json
 import logging
 from tempfile import TemporaryDirectory
 from time import time
@@ -12,8 +11,7 @@ from yt_dlp.utils import DownloadError
 from hathor.client import HathorClient
 from hathor.exc import HathorException, FunctionUndefined
 from hathor.podcast.archive import ArchiveInterface, RSSManager, YoutubeManager
-from hathor.podcast.archive import curl_download, verify_title_filters
-from hathor import utils
+from hathor.podcast.archive import verify_title_filters
 
 from tests import utils as test_utils
 
@@ -22,13 +20,12 @@ class RequestsMockObject():
         self.headers = headers
         self.audio_file = audio_file
 
-    def iter_content(self, chunk_size: int = None):
+    def iter_content(self, chunk_size: None):
         return [Path(self.audio_file).read_bytes()]
 
 
-def requests_get_mock(url, audio_file, **kwargs):
-    def func(url, **kwargs):
-        print('Requests mock', url, kwargs)
+def requests_get_mock(_url, audio_file, **_):
+    def func(_url, **_):
         return RequestsMockObject({
             'content-type': 'audio/mpeg',
         },
@@ -55,7 +52,7 @@ def test_curl_download(mocker):
         client.episode_sync()
         episode_list = client.episode_list(only_files=False)
         with test_utils.temp_audio_file() as temp_audio_file:
-            requests_mock = mocker.patch('hathor.podcast.archive.get', side_effect=requests_get_mock('https://example.foo/download1', temp_audio_file))
+            mocker.patch('hathor.podcast.archive.get', side_effect=requests_get_mock('https://example.foo/download1', temp_audio_file))
             client.episode_download([episode_list[0]['id']])
             episode_list = client.episode_list()
             assert 'Episode_0.mp3' in episode_list[0]['file_path']
@@ -64,11 +61,11 @@ def test_curl_download(mocker):
 
 def test_title_filters():
     no_filters = verify_title_filters([], 'foo')
-    assert no_filters == True
+    assert no_filters is True
     good_filter = verify_title_filters([r'^foo$'], 'foo')
-    assert good_filter == True
+    assert good_filter is True
     bad_filter = verify_title_filters([r'^foo$'], 'bar')
-    assert bad_filter == False
+    assert bad_filter is False
 
 def test_archive_interface():
     manager = ArchiveInterface(logging)
@@ -206,7 +203,7 @@ def test_youtube_no_google_key_given():
 class MockYoutubeRequest():
     def __init__(self):
         pass
-    
+
     def execute(self):
         return {
             'items': [
@@ -236,10 +233,10 @@ class MockYoutubeRequest():
 class MockYoutubeSearch():
     def __init__(self):
         pass
-    
+
     def list(self, **kwargs):
         return MockYoutubeRequest()
-    
+
     def list_next(self, *args, **kwargs):
         return None
 
@@ -247,7 +244,7 @@ class MockYoutubeSearch():
 class MockYoutube():
     def __init__(self):
         pass
-    
+
     def search(self):
         return MockYoutubeSearch()
 
@@ -300,7 +297,7 @@ def generate_mock_youtube(temp_audio_file):
 class MockYoutubeError():
     def __init__(self):
         pass
-    
+
     def extract_info(self, *args, **kwargs):
         raise DownloadError('issue downloading file')
 

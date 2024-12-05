@@ -11,7 +11,7 @@ def test_process_url():
     assert result == 'https://foo.example/'
 
 def test_clean_stringy():
-    assert utils.clean_string(None) == None
+    assert utils.clean_string(None) is None
     assert utils.clean_string('') == ''
     assert utils.clean_string('foo') == 'foo'
     assert utils.clean_string('          foo     ') == 'foo'
@@ -31,4 +31,4 @@ def test_rm_tree():
         sub_dir = new_dir / 'bar'
         sub_dir.mkdir(exist_ok=True)
         utils.rm_tree(new_dir)
-        assert new_dir.exists() == False
+        assert new_dir.exists() is False

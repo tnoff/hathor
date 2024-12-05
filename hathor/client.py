@@ -8,7 +8,6 @@ from typing import Literal, List
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy import and_, desc, or_
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, Query
 
 from hathor.audio import metadata
@@ -451,17 +450,10 @@ class HathorClient():
                     'prevent_deletion' : False,
                 }
                 new_episode = PodcastEpisode(**episode_args)
-                try:
-                    self.db_session.add(new_episode)
-                    self.db_session.commit()
-                    self.logger.debug(f'Created new podcast episode: {new_episode.id} from url: {new_episode.download_url}')
-                    new_episodes.append(new_episode.as_dict(self.datetime_output_format))
-                except IntegrityError:
-                    # if you attempt to add another episode with the same
-                    # url, it will fail here, thats expected, we dont want
-                    # duplicate episodes
-                    self.db_session.rollback()
-                    self.logger.debug(f'Podcast episode is duplicate, title was {episode_args["title"]}')
+                self.db_session.add(new_episode)
+                self.db_session.commit()
+                self.logger.debug(f'Created new podcast episode: {new_episode.id} from url: {new_episode.download_url}')
+                new_episodes.append(new_episode.as_dict(self.datetime_output_format))
         return new_episodes
 
     @run_plugins

@@ -1,14 +1,9 @@
-from datetime import datetime
-import os
-import json
 from tempfile import TemporaryDirectory
 
 import pytest
 
 from hathor.client import HathorClient
 from hathor.exc import HathorException
-
-from tests import utils
 
 def test_podcast_create():
     with TemporaryDirectory() as tmp_dir:
@@ -36,7 +31,7 @@ def test_podcast_create_with_specific_file_location():
         client.podcast_create('rss', 'foo1234', 'temp pod name', file_location=tmp_dir)
         podcast_list = client.podcast_list()
         assert len(podcast_list) == 1
-        assert podcast_list[0]['name'] == 'temp pod name'    
+        assert podcast_list[0]['name'] == 'temp pod name'
 
 def test_podcast_show():
     with TemporaryDirectory() as tmp_dir:
@@ -88,4 +83,4 @@ def test_podcast_update_max_allowed_zero():
         client.podcast_update(podcast_list[0]['id'],
                               max_allowed=0)
         podcast_list = client.podcast_list()
-        assert podcast_list[0]['max_allowed'] == None
+        assert podcast_list[0]['max_allowed'] is None

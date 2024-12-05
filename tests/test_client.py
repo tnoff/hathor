@@ -1,19 +1,13 @@
-from datetime import datetime
-import os
-import logging
 from tempfile import TemporaryDirectory
 from time import time
 
 from pathlib import Path
-import pytest
-
 from hathor.client import HathorClient
-from hathor.exc import HathorException
 from hathor.database.tables import PodcastEpisode
-from hathor import utils
+
 from tests import utils as test_utils
 
-def mock_plugin(self, result, *args, **kwargs):
+def mock_plugin(self, result, *_, **__):
     episode = self.db_session.query(PodcastEpisode).get(result[0]['id'])
     episode.description = "foo-description"
     self.db_session.commit()
@@ -22,7 +16,7 @@ def mock_plugin(self, result, *args, **kwargs):
 
 def test_plugins(mocker):
     client = HathorClient()
-    client.plugins = ([('episode_download', mock_plugin)])
+    client.plugins = [('episode_download', mock_plugin)]
     with TemporaryDirectory() as tmp_dir:
         parse_mock = mocker.patch('hathor.podcast.archive.parse')
         parse_mock.return_value = {
