@@ -56,14 +56,24 @@ def verify_title_filters(filters: List[str], title: str) -> bool:
             break
     return valid
 
-class ArchiveInterface(object):
+class ArchiveInterface():
+    '''
+    Basic Archive Interface
+    Must be inherited
+    '''
     def __init__(self, logger: RootLogger, **_):
         self.logger = logger
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None, **kwargs):
+        '''
+        Basic broadcast update
+        '''
         raise FunctionUndefined("No broadcast update for class")
 
     def episode_download(self, download_url, output_prefix, **kwargs):
+        '''
+        Basic podcast episode
+        '''
         raise FunctionUndefined("No episode download for class")
 
 class RSSManager(ArchiveInterface):
@@ -158,7 +168,7 @@ class YoutubeManager(ArchiveInterface):
             'type': 'video',
             'fields': 'nextPageToken,items(id(videoId),snippet(publishedAt,title,description))'
         }
-        req = youtube_api.search.list(**data_inputs)
+        req = youtube_api.search().list(**data_inputs) #pylint:disable=no-member
         while req is not None:
             response = req.execute()
             for item in response['items']:
@@ -179,7 +189,7 @@ class YoutubeManager(ArchiveInterface):
                 if max_results and len(archive_data) >= max_results:
                     self.logger.debug(f'At max results: {max_results}, exiting early')
                     return archive_data
-            req = youtube_api.search.list_next(req, response)
+            req = youtube_api.search().list_next(req, response) #pylint:disable=no-member
         return archive_data
 
     def episode_download(self, download_url: str, output_prefix: str, **_) -> (Path, int):

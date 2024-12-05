@@ -2,9 +2,6 @@ from datetime import datetime
 import json
 import os
 
-import httpretty
-import mock
-
 from hathor.exc import HathorException
 
 from tests import utils as test_utils

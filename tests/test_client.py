@@ -4,7 +4,6 @@ import logging
 from tempfile import TemporaryDirectory
 from time import time
 
-from mock import patch
 from pathlib import Path
 import pytest
 

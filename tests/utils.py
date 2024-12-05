@@ -6,7 +6,6 @@ import random
 import string
 import unittest
 
-import httpretty
 from moviepy.audio.AudioClip import AudioClip
 from moviepy.video.VideoClip import ImageClip
 import numpy as np

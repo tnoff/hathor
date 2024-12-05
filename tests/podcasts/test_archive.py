@@ -243,9 +243,13 @@ class MockYoutubeSearch():
     def list_next(self, *args, **kwargs):
         return None
 
+
 class MockYoutube():
     def __init__(self):
-        self.search = MockYoutubeSearch()
+        pass
+    
+    def search(self):
+        return MockYoutubeSearch()
 
 def google_api_build(typer, version, developerKey=None):
     return MockYoutube()

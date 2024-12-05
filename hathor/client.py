@@ -67,6 +67,10 @@ def run_plugins(func):
 ArchiveType = Literal[VALID_ARCHIVE_KEYS]
 
 class HathorClient():
+    '''
+    Hathor Client
+    Sync podcasts from different sources
+    '''
     def __init__(self, podcast_directory: Path = None,
                  datetime_output_format: str = DEFAULT_DATETIME_FORMAT,
                  logger: RootLogger = None,
@@ -629,7 +633,7 @@ class HathorClient():
                 metadata.tags_update(output_path, audio_tags)
                 self.logger.debug(f'Updated database audio tags for episode {episode.id}')
             except AudioFileException as error:
-                self.logger.warn(f'Unable to update tags on file {str(output_path)} : {str(error)}')
+                self.logger.warning(f'Unable to update tags on file {str(output_path)} : {str(error)}')
             episodes_downloaded.append(episode.as_dict(self.datetime_output_format))
         return episodes_downloaded
 

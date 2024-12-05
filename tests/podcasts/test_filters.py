@@ -1,7 +1,5 @@
 import json
 
-import httpretty
-
 from hathor.exc import HathorException
 from hathor import utils as common_utils
 
