@@ -9,6 +9,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy import and_, desc, or_
 from sqlalchemy.orm import sessionmaker, Query
+from sqlalchemy.sql import text
 
 from hathor.audio import metadata
 from hathor.database.tables import BASE, Podcast
@@ -274,7 +275,7 @@ class HathorClient():
             new_podcast_dir.mkdir(exist_ok=True)
 
             episodes = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.podcast_id == podcast_id)
-            episodes = episodes.filter(PodcastEpisode.file_path is not None)
+            episodes = episodes.filter(PodcastEpisode.file_path != None) #pylint:disable=singleton-comparison
             for episode in episodes:
                 episode_path = Path(episode.file_path)
                 new_path = new_podcast_dir / episode_path.name
@@ -439,7 +440,7 @@ class HathorClient():
                 episode_processed_url = utils.process_url(episode['download_link'])
                 existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode_processed_url).first()
                 if existing_episode:
-                    self.logger.debug(f'Episode {existing_episode["id"]} has same url, skipping saving episode')
+                    self.logger.debug(f'Episode {existing_episode.id} has same url, skipping saving episode')
                     continue
                 episode_args = {
                     'title' : episode['title'],
@@ -470,7 +471,7 @@ class HathorClient():
         '''
         query = self.db_session.query(PodcastEpisode)
         if only_files:
-            query = query.filter(PodcastEpisode.file_path is not None)
+            query = query.filter(PodcastEpisode.file_path != None) #pylint: disable=singleton-comparison
         if sort_date:
             query = query.order_by(desc(PodcastEpisode.date))
         if include_podcasts:
@@ -534,7 +535,7 @@ class HathorClient():
         file_path = Path(file_path)
         pod_path = Path(podcast.file_location)
         existing_path = Path(episode.file_path)
-        if file_path.parent != pod_path:
+        if file_path.parent != pod_path.parent:
             self._fail(f'Podcast Episode cannot be moved out of podcast file location: {str(podcast.file_location)}')
         if existing_path.suffix != file_path.suffix:
             self._fail(f'New path {str(file_path)} suffix must match original suffix {str(existing_path)}')
@@ -662,7 +663,7 @@ class HathorClient():
         '''
         self.db_session.query(PodcastEpisode).filter_by(file_path=None).delete()
         self.db_session.commit()
-        self.db_session.execute("VACUUM")
+        self.db_session.execute(text('VACUUM'))
         self.logger.info("Database cleaned of uneeded episodes")
         return True
 
@@ -725,7 +726,7 @@ class HathorClient():
         # Not all episodes may have been downloaded, so this should use
         # another episode query, since that will check if "file_path" is defined
         # that way you dont delete episodes pre-maturely
-        for podcast in podcast_query.filter(Podcast.max_allowed is not None):
+        for podcast in podcast_query.filter(Podcast.max_allowed != None): #pylint:disable=singleton-comparison
             episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
                     filter(PodcastEpisode.podcast_id == podcast.id).\
                     filter(PodcastEpisode.file_path is not None).\

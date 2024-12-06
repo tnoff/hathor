@@ -1,9 +1,29 @@
+from datetime import datetime
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
 
 from hathor.client import HathorClient
 from hathor.exc import HathorException
+from hathor.podcast.archive import RSSManager
+
+from tests.utils import temp_audio_file
+
+mock_episode_data = [
+    {
+        'download_link': 'https://foo.com/example1',
+        'title': 'Episode 0',
+        'date': datetime.now(),
+        'description': 'Episode 0 description',
+    },
+    {
+        'download_link': 'https://foo.com/example2',
+        'title': 'Episode 1',
+        'date': datetime.now(),
+        'description': 'Episode 1 description',
+    },
+]
 
 def test_podcast_create():
     with TemporaryDirectory() as tmp_dir:
@@ -84,3 +104,42 @@ def test_podcast_update_max_allowed_zero():
                               max_allowed=0)
         podcast_list = client.podcast_list()
         assert podcast_list[0]['max_allowed'] is None
+
+def test_podcast_update_file_location(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        with temp_audio_file() as temp_audio:
+            client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+            new_pod1 = client.podcast_create('rss', '1234', 'foo')
+            mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+            mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
+            client.episode_sync(include_podcasts=[new_pod1['id']])
+            episode_list = client.episode_list(only_files=False)
+            client.episode_download([episode_list[0]['id']])
+            with TemporaryDirectory() as new_dir:
+                client.podcast_update_file_location(new_pod1['id'], Path(new_dir))
+                episode_list = client.episode_list()
+                assert new_dir in str(episode_list[0]['file_path'])
+
+def test_podcast_update_file_no_move(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        with temp_audio_file() as temp_audio:
+            client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+            new_pod1 = client.podcast_create('rss', '1234', 'foo')
+            mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+            mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
+            client.episode_sync(include_podcasts=[new_pod1['id']])
+            episode_list = client.episode_list(only_files=False)
+            client.episode_download([episode_list[0]['id']])
+            with TemporaryDirectory() as new_dir:
+                client.podcast_update_file_location(new_pod1['id'], Path(new_dir), move_files=False)
+                episode_list = client.episode_list()
+                assert new_dir not in str(episode_list[0]['file_path'])
+
+def test_podcast_update_no_exists():
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+        with pytest.raises(HathorException) as error:
+            client.podcast_update_file_location(1, 'foo')
+        assert 'Podcast not found for ID' in str(error.value)

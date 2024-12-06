@@ -1,4 +1,5 @@
 from time import time
+
 SIMPLE_RSS_FEED = {
     'feed': {
         'link': 'https://example.foo'
