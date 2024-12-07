@@ -11,7 +11,7 @@ from sqlalchemy import and_, desc, or_
 from sqlalchemy.orm import sessionmaker, Query
 from sqlalchemy.sql import text
 
-from hathor.audio import metadata
+from hathor.audio.metadata import tags_update
 from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
 from hathor.exc import AudioFileException, HathorException
@@ -275,7 +275,7 @@ class HathorClient():
             new_podcast_dir.mkdir(exist_ok=True)
 
             episodes = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.podcast_id == podcast_id)
-            episodes = episodes.filter(PodcastEpisode.file_path != None) #pylint:disable=singleton-comparison
+            episodes = episodes.filter(PodcastEpisode.file_path != None)
             for episode in episodes:
                 episode_path = Path(episode.file_path)
                 new_path = new_podcast_dir / episode_path.name
@@ -314,7 +314,7 @@ class HathorClient():
             self.logger.info(f'Deleted podcast record: {podcast.id}')
             # delete files if needed
             if delete_files:
-                utils.rm_tree(podcast.file_location)
+                utils.rm_tree(Path(podcast.file_location))
             podcasts_deleted.append(podcast.id)
         return podcasts_deleted
 
@@ -471,7 +471,7 @@ class HathorClient():
         '''
         query = self.db_session.query(PodcastEpisode)
         if only_files:
-            query = query.filter(PodcastEpisode.file_path != None) #pylint: disable=singleton-comparison
+            query = query.filter(PodcastEpisode.file_path != None)
         if sort_date:
             query = query.order_by(desc(PodcastEpisode.date))
         if include_podcasts:
@@ -623,7 +623,7 @@ class HathorClient():
                 'date' : episode.date.strftime(self.datetime_output_format),
             }
             try:
-                metadata.tags_update(output_path, audio_tags)
+                tags_update(output_path, audio_tags)
                 self.logger.debug(f'Updated database audio tags for episode {episode.id}')
             except AudioFileException as error:
                 self.logger.warning(f'Unable to update tags on file {str(output_path)} : {str(error)}')
@@ -692,7 +692,7 @@ class HathorClient():
 
         # Built podcast query to iterate through
         podcast_query = self.db_session.query(Podcast).\
-            filter(Podcast.automatic_episode_download is True) #pylint:disable=singleton-comparison
+            filter(Podcast.automatic_episode_download == True)
         if include_podcasts:
             opts = (Podcast.id == pod for pod in include_podcasts)
             podcast_query = podcast_query.filter(or_(opts))
@@ -702,9 +702,9 @@ class HathorClient():
 
         # Find all episodes to attempt to download
         for podcast in podcast_query:
-            episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
-                    filter(PodcastEpisode.podcast_id == podcast.id).\
-                    filter(PodcastEpisode.file_path is None)
+            episode_query = self.db_session.query(PodcastEpisode).\
+                    order_by(desc(PodcastEpisode.date)).\
+                    filter(PodcastEpisode.podcast_id == podcast.id)
 
             # Make sure you call limit, then do check for file path
             # If you add the check for file path is None first
@@ -714,33 +714,32 @@ class HathorClient():
 
             if podcast.max_allowed:
                 episode_query = episode_query.limit(podcast.max_allowed)
-            for episode in episode_query: #pylint:disable=singleton-comparison
-                download_episodes.append((episode, podcast))
+            for episode in episode_query:
+                if episode.file_path == None:
+                    download_episodes.append((episode, podcast))
 
         # Download episodes from query
         if download_episodes:
-            self.logger.debug(f'Episodes {[i.id for i in download_episodes]} set for download from file sync')
+            self.logger.debug(f'Episodes {[i[0].id for i in download_episodes]} set for download from file sync')
             self.__episode_download_input(download_episodes)
 
         # Find episodes to delete if there is max allowed on the podcast
         # Not all episodes may have been downloaded, so this should use
         # another episode query, since that will check if "file_path" is defined
         # that way you dont delete episodes pre-maturely
-        for podcast in podcast_query.filter(Podcast.max_allowed != None): #pylint:disable=singleton-comparison
+        for podcast in podcast_query.filter(Podcast.max_allowed != None):
             episode_query = self.db_session.query(PodcastEpisode).order_by(desc(PodcastEpisode.date)).\
                     filter(PodcastEpisode.podcast_id == podcast.id).\
-                    filter(PodcastEpisode.file_path is not None).\
-                    filter(not PodcastEpisode.prevent_deletion).\
+                    filter(PodcastEpisode.file_path != None).\
                     offset(podcast.max_allowed)
                     # Make sure offset is called first, since you want to first limit
                     # then check if prevent deletion is false
                     # This way files that should be kept, but also have
                     # prevent delete will not count against files
                     # that should be deleted
-
             for episode in episode_query:
-                delete_episodes.append(episode)
-
+                if episode.prevent_deletion is False:
+                    delete_episodes.append(episode)
         if delete_episodes:
             self.logger.debug(f'Episodes {[i.id for i in delete_episodes]} set for deletion for max allowed from file sync')
             self.__episode_delete_file_input(delete_episodes)

@@ -15,4 +15,5 @@ disable=line-too-long,
         logging-fstring-interpolation,
         too-many-arguments,
         too-many-positional-arguments,
-        too-many-locals
+        too-many-locals,
+        singleton-comparison

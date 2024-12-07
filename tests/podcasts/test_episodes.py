@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 import pytest
 
 from hathor.client import HathorClient
-from hathor.exc import HathorException
+from hathor.exc import AudioFileException, HathorException
 from hathor.podcast.archive import RSSManager, YoutubeManager
 
 from tests.utils import temp_audio_file
@@ -13,13 +13,13 @@ mock_episode_data = [
     {
         'download_link': 'https://foo.com/example1',
         'title': 'Episode 0',
-        'date': datetime.now(),
+        'date': datetime(2024, 12, 7, 14, 00, 00),
         'description': 'Episode 0 description',
     },
     {
         'download_link': 'https://foo.com/example2',
         'title': 'Episode 1',
-        'date': datetime.now(),
+        'date': datetime(2024, 12, 8, 14, 00, 00),
         'description': 'Episode 1 description',
     },
 ]
@@ -28,13 +28,13 @@ mock_duplicate_episode = [
     {
         'download_link': 'https://foo.com/example1',
         'title': 'Episode 0',
-        'date': datetime.now(),
+        'date': datetime(2024, 12, 7, 14, 00, 00),
         'description': 'Episode 0 description',
     },
     {
         'download_link': 'https://foo.com/example1',
         'title': 'Episode 1',
-        'date': datetime.now(),
+        'date': datetime(2024, 12, 8, 14, 00, 00),
         'description': 'Episode 1 description',
     },
 ]
@@ -43,13 +43,13 @@ mock_episode_data_two = [
     {
         'download_link': 'https://bar.com/example1',
         'title': 'Youtube Episode 0',
-        'date': datetime.now(),
+        'date': datetime(2024, 12, 7, 14, 00, 00),
         'description': 'Episode 0 description',
     },
     {
         'download_link': 'https://bar.com/example2',
         'title': 'Youtube Episode 1',
-        'date': datetime.now(),
+        'date': datetime(2024, 12, 8, 14, 00, 00),
         'description': 'Episode 1 description',
     },
 ]
@@ -308,3 +308,31 @@ def test_episode_cleanup(mocker):
         client.episode_cleanup()
         episode_list = client.episode_list(only_files=False)
         assert len(episode_list) == 0
+
+def test_episode_download_no_return(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+        new_pod1 = client.podcast_create('rss', '1234', 'foo')
+        mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+        mocker.patch.object(RSSManager, 'episode_download', return_value=(None, None))
+        client.episode_sync(include_podcasts=[new_pod1['id']])
+        episode_list = client.episode_list(only_files=False)
+        client.episode_download([episode_list[0]['id']])
+        episode_list = client.episode_list()
+        assert len(episode_list) == 0
+
+def test_episode_download_update_tags(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        with temp_audio_file() as temp_audio:
+            client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+            new_pod1 = client.podcast_create('rss', '1234', 'foo')
+            mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+            mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
+            mocker.patch('hathor.client.tags_update', side_effect=AudioFileException('unable to update tags'))
+            client.episode_sync(include_podcasts=[new_pod1['id']])
+            episode_list = client.episode_list(only_files=False)
+            client.episode_download([episode_list[0]['id']])
+            episode_list = client.episode_list()
+            assert len(episode_list) == 1
