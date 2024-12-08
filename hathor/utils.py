@@ -55,7 +55,9 @@ def setup_logger(name: str,
                  logging_file: Path = None,
                  console_logging: bool = True,
                  console_logging_level: int = 20,
-                 log_file_level: int = 20) -> RootLogger:
+                 log_file_level: int = 20,
+                 logging_file_backup_count: int = 4,
+                 logging_file_max_bytes: int = (2 ** 20) * 10) -> RootLogger:
     '''
     Setup a generic python logger
     name: Name of logger
@@ -69,9 +71,12 @@ def setup_logger(name: str,
                           datefmt='%Y-%m-%d %H:%M:%S')
     logger.setLevel(log_file_level)
     if logging_file is not None:
+        # Create logging dir if does not exist
+        log_path = Path(logging_file)
+        log_path.parent.mkdir(exist_ok=True)
         fh = RotatingFileHandler(logging_file,
-                                 backupCount=4,
-                                 maxBytes=(2 ** 20) * 10)
+                                 backupCount=logging_file_backup_count,
+                                 maxBytes=logging_file_max_bytes)
         fh.setLevel(log_file_level)
         fh.setFormatter(formatter)
         logger.addHandler(fh)

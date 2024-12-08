@@ -20,7 +20,7 @@ setuptools.setup(
     install_requires=required,
     entry_points={
         'console_scripts' : [
-            'hathor = hathor.cli.client:main',
+            'hathor = hathor.cli:main',
         ]
     },
     packages=setuptools.find_packages(exclude=['tests']),
