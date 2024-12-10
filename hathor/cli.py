@@ -7,6 +7,7 @@ from pyaml_env import parse_config
 
 from hathor.client import HathorClient
 from hathor.exc import CliException
+from hathor.podcast.archive import VALID_ARCHIVE_KEYS
 from hathor.utils import setup_logger
 
 HOME_DIR = Path.home()
@@ -41,7 +42,7 @@ def cli(ctx, config):
     if ctx.obj['config']['logging']:
         logger = setup_logger('hathor', **ctx.obj['config']['logging'])
         config_copy['logger'] = logger
-    ctx.obj['client'] = HathorClient(**ctx.obj['config']['hathor'])
+    ctx.obj['client'] = HathorClient(**config_copy)
 
 @cli.command(name='dump-config')
 @click.pass_context
@@ -59,12 +60,26 @@ def podcast(_ctx):
     '''
 
 @podcast.command(name='create')
+@click.argument('archive_type', type=click.Choice(VALID_ARCHIVE_KEYS))
+@click.argument('broadcast_id')
+@click.argument('podcast_name')
+@click.option('--max-allowed', type=int, help='Max allowed episodes')
+@click.option('--file-location', type=click.Path(dir_okay=True), help='Directory for podcast')
+@click.option('--artist-name', help='Artist name to set in tags')
+@click.option('--no-automatic-download', is_flag=True, default=False)
 @click.pass_context
-def podcast_create(ctx):
+def podcast_create(ctx, archive_type, broadcast_id, podcast_name,
+                   max_allowed, file_location, artist_name, no_automatic_download):
     '''
     Create a podcast
     '''
-    print(ctx.obj)
+    result = ctx.obj['client'].podcast_create(
+        archive_type, broadcast_id, podcast_name,
+        max_allowed=max_allowed,
+        file_location=file_location,
+        artist_name=artist_name,
+        automatic_download=not no_automatic_download)
+    click.echo(dumps(result, indent=4))
 
 @podcast.command(name='list')
 @click.pass_context
@@ -73,6 +88,122 @@ def podcast_list(ctx):
     List all podcasts
     '''
     click.echo(dumps(ctx.obj['client'].podcast_list(), indent=4))
+
+@podcast.command(name='show')
+@click.argument('podcast_id', type=int, nargs=-1)
+@click.pass_context
+def podcast_show(ctx, podcast_id):
+    '''
+    Show podcast info
+    '''
+    click.echo(dumps(ctx.obj['client'].podcast_show(list(podcast_id)), indent=4))
+
+@podcast.command(name='update')
+@click.argument('podcast_id', type=int)
+@click.option('--podcast-name', help='New podcast name')
+@click.option('--broadcast-id', help='New broadcast id')
+@click.option('--archive-type', type=click.Choice(VALID_ARCHIVE_KEYS), help='New archive type')
+@click.option('--max-allowed', type=int, help='New max allowed')
+@click.option('--artist-name', help='New artist name')
+@click.option('--automatic-download', type=bool, help='New automatic download setting')
+@click.pass_context
+def podcast_update(ctx, podcast_id, podcast_name, broadcast_id,
+                   archive_type, max_allowed, artist_name, automatic_download):
+    '''
+    Update podcast info
+    '''
+    result = ctx.obj['client'].podcast_update(
+        podcast_id,
+        podcast_name=podcast_name,
+        broadcast_id=broadcast_id,
+        archive_type=archive_type,
+        max_allowed=max_allowed,
+        artist_name=artist_name,
+        automatic_download=automatic_download,
+    )
+    click.echo(dumps(result, indent=4))
+
+@podcast.command(name='update-file-location')
+@click.argument('podcast_id', type=int)
+@click.argument('file_location', type=click.Path(dir_okay=True))
+@click.option('--no-move-files', is_flag=True, default=False)
+@click.pass_context
+def podcast_update_file_location(ctx, podcast_id, file_location, no_move_files):
+    '''
+    Update file location
+    '''
+    result = ctx.obj['client'].podcast_update_file_location(
+        podcast_id,
+        file_location,
+        move_files=not no_move_files,
+    )
+    click.echo(dumps(result, indent=4))
+
+@podcast.command(name='delete')
+@click.argument('podcast_id', type=int, nargs=-1)
+@click.option('--no-delete-files', is_flag=True, default=False)
+@click.pass_context
+def podcast_delete(ctx, podcast_id, no_delete_files):
+    '''
+    Podcast delete
+    '''
+    result = ctx.obj['client'].podcast_delete(
+        list(podcast_id),
+        delete_files=not no_delete_files,
+    )
+    click.echo(dumps(result, indent=4))
+
+@cli.group(name='filter')
+@click.pass_context
+def filter_group(_ctx):
+    '''
+    Filter functions
+    '''
+
+@filter_group.command(name='create')
+@click.argument('podcast_id', type=int)
+@click.argument('regex_string')
+@click.pass_context
+def filter_create(ctx, podcast_id, regex_string):
+    '''
+    Filter create
+    '''
+    result = ctx.obj['client'].filter_create(
+        podcast_id, regex_string
+    )
+    click.echo(dumps(result, indent=4))
+
+@filter_group.command(name='list')
+@click.option('--include-podcasts', help='Comma separated list of podcasts')
+@click.option('--exclude-podcasts', help='Comma separated list of podcasts')
+@click.pass_context
+def filter_list(ctx, include_podcasts, exclude_podcasts):
+    '''
+    Filter list
+    '''
+    if include_podcasts:
+        try:
+            include_podcasts = [int(i) for i in include_podcasts.split(',')]
+        except ValueError as e:
+            raise CliException('Invalid include podcasts arg, must be comma separated list of ints') from e
+    if exclude_podcasts:
+        try:
+            exclude_podcasts = [int(i) for i in exclude_podcasts.split(',')]
+        except ValueError as e:
+            raise CliException('Invalid include podcasts arg, must be comma separated list of ints') from e
+    result = ctx.obj['client'].filter_list(include_podcasts=include_podcasts, exclude_podcasts=exclude_podcasts)
+    click.echo(dumps(result, indent=4))
+
+@filter_group.command(name='delete')
+@click.argument('filter_id', type=int, nargs=-1)
+@click.pass_context
+def filter_delete(ctx, filter_id):
+    '''
+    Filter delete
+    '''
+    result = ctx.obj['client'].filter_delete(list(filter_id))
+    click.echo(dumps(result, indent=4))
+
 
 def main():
     '''

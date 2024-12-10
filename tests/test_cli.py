@@ -1,16 +1,31 @@
-from tempfile import NamedTemporaryFile
+from copy import deepcopy
+from json import loads
+from pathlib import Path
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from click.testing import CliRunner
 from yaml import dump
 
 from hathor.cli import cli
 
-valid_config_data = {
+basic_config_data = {
     'hathor': {
     },
     'logging': {
     }
 }
+
+logging_config_data = {
+    'hathor': {
+    },
+    'logging': {
+        'log_file_level': 10,
+    },
+}
+
+class FakeClient():
+    def init(self, *args, **kwargs):
+        pass
 
 def test_invalid_config():
     runner = CliRunner()
@@ -28,8 +43,332 @@ def test_invalid_config_file():
 def test_dump_config():
     with NamedTemporaryFile(suffix='.yml') as config:
         with open(config.name, 'w+', encoding='utf-8') as writer:
-            dump(valid_config_data, writer)
+            dump(basic_config_data, writer)
         runner = CliRunner()
         result = runner.invoke(cli, ['-c', f'{config.name}', 'dump-config'])
         assert result.exit_code == 0
         assert result.output == '{\n    "hathor": {},\n    "logging": {}\n}\n'
+
+def test_logging_config():
+    with NamedTemporaryFile(suffix='.log') as log_file:
+        config_data = deepcopy(logging_config_data)
+        config_data['logging']['logging_file'] = log_file.name
+        with NamedTemporaryFile(suffix='.yml') as config:
+            with open(config.name, 'w+', encoding='utf-8') as writer:
+                dump(config_data, writer)
+            runner = CliRunner()
+            runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'list'])
+            log_file_path = Path(log_file.name)
+            assert 'hathor client in memory' in log_file_path.read_text(encoding='utf-8')
+
+def test_database_connection():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            config_data = {
+                'hathor': {
+                    'database_connection_string': f'sqlite:///{db_file.name}',
+                    'podcast_directory': tmp_dir,
+                }
+            }
+            with NamedTemporaryFile(suffix='.yml') as config:
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod'])
+                db_path = Path(db_file.name)
+                assert db_path.stat().st_size > 0
+
+def test_podcast_create():
+    with TemporaryDirectory() as tmp_dir:
+        with NamedTemporaryFile(suffix='.yml') as config:
+            with open(config.name, 'w+', encoding='utf-8') as writer:
+                dump(basic_config_data, writer)
+            runner = CliRunner()
+            result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                        'rss', 'https://foo.com/example', 'temp-pod',
+                                        '--max-allowed', '2', '--file-location', tmp_dir,
+                                        '--artist-name', 'foo', '--no-automatic-download'])
+            assert loads(result.output) == {
+                'archive_type': 'rss',
+                'artist_name': 'foo',
+                'automatic_episode_download': False,
+                'broadcast_id': 'https://foo.com/example',
+                'file_location': tmp_dir,
+                'id': 1,
+                'max_allowed': 2,
+                'name': 'temp-pod'
+            }
+
+def test_podcast_create_no_automatic_flag():
+    with TemporaryDirectory() as tmp_dir:
+        with NamedTemporaryFile(suffix='.yml') as config:
+            with open(config.name, 'w+', encoding='utf-8') as writer:
+                dump(basic_config_data, writer)
+            runner = CliRunner()
+            result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                        'rss', 'https://foo.com/example', 'temp-pod',
+                                        '--max-allowed', '2', '--file-location', tmp_dir,
+                                        '--artist-name', 'foo'])
+            assert loads(result.output) == {
+                'archive_type': 'rss',
+                'artist_name': 'foo',
+                'automatic_episode_download': True,
+                'broadcast_id': 'https://foo.com/example',
+                'file_location': tmp_dir,
+                'id': 1,
+                'max_allowed': 2,
+                'name': 'temp-pod'
+            }
+
+def test_podcast_show():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'show', '1'])
+                assert loads(result.output) == [
+                    {
+                        'archive_type': 'rss',
+                        'artist_name': None,
+                        'automatic_episode_download': True,
+                        'broadcast_id': 'https://foo.com/example',
+                        'file_location': tmp_dir,
+                        'id': 1,
+                        'max_allowed': None,
+                        'name': 'temp-pod'
+                    },
+                ]
+
+def test_podcast_update():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'update', '1', '--artist-name', 'bar'])
+                assert loads(result.output) == {
+                    'archive_type': 'rss',
+                    'artist_name': 'bar',
+                    'automatic_episode_download': True,
+                    'broadcast_id': 'https://foo.com/example',
+                    'file_location': tmp_dir,
+                    'id': 1,
+                    'max_allowed': None,
+                    'name': 'temp-pod'
+                }
+
+def test_podcast_update_file_location():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with TemporaryDirectory() as tmp_dir2:
+                with NamedTemporaryFile(suffix='.yml') as config:
+                    config_data = {
+                        'hathor': {
+                            'database_connection_string': f'sqlite:///{db_file.name}',
+                            'podcast_directory': tmp_dir,
+                        }
+                    }
+                    with open(config.name, 'w+', encoding='utf-8') as writer:
+                        dump(config_data, writer)
+                    runner = CliRunner()
+                    runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                        'rss', 'https://foo.com/example', 'temp-pod',
+                                        '--file-location', tmp_dir])
+                    result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast',
+                                                 'update-file-location', '1', tmp_dir2])
+                    assert loads(result.output) == {
+                        'archive_type': 'rss',
+                        'artist_name': None,
+                        'automatic_episode_download': True,
+                        'broadcast_id': 'https://foo.com/example',
+                        'file_location': tmp_dir2,
+                        'id': 1,
+                        'max_allowed': None,
+                        'name': 'temp-pod'
+                    }
+
+def test_podcast_delete():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast',
+                                             'delete', '1'])
+                assert loads(result.output) == [1]
+
+def test_filter_create():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter',
+                                             'create', '1', "r'foo.*'"])
+                assert loads(result.output) == {
+                    'id': 1,
+                    'podcast_id': 1,
+                    'regex_string': "r'foo.*'"
+                }
+
+def test_filter_list():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                runner.invoke(cli, ['-c', f'{config.name}', 'filter',
+                                    'create', '1', "r'foo.*'"])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'list'])
+                assert loads(result.output) == [
+                    {
+                        'id': 1,
+                        'podcast_id': 1,
+                        'regex_string': "r'foo.*'"
+                    },
+                ]
+
+def test_filter_list_invalid_include():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                runner.invoke(cli, ['-c', f'{config.name}', 'filter',
+                                    'create', '1', "r'foo.*'"])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'list',
+                                             '--include-podcasts', 'foo'])            
+                assert 'Invalid include podcasts arg, must be comma separated list of ints' in str(result.exception)
+
+def test_filter_list_include():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                runner.invoke(cli, ['-c', f'{config.name}', 'filter',
+                                    'create', '1', "r'foo.*'"])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'list',
+                                             '--include-podcasts', '1'])            
+                assert loads(result.output) == [
+                    {
+                        'id': 1,
+                        'podcast_id': 1,
+                        'regex_string': "r'foo.*'"
+                    },
+                ]
+
+def test_filter_list_exclude():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                runner.invoke(cli, ['-c', f'{config.name}', 'filter',
+                                    'create', '1', "r'foo.*'"])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'list',
+                                             '--exclude-podcasts', '1'])            
+                assert loads(result.output) == []
+
+def test_filter_delete():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                runner.invoke(cli, ['-c', f'{config.name}', 'filter',
+                                    'create', '1', "r'foo.*'"])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'delete', '1'])
+                assert loads(result.output) == [1]

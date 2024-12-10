@@ -53,7 +53,7 @@ def clean_string(stringy: str) -> str:
 
 def setup_logger(name: str,
                  logging_file: Path = None,
-                 console_logging: bool = True,
+                 console_logging: bool = False,
                  console_logging_level: int = 20,
                  log_file_level: int = 20,
                  logging_file_backup_count: int = 4,

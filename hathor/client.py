@@ -74,14 +74,15 @@ class HathorClient():
     def __init__(self, podcast_directory: Path = None,
                  datetime_output_format: str = DEFAULT_DATETIME_FORMAT,
                  logger: RootLogger = None,
-                 database_file: Path = None, google_api_key: str = None):
+                 database_connection_string: str = None,
+                 google_api_key: str = None):
         '''
         Initialize the hathor client
-        podcast_directory       :   Directory where new podcasts will be placed by default
-        datetime_output_format  :   Python datetime output format
-        database_file           :   Sqlite database to use, if None db will be stored in memory
-        google_api_key          :   Key for accessing google API for youtube
-        logger                  :   Logger for client to use
+        podcast_directory               :   Directory where new podcasts will be placed by default
+        datetime_output_format          :   Python datetime output format
+        database_connection_string      :   Sqlalchemy connection string, if None db will be stored in memory
+        google_api_key                  :   Key for accessing google API for youtube
+        logger                          :   Logger for client to use
         '''
         self.podcast_directory = None
         if podcast_directory:
@@ -89,12 +90,12 @@ class HathorClient():
         self.datetime_output_format = datetime_output_format
         self.logger = logger or utils.setup_logger('Hathor')
 
-        if database_file is None:
+        if database_connection_string is None:
             engine = create_engine('sqlite:///')
             self.logger.debug("Initializing hathor client in memory (no database file given")
         else:
-            engine = create_engine(f'sqlite:///{database_file}')
-            self.logger.debug(f'Initializing hathor client with database file {database_file}')
+            engine = create_engine(f'{database_connection_string}')
+            self.logger.debug(f'Initializing hathor client with database connection {database_connection_string}')
 
         BASE.metadata.create_all(engine)
         BASE.metadata.bind = engine
