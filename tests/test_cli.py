@@ -1,4 +1,5 @@
 from copy import deepcopy
+from datetime import datetime
 from json import loads
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -7,6 +8,7 @@ from click.testing import CliRunner
 from yaml import dump
 
 from hathor.cli import cli
+from hathor.podcast.archive import RSSManager
 
 basic_config_data = {
     'hathor': {
@@ -22,6 +24,15 @@ logging_config_data = {
         'log_file_level': 10,
     },
 }
+
+mock_episode_data = [
+    {
+        'download_link': 'https://foo.com/example1',
+        'title': 'Episode 0',
+        'date': datetime(2024, 12, 7, 14, 00, 00),
+        'description': 'Episode 0 description',
+    },
+]
 
 class FakeClient():
     def init(self, *args, **kwargs):
@@ -302,6 +313,28 @@ def test_filter_list_invalid_include():
                                              '--include-podcasts', 'foo'])            
                 assert 'Invalid include podcasts arg, must be comma separated list of ints' in str(result.exception)
 
+def test_filter_list_invalid_exclude():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                runner.invoke(cli, ['-c', f'{config.name}', 'filter',
+                                    'create', '1', "r'foo.*'"])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'list',
+                                             '--exclude-podcasts', 'foo'])            
+                assert 'Invalid exclude podcasts arg, must be comma separated list of ints' in str(result.exception)
+
 def test_filter_list_include():
     with NamedTemporaryFile(suffix='.sql') as db_file:
         with TemporaryDirectory() as tmp_dir:
@@ -372,3 +405,35 @@ def test_filter_delete():
                                     'create', '1', "r'foo.*'"])
                 result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'delete', '1'])
                 assert loads(result.output) == [1]
+
+def test_episode_sync(mocker):
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
+                assert loads(result.output) == [
+                    {
+                        'date': '2024-12-07',
+                        'description': 'Episode 0 description',
+                        'download_url': 'https://foo.com//example1',
+                        'file_path': None,
+                        'file_size': None,
+                        'id': 1,
+                        'podcast_id': 1,
+                        'prevent_deletion': False,
+                        'title': 'Episode 0',
+                    },
+                ]

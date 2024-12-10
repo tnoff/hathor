@@ -13,6 +13,22 @@ from hathor.utils import setup_logger
 HOME_DIR = Path.home()
 SETTINGS_DEFAULT = HOME_DIR / '.hathor_config.yml'
 
+def _generate_cluders(include_podcasts, exclude_podcasts):
+    '''
+    Generate cluders from input
+    '''
+    if include_podcasts:
+        try:
+            include_podcasts = [int(i) for i in include_podcasts.split(',')]
+        except ValueError as e:
+            raise CliException('Invalid include podcasts arg, must be comma separated list of ints') from e
+    if exclude_podcasts:
+        try:
+            exclude_podcasts = [int(i) for i in exclude_podcasts.split(',')]
+        except ValueError as e:
+            raise CliException('Invalid exclude podcasts arg, must be comma separated list of ints') from e
+    return include_podcasts, exclude_podcasts
+
 @click.group()
 @click.option('-c', '--config',
               type=click.Path(dir_okay=False),
@@ -181,16 +197,7 @@ def filter_list(ctx, include_podcasts, exclude_podcasts):
     '''
     Filter list
     '''
-    if include_podcasts:
-        try:
-            include_podcasts = [int(i) for i in include_podcasts.split(',')]
-        except ValueError as e:
-            raise CliException('Invalid include podcasts arg, must be comma separated list of ints') from e
-    if exclude_podcasts:
-        try:
-            exclude_podcasts = [int(i) for i in exclude_podcasts.split(',')]
-        except ValueError as e:
-            raise CliException('Invalid include podcasts arg, must be comma separated list of ints') from e
+    include_podcasts, exclude_podcasts = _generate_cluders(include_podcasts, exclude_podcasts)
     result = ctx.obj['client'].filter_list(include_podcasts=include_podcasts, exclude_podcasts=exclude_podcasts)
     click.echo(dumps(result, indent=4))
 
@@ -204,6 +211,29 @@ def filter_delete(ctx, filter_id):
     result = ctx.obj['client'].filter_delete(list(filter_id))
     click.echo(dumps(result, indent=4))
 
+@cli.group(name='episode')
+@click.pass_context
+def episode(_ctx):
+    '''
+    Episode functions
+    '''
+
+@episode.command(name='sync')
+@click.option('--include-podcasts', help='Comma separated list of podcasts')
+@click.option('--exclude-podcasts', help='Comma separated list of podcasts')
+@click.option('--max-episode-sync', type=int, help='Max episodes to sync')
+@click.pass_context
+def episode_sync(ctx, include_podcasts, exclude_podcasts, max_episode_sync):
+    '''
+    Episode sync
+    '''
+    include_podcasts, exclude_podcasts = _generate_cluders(include_podcasts, exclude_podcasts)
+    result = ctx.obj['client'].episode_sync(
+        include_podcasts=include_podcasts,
+        exclude_podcasts=exclude_podcasts,
+        max_episode_sync=max_episode_sync,
+    )
+    click.echo(dumps(result, indent=4))
 
 def main():
     '''
