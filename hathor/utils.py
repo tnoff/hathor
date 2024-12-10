@@ -12,7 +12,16 @@ def process_url(url: str) -> str:
     url: Basic url string
     '''
     processed_url = urlparse(url)
-    return f'{processed_url.scheme}://{processed_url.netloc}/{processed_url.path}'
+    return f'{processed_url.scheme}://{processed_url.netloc}{processed_url.path}'
+
+def check_patreon(url: str) -> bool:
+    '''
+    Check if patreon url
+
+    url: Basic url string
+    '''
+    processed_url = urlparse(url)
+    return 'patreonusercontent' in processed_url.netloc
 
 def normalize_name(name: str) -> str:
     '''

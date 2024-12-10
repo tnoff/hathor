@@ -54,6 +54,37 @@ mock_episode_data_two = [
     },
 ]
 
+mock_patreon = [
+    {
+        'download_link': 'https://test.patreonusercontent.com/example1?token-time=123&token-hash=abcd',
+        'title': 'Youtube Episode 0',
+        'date': datetime(2024, 12, 7, 14, 00, 00),
+        'description': 'Episode 0 description',
+    },
+    {
+        'download_link': 'https://test.patreonusercontent.com/example2?token-time=123&token-hash=abcd',
+        'title': 'Youtube Episode 1',
+        'date': datetime(2024, 12, 8, 14, 00, 00),
+        'description': 'Episode 1 description',
+    },
+]
+
+mock_patreon_two = [
+    {
+        'download_link': 'https://test.patreonusercontent.com/example1?token-time=456&token-hash=defg',
+        'title': 'Youtube Episode 0',
+        'date': datetime(2024, 12, 7, 14, 00, 00),
+        'description': 'Episode 0 description',
+    },
+    {
+        'download_link': 'https://test.patreonusercontent.com/example2?token-time=456&token-hash=defg',
+        'title': 'Youtube Episode 1',
+        'date': datetime(2024, 12, 8, 14, 00, 00),
+        'description': 'Episode 1 description',
+    },
+]
+
+
 def test_episode_sync(mocker):
     with TemporaryDirectory() as tmp_dir:
         client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
@@ -336,3 +367,16 @@ def test_episode_download_update_tags(mocker):
             client.episode_download([episode_list[0]['id']])
             episode_list = client.episode_list()
             assert len(episode_list) == 1
+
+def test_episode_download_patreon(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+        client.podcast_create('rss', '1234', 'foo')
+        mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_patreon)
+        client.episode_sync()
+        episode_list = client.episode_list(only_files=False)
+        assert len(episode_list) == 2
+        mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_patreon_two)
+        client.episode_sync()
+        episode_list = client.episode_list(only_files=False)
+        assert len(episode_list) == 2

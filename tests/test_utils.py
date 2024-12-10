@@ -6,9 +6,10 @@ from hathor import utils
 
 def test_process_url():
     result = utils.process_url('https://foo.example')
-    assert result == 'https://foo.example/'
+    assert result == 'https://foo.example'
     result = utils.process_url('https://foo.example?id=bar')
-    assert result == 'https://foo.example/'
+    assert result == 'https://foo.example'
+    assert utils.process_url('https://foo.example/bar?id=3') == 'https://foo.example/bar'
 
 def test_clean_stringy():
     assert utils.clean_string(None) is None

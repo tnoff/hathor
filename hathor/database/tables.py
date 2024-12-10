@@ -50,6 +50,7 @@ class PodcastEpisode(BASE):
     # unique keys
     id = Column(Integer, primary_key=True)
     download_url = Column(String(10*1024), unique=True)
+    processed_url = Column(String(10*1024))
     # keys set at creation, and inmutable
     title = Column(String(10*1024))
     description = Column(String(10*1024))

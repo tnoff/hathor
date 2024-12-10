@@ -90,12 +90,11 @@ class HathorClient():
         self.datetime_output_format = datetime_output_format
         self.logger = logger or utils.setup_logger('Hathor')
 
-        if database_connection_string is None:
-            engine = create_engine('sqlite:///')
-            self.logger.debug("Initializing hathor client in memory (no database file given")
-        else:
-            engine = create_engine(f'{database_connection_string}')
-            self.logger.debug(f'Initializing hathor client with database connection {database_connection_string}')
+        # Default to in memory db
+        # Mostly for tests
+        self.database_connection_string = database_connection_string or 'sqlite:///'
+        engine = create_engine(f'{self.database_connection_string}')
+        self.logger.debug(f'Initializing hathor client with database connection {self.database_connection_string}')
 
         BASE.metadata.create_all(engine)
         BASE.metadata.bind = engine
@@ -439,7 +438,15 @@ class HathorClient():
             for episode in current_episodes:
                 # Check if download link with same download link exists in podcast
                 episode_processed_url = utils.process_url(episode['download_link'])
-                existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode_processed_url).first()
+                # Patreon keeps the same basic url but changes up the query params
+                # Have this check for the base url, default to full url for others
+                is_patreon = utils.check_patreon(episode['download_link'])
+                if is_patreon:
+                    existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.processed_url == episode_processed_url).first()
+                    if existing_episode:
+                        self.logger.debug(f'Episode {existing_episode.id} has same url, skipping saving episode')
+                        continue
+                existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode['download_link']).first()
                 if existing_episode:
                     self.logger.debug(f'Episode {existing_episode.id} has same url, skipping saving episode')
                     continue
@@ -447,7 +454,8 @@ class HathorClient():
                     'title' : episode['title'],
                     'date' : episode['date'],
                     'description' : episode['description'],
-                    'download_url' : episode_processed_url,
+                    'download_url' : episode['download_link'],
+                    'processed_url': episode_processed_url,
                     'podcast_id' : podcast.id,
                     'prevent_deletion' : False,
                 }
@@ -664,7 +672,8 @@ class HathorClient():
         '''
         self.db_session.query(PodcastEpisode).filter_by(file_path=None).delete()
         self.db_session.commit()
-        self.db_session.execute(text('VACUUM'))
+        if 'sqlite' in self.database_connection_string:
+            self.db_session.execute(text('VACUUM'))
         self.logger.info("Database cleaned of uneeded episodes")
         return True
 

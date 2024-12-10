@@ -70,7 +70,7 @@ def test_logging_config():
             runner = CliRunner()
             runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'list'])
             log_file_path = Path(log_file.name)
-            assert 'hathor client in memory' in log_file_path.read_text(encoding='utf-8')
+            assert 'Initializing hathor client with database connection' in log_file_path.read_text(encoding='utf-8')
 
 def test_database_connection():
     with NamedTemporaryFile(suffix='.sql') as db_file:
@@ -428,7 +428,8 @@ def test_episode_sync(mocker):
                     {
                         'date': '2024-12-07',
                         'description': 'Episode 0 description',
-                        'download_url': 'https://foo.com//example1',
+                        'download_url': 'https://foo.com/example1',
+                        'processed_url': 'https://foo.com/example1',
                         'file_path': None,
                         'file_size': None,
                         'id': 1,
