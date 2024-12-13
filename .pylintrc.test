@@ -16,4 +16,7 @@ disable=line-too-long,
         too-many-arguments,
         too-many-positional-arguments,
         too-many-locals,
-        singleton-comparison
+        missing-function-docstring,
+        unnecessary-lambda-assignment,
+        missing-class-docstring,
+        duplicate-code,

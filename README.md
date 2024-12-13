@@ -4,7 +4,6 @@ Hathor is a python package that is designed to help users download and maintain 
 
 Includes support for the following feed types:
 - RSS
-- Soundcloud
 - Youtube
 
 
@@ -26,7 +25,7 @@ The ``hathor`` python module will be installed, as well as 2 cli scripts:
 ``hathor``
     Used for downloading and managing podcast media files
 ``audio-tool``
-    A general use tool for editing audio tags and cover pictures for mp3 files.
+    Used for modifying metadata on audio files
 
 ## The Hathor Client
 
@@ -43,47 +42,41 @@ When the hathor client is initialized, certain variables must be specified. Thes
 are better documented in the codebase.
 
 These variables can also be loaded from a settings file. The default location of this settings file
-is the home directory, under ``~/.hathor_settings.conf``. It can also be specified in the command line
-with the ``-s`` flag.
+is the home directory, under ``~/.hathor_config.yml``. It can also be specified in the command line
+with the ``-c`` flag.
 
-Setting options include:
 
-``database_file``
-    Where the sqlite database file will be placed
-``logging_file``
-    Where log output will be sent ( rotating logs )
-``podcast_directory``
-    Default directory where podcast files will be stored
+There should be two sections, `hathor` and `logging`. Logging args are sent directly to the `utils.setup_logger` method, `hathor` args are sent directly to the `HathorClient` class.
 
-Here is an example of what a settings file looks like:
+Options include
 
 ```
-[general]
-database_file = /home/user/.hathor-db.sql
-datetime_output_format = %%Y.%%m.%%d
-logging_file = /var/log/hathor/hathor.log
-logging_level = debug
-
-[podcasts]
-podcast_directory = /home/user/podcasts/
-soundcloud_client_id = foo-bar
-google_api_key = bar-foo
+---
+hathor:
+  podcast_directory: /home/user/foo
+  database_connection_string: sqlite:////home/user/foo.sql
+  google_api_key: abc1234
+  datetime_output_format = %Y-%m-%d
+logging:
+    logging_file: /home/user/foo.log
+    console_logging: true
+    log_level: 10
+    logging_file_backup_count: 5
+    logging_file_max_bytes: 102400
 ```
 
 ### Podcast Archives
+
 When creating a new podcast record, users will need to specify where the podcast will be downloaded
 from, we call that the "archive". The following archives are supported:
 
-- Soundcloud
 - Youtube
 - RSS Feeds
 
-#### Soundcloud and Google API Keys
+#### Google API Keys
 
-To download podcasts from soundcloud and youtube, users will need to create credentials
+To download podcasts from youtube, users will need to create credentials
 that can be used for their APIs.
-
-For soundcloud users will need a `client id <https://developers.soundcloud.com/>`_.
 
 For youtube users will need a `google api secret key <https://console.developers.google.com>`_.
 
@@ -95,11 +88,10 @@ These can be either placed in the settings file, or specified when initializing 
 The broadcast ID for a podcast is the unique identifier for that podcast when downloading
 it from its archive.
 
-For Soundcloud, if given the following url `https://soundcloud.com/themonday-morning-podcast/`,
-the broadcast id will be the last portion of the url, in this case `themonday-morning-podcast`.
+For Youtube, if given the following url `https://www.youtube.com/channel/UC27vDmUZpQjuJFFkUz8ujtg`,
+the broadcast id will be the last portion of the url, in this case `UC27vDmUZpQjuJFFkUz8ujtg`.
 
-For Youtube, if given the following url `https://www.youtube.com/channel/UCzQUP1qoWDoEbmsQxvdjxgQ`,
-the broadcast id will be the last portion of the url, in this case ``UCzQUP1qoWDoEbmsQxvdjxgQ``.
+You may need to use 3rd party tools to find the channel ID of a particular uploader, such as [ytlarge](https://ytlarge.com/youtube/channel-id-finder/).
 
 
 ### Downloading Podcasts
@@ -107,35 +99,35 @@ the broadcast id will be the last portion of the url, in this case ``UCzQUP1qoWD
 With a archive type and broadcast id, users can then create a new podcast record using the cli:
 
 ```
-hathor podcast create 'podcast-name' "rss" "http://feeds.podtrac.com/xUnmFXZLuavF"
+$ hathor podcast create "rss" "http://example.foo/rss/feed" "podcast-name"
 ```
 
 After the podcast has been created, users can then run a podcast sync, which will check the web
 for new episodes, and then download the latest to the local machine:
 
 ```
-hathor podcast sync
+$ hathor podcast sync
 ```
 
 You can then list the podcast episodes to check for new episodes:
 
 ```
 # Will only list episodes with files
-hathor episode list
+$ hathor episode list --only-files
 # Will list all episodes
-hathor episode list --all
+$ hathor episode list
 ```
 
 Alternatively, you can sync podcast episodes without downloading them:
 
 ```
-hathor episode sync
+$ hathor episode sync
 ```
 
 To download podcast episodes individually:
 
 ```
-hathor episode download <episode-id>
+$ hathor episode download <episode-id>
 ```
 
 #### Max Allowed
@@ -148,7 +140,7 @@ possible episodes.
 To set max allowed on a podcast:
 
 ```
-hathor podcast update --max-allowed <max-allowed-int> <podcast-id>
+$ hathor podcast update <podcast-id> --max-allowed <max-allowed-int>
 ```
 
 It is possible to prevent the deletion of a file from max allowed restrictions.
@@ -156,7 +148,7 @@ If the user sets "prevent delete" to True, it will not be deleted by
 a podcast sync command. To update the podcast episode use:
 
 ```
-hathor episode update --prevent-delete <episode-id>
+$ hathor episode update <episode-id> True
 ```
 
 #### Episode filters Filters
@@ -167,7 +159,7 @@ added to the database and downloaded via regexes.
 To add podcast filters:
 
 ```
-hathor filter create <podcast-id> <regex-filter>
+$ hathor filter create <podcast-id> <regex-filter>
 ```
 
 ## Plugins
@@ -181,8 +173,8 @@ Plugins should be named after the function you want them to run after,
 for example if the plugin function is named "episode_download", it will be
 run after the episode_download client function is complete.
 
-Plugin functions should take 2 arguments, the first being the hathor client
-(self), and the second being the result of the original client function.
+Plugin functions should take 4 argument the first being the hathor client
+(self), and the second being the result of the original client function, and the next being the `*args` and `**kwargs` the original function was called with.
 
 Plugins should also return a result, that will be treated as the result of the
 client function.
@@ -194,7 +186,7 @@ Take the following plugin function for example:
     # the following is in hathor/plugins/fix_title.py
     from hathor.database.tables import PodcastEpisode
 
-    def episode_download(self, results):
+    def episode_download(self, results, *args, **kwargs):
         for episode in results:
             if episode['podcast_id'] in [2, 3, 5]:
                 episode['title'] = 'some fancy title'
@@ -206,37 +198,3 @@ Take the following plugin function for example:
 
 This will change the title of new episodes for certain podcasts. Note that for the change
 to be permanent, you'll have to change the episodes in the database.
-
-
-## Tests
-
-To run the tests install the additional packages in
-``tests/requirements.txt``.
-
-### Moviepy Issue
-
-
-The current issue of moviepy (only used in tests), has a bug where fps is not defined.
-To get around this use this patch:
-
-```
-
-diff --git a/moviepy/audio/AudioClip.py b/moviepy/audio/AudioClip.py
-index 8572407..6089b2a 100644
---- a/moviepy/audio/AudioClip.py
-+++ b/moviepy/audio/AudioClip.py
-@@ -188,8 +188,11 @@ class AudioClip(Clip):
-    
-            """
-            if not fps:
--            if not self.fps:
--                fps = 44100
-+            try:
-+                if not self.fps:
-+                    fps = 44100
-+            except AttributeError:
-+                    fps = 44100
-                else:
-                    fps = self.fps
-     
-```
