@@ -190,7 +190,8 @@ class YoutubeManager(ArchiveInterface):
             'part': 'id,snippet',
             'channelId': broadcast_id,
             'type': 'video',
-            'fields': 'nextPageToken,items(id(videoId),snippet(publishedAt,title,description))'
+            'fields': 'nextPageToken,items(id(videoId),snippet(publishedAt,title,description))',
+            'order': 'date',
         }
         req = youtube_api.search().list(**data_inputs) #pylint:disable=no-member
         while req is not None:
