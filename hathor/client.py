@@ -440,19 +440,19 @@ class HathorClient():
                                                         max_results=max_results,
                                                         filters=compiled_filters)
             for episode in current_episodes:
-                # Check if download link with same download link exists in podcast
-                episode_processed_url = utils.process_url(episode['download_link'])
+                episode_processed_url = episode['download_link']
                 # Patreon keeps the same basic url but changes up the query params
                 # Have this check for the base url, default to full url for others
                 is_patreon = utils.check_patreon(episode['download_link'])
                 if is_patreon:
+                    episode_processed_url = utils.process_url(episode['download_link'])
                     existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.processed_url == episode_processed_url).first()
                     if existing_episode:
-                        self.logger.debug(f'Episode {existing_episode.id} has same url, skipping saving episode')
+                        self.logger.debug(f'Episode {existing_episode.id} has same url "{episode_processed_url}", skipping saving episode')
                         continue
                 existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode['download_link']).first()
                 if existing_episode:
-                    self.logger.debug(f'Episode {existing_episode.id} has same url, skipping saving episode')
+                    self.logger.debug(f'Episode {existing_episode.id} has same url "{episode["download_link"]}", skipping saving episode')
                     continue
                 episode_args = {
                     'title' : episode['title'],
