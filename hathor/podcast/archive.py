@@ -226,7 +226,7 @@ class YoutubeManager(ArchiveInterface):
         options = {
             'outtmpl' : f'{output_prefix}.%(ext)s',
             'noplaylist' : True,
-            'format': 'best',
+            'format': 'bestvideo+bestaudio',
             'logger' : self.logger,
         }
         try:
