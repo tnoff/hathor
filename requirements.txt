@@ -4,6 +4,6 @@ google-api-python-client==2.157.0
 mutagen==1.47.0
 pyaml-env==1.2.1
 requests==2.32.3
-SQLAlchemy==2.0.36
+SQLAlchemy==2.0.37
 validators==0.34.0
 yt-dlp==2024.12.23
