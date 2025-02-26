@@ -40,7 +40,10 @@ def tags_update(input_file: Path, key_values: dict) -> mutagen_file:
             del audio_file[key]
         except KeyError:
             pass
-        audio_file[key] = value
+        try:
+            audio_file[key] = value
+        except TypeError as e:
+            raise AudioFileException(f'Unable to add key value {key}={value} for file {input_file}') from e
     audio_file.save()
     return True
 
