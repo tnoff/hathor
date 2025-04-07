@@ -6,4 +6,4 @@ pyaml-env==1.2.2
 requests==2.32.3
 SQLAlchemy==2.0.40
 validators==0.34.0
-yt-dlp==2025.3.27
+yt-dlp==2025.3.31
