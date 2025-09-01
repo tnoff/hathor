@@ -3,6 +3,6 @@ pytest-mock==3.14.1
 moviepy==2.2.1
 pillow==11.3.0
 pytest-cov==6.2.1
-tox==4.27.0
+tox==4.29.0
 pylint==3.3.8
 requests-mock==1.12.1
