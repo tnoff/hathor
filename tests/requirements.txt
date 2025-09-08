@@ -1,4 +1,4 @@
-pytest==8.4.1
+pytest==8.4.2
 pytest-mock==3.14.1
 moviepy==2.2.1
 pillow==11.3.0
