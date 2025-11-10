@@ -1,6 +1,6 @@
 click==8.3.0
 feedparser==6.0.12
-google-api-python-client==2.186.0
+google-api-python-client==2.187.0
 mutagen==1.47.0
 pyaml-env==1.2.2
 requests==2.32.5
