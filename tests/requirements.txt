@@ -1,7 +1,8 @@
 pytest==9.0.0
 pytest-mock==3.15.1
 moviepy==2.2.1
-pillow==11.3.0
+# Moviepy doesn't play well with this one
+pillow
 pytest-cov==7.0.0
 tox==4.32.0
 pylint==4.0.2
