@@ -24,6 +24,21 @@ DEFAULT_DATETIME_FORMAT = '%Y-%m-%d'
 
 FILE_PATH = os.path.abspath(__file__)
 
+
+def get_default_database_path():
+    """Get default database path following XDG Base Directory spec"""
+    home = Path.home()
+
+    # Use XDG_DATA_HOME if set, otherwise default to ~/.local/share
+    xdg_data = os.environ.get('XDG_DATA_HOME')
+    if xdg_data:
+        data_dir = Path(xdg_data) / 'hathor'
+    else:
+        data_dir = home / '.local' / 'share' / 'hathor'
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / 'hathor.db'
+
 def load_plugins():
     '''
     Loads plugins for dir, gets list of functions to run later
@@ -94,9 +109,17 @@ class HathorClient():
         self.datetime_output_format = datetime_output_format
         self.logger = logger or utils.setup_logger('Hathor')
 
-        # Default to in memory db
-        # Mostly for tests
-        self.database_connection_string = database_connection_string or 'sqlite:///'
+        # Use provided connection string, or default to XDG location
+        # If neither, use in-memory (for tests)
+        if database_connection_string:
+            self.database_connection_string = database_connection_string
+        elif os.environ.get('HATHOR_USE_MEMORY_DB'):
+            # For tests
+            self.database_connection_string = 'sqlite:///'
+        else:
+            default_db = get_default_database_path()
+            self.database_connection_string = f'sqlite:///{default_db}'
+
         engine = create_engine(f'{self.database_connection_string}')
         self.logger.debug(f'Initializing hathor client with database connection {self.database_connection_string}')
 
@@ -401,11 +424,11 @@ class HathorClient():
 
         Returns: list of dictionaries representing new episodes added
         '''
-        return self.__episode_sync_cluders(include_podcasts, exclude_podcasts, max_episode_sync=max_episode_sync)
+        return self.__episode_sync_with_filters(include_podcasts, exclude_podcasts, max_episode_sync=max_episode_sync)
 
     @run_plugins
-    def __episode_sync_cluders(self, include_podcasts: List[int], exclude_podcasts: List[int],
-                               max_episode_sync: int = None, automatic_sync: bool = True) -> List[dict]:
+    def __episode_sync_with_filters(self, include_podcasts: List[int], exclude_podcasts: List[int],
+                                     max_episode_sync: int = None, automatic_sync: bool = True) -> List[dict]:
         query = self.db_session.query(Podcast)
         if include_podcasts:
             opts = (Podcast.id == pod for pod in include_podcasts)
@@ -691,8 +714,8 @@ class HathorClient():
         Returns: null
         '''
         if sync_web_episodes:
-            self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
-                                        automatic_sync=False)
+            self.__episode_sync_with_filters(include_podcasts, exclude_podcasts,
+                                              automatic_sync=False)
         if download_episodes:
             self._podcast_download_episodes(include_podcasts, exclude_podcasts)
         return True

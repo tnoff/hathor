@@ -6,3 +6,5 @@ hathor/plugins/
 build/
 *egg-info*
 .tox/
+docker-compose.override.yml
+podcasts/

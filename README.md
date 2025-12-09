@@ -9,14 +9,34 @@ Includes support for the following feed types:
 
 ## Installation
 
+### Local Installation
+
 Clone the repo from github and use pip to install:
 
-```
-
+```bash
 git clone https://github.com/tnoff/hathor.git
 pip install hathor/
-
 ```
+
+### Docker Installation
+
+Use Docker for an isolated environment with all dependencies pre-installed:
+
+```bash
+# Clone and build
+git clone https://github.com/tnoff/hathor.git
+cd hathor
+docker-compose build
+
+# Initialize configuration
+docker-compose run --rm hathor hathor init
+
+# Run commands
+docker-compose run --rm hathor hathor podcast create rss "https://example.com/feed.xml" "My Podcast"
+docker-compose run --rm hathor hathor podcast sync
+```
+
+See the [Docker section](#docker-usage) below for more details.
 
 ### What Is Installed
 
@@ -199,3 +219,125 @@ Take the following plugin function for example:
 
 This will change the title of new episodes for certain podcasts. Note that for the change
 to be permanent, you'll have to change the episodes in the database.
+
+## Docker Usage
+
+Hathor includes Docker support with persistent volumes for configuration, database, and podcasts.
+
+### Quick Start
+
+```bash
+# Build the image
+docker-compose build
+
+# Initialize configuration (only needed once)
+docker-compose run --rm hathor hathor init
+
+# Create a podcast
+docker-compose run --rm hathor hathor podcast create rss "https://example.com/feed.xml" "My Podcast"
+
+# Sync podcasts
+docker-compose run --rm hathor hathor podcast sync
+
+# List episodes
+docker-compose run --rm hathor hathor episode list
+```
+
+### Persistent Storage
+
+Hathor uses Docker volumes for persistence:
+
+- **hathor-config**: Configuration file at `/data/config/hathor/config.yml`
+- **hathor-db**: SQLite database at `/data/db/hathor/hathor.db`
+- **podcasts**: Downloaded files at `/data/podcasts` (mapped to `./podcasts` by default)
+
+### Configuration
+
+The Docker entrypoint automatically creates a default configuration on first run. To customize:
+
+1. Get a shell in the container:
+   ```bash
+   docker-compose run --rm hathor bash
+   ```
+
+2. Edit the config file:
+   ```bash
+   vi /data/config/hathor/config.yml
+   ```
+
+3. Or inspect the volume location:
+   ```bash
+   docker volume inspect hathor_hathor-config
+   ```
+
+### Adding Google API Key
+
+To enable YouTube downloads, add your API key to the config:
+
+```bash
+# Get a shell
+docker-compose run --rm hathor bash
+
+# Edit config
+vi /data/config/hathor/config.yml
+
+# Add this line under the 'hathor:' section:
+#   google_api_key: YOUR_KEY_HERE
+```
+
+### Running as a Daemon
+
+For automatic syncing, run Hathor as a background service:
+
+```bash
+# Start daemon
+docker-compose up -d
+
+# Run commands via exec
+docker-compose exec hathor hathor podcast sync
+docker-compose exec hathor hathor podcast list
+
+# View logs
+docker-compose logs -f
+
+# Stop daemon
+docker-compose down
+```
+
+### Customization
+
+Create a `docker-compose.override.yml` file (see `docker-compose.override.yml.example`) to:
+
+- Change the podcast directory location
+- Add environment variables
+- Set up automatic syncing with cron
+- Customize resource limits
+
+Example override for custom podcast directory:
+
+```yaml
+version: '3.8'
+
+services:
+  hathor:
+    volumes:
+      - /mnt/media/podcasts:/data/podcasts
+```
+
+### Scheduled Syncing
+
+To set up automatic syncing, create `docker-compose.override.yml`:
+
+```yaml
+version: '3.8'
+
+services:
+  hathor:
+    command: >
+      sh -c "
+      echo '0 */6 * * * hathor podcast sync' | crontab - &&
+      crond -f
+      "
+```
+
+This will sync all podcasts every 6 hours.
