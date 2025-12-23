@@ -1,0 +1,25 @@
+# Copy this file to docker-compose.override.yml and customize
+# This file is ignored by git and allows you to override settings locally
+
+version: '3.8'
+
+services:
+  hathor:
+    # Use a custom host path for podcasts instead of ./podcasts
+    volumes:
+      - /path/to/your/podcasts:/data/podcasts
+
+    # Set up cron job to sync automatically (example)
+    # Uncomment and modify as needed
+    # command: >
+    #   sh -c "
+    #   echo '0 */6 * * * hathor podcast sync' | crontab - &&
+    #   crond -f
+    #   "
+
+    # Or run as a one-shot command
+    # command: hathor podcast sync
+
+    # Add environment variables for your API keys
+    # environment:
+    #   - GOOGLE_API_KEY=your_key_here

@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  hathor:
+    build: .
+    container_name: hathor
+    volumes:
+      # Mount config directory
+      - hathor-config:/data/config
+      # Mount database directory
+      - hathor-db:/data/db
+      # Mount podcasts directory (you can change the host path)
+      - ./podcasts:/data/podcasts
+    environment:
+      # Use XDG directories in container
+      - XDG_CONFIG_HOME=/data/config
+      - XDG_DATA_HOME=/data/db
+    # Override command to keep container running for exec commands
+    # Comment out to run one-off commands
+    stdin_open: true
+    tty: true
+
+volumes:
+  hathor-config:
+    driver: local
+  hathor-db:
+    driver: local
+
+# Usage examples:
+#
+# Build and initialize:
+#   docker-compose build
+#   docker-compose run --rm hathor hathor init
+#
+# Create a podcast:
+#   docker-compose run --rm hathor hathor podcast create rss "https://example.com/feed.xml" "My Podcast"
+#
+# List podcasts:
+#   docker-compose run --rm hathor hathor podcast list
+#
+# Sync all podcasts:
+#   docker-compose run --rm hathor hathor podcast sync
+#
+# Interactive shell:
+#   docker-compose run --rm hathor bash
+#
+# Run as daemon and exec commands:
+#   docker-compose up -d
+#   docker-compose exec hathor hathor podcast sync
+#   docker-compose down
