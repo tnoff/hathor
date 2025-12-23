@@ -1,0 +1,12 @@
+name: Tag build
+
+on:
+  push:
+    branches:
+    - main
+
+jobs:
+  tag_build:
+    uses: tnoff/github-workflows/.github/workflows/tag.yml@f1ccc6f7845e103773faa0c4f1a61b7feeeddc10
+    with:
+      version_file: ./VERSION
