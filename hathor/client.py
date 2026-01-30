@@ -655,7 +655,10 @@ class HathorClient():
         for episode in query_input:
             if episode.file_path is not None:
                 file_path = Path(episode.file_path)
-                file_path.unlink()
+                try:
+                    file_path.unlink()
+                except FileNotFoundError:
+                    continue
                 episode.file_path = None
                 episode.file_size = None
                 # Make sure prevent delete is turned off
