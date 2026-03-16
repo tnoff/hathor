@@ -1,6 +1,5 @@
 from mimetypes import guess_extension, guess_type
 from pathlib import Path
-from typing import List
 
 from mutagen import File as mutagen_file
 from mutagen.id3 import APIC, ID3
@@ -59,7 +58,7 @@ def tags_show(input_file: Path) -> mutagen_file:
         new_dict[key] = value[0]
     return new_dict
 
-def tags_delete(input_file: Path, tag_list: List[str]) -> mutagen_file:
+def tags_delete(input_file: Path, tag_list: list[str]) -> mutagen_file:
     '''
     Attempt to delete all tags in args from audio file
     input_file  :   audio_file to delete tags

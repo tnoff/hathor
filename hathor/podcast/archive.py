@@ -4,7 +4,6 @@ from mimetypes import guess_extension, guess_type
 from re import match
 from pathlib import Path
 from time import mktime
-from typing import List
 
 from feedparser import parse
 from googleapiclient.discovery import build
@@ -52,7 +51,7 @@ def curl_download(episode_url: str, output_path: Path) -> int:
                 download_size += len(chunk)
     return output_path, download_size
 
-def verify_title_filters(filters: List[str], title: str) -> bool:
+def verify_title_filters(filters: list[str], title: str) -> bool:
     '''
     Verify title matches filters given
 
@@ -94,7 +93,7 @@ class RSSManager(ArchiveInterface):
     def __init__(self, logger: RootLogger, **_):
         ArchiveInterface.__init__(self, logger)
 
-    def broadcast_update(self, broadcast_id: str, max_results: int = None, filters: List[str] = None, **_):
+    def broadcast_update(self, broadcast_id: str, max_results: int | None = None, filters: list[str] | None = None, **_):
         '''
         Get latest episodes from broadcast
         broadcast_id : URL to generate episodes from
