@@ -12,10 +12,8 @@ Includes support for the following feed types:
 Clone the repo from github and use pip to install:
 
 ```
-
 git clone https://github.com/tnoff/hathor.git
 pip install hathor/
-
 ```
 
 ### What Is Installed
@@ -45,7 +43,6 @@ are better documented in the codebase.
 These variables can also be loaded from a settings file. The default location of this settings file
 is the home directory, under ``~/.hathor_config.yml``. It can also be specified in the command line
 with the ``-c`` flag.
-
 
 There should be two sections, `hathor` and `logging`. Logging args are sent directly to the `utils.setup_logger` method, `hathor` args are sent directly to the `HathorClient` class.
 
@@ -152,7 +149,7 @@ a podcast sync command. To update the podcast episode use:
 $ hathor episode update <episode-id> True
 ```
 
-#### Episode filters Filters
+#### Episode Filters
 
 Episode filters can be used to control which podcast episodes will be
 added to the database and downloaded via regexes.
@@ -162,40 +159,3 @@ To add podcast filters:
 ```
 $ hathor filter create <podcast-id> <regex-filter>
 ```
-
-## Plugins
-
-Plugins can be added for most functions in the hathor client.
-
-Any plugins will have to be written in python and be placed in the
-``hathor/plugins/`` directory.
-
-Plugins should be named after the function you want them to run after,
-for example if the plugin function is named "episode_download", it will be
-run after the episode_download client function is complete.
-
-Plugin functions should take 4 argument the first being the hathor client
-(self), and the second being the result of the original client function, and the next being the `*args` and `**kwargs` the original function was called with.
-
-Plugins should also return a result, that will be treated as the result of the
-client function.
-
-Take the following plugin function for example:
-
-```
-
-    # the following is in hathor/plugins/fix_title.py
-    from hathor.database.tables import PodcastEpisode
-
-    def episode_download(self, results, *args, **kwargs):
-        for episode in results:
-            if episode['podcast_id'] in [2, 3, 5]:
-                episode['title'] = 'some fancy title'
-                episode_obj = self.db_session.query(PodcastEpisode).get(episode['id'])
-                episode_obj.title = 'some fancy title'
-                self.db_session.commit()
-        return results
-```
-
-This will change the title of new episodes for certain podcasts. Note that for the change
-to be permanent, you'll have to change the episodes in the database.
