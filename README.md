@@ -178,6 +178,47 @@ Extract cover art from an audio file:
 $ audio-tool picture-extract <audio-file> <output-file>
 ```
 
+## Docker
+
+Build the image:
+
+```bash
+docker build -t hathor .
+```
+
+Create a config file pointing to container paths:
+
+```yaml
+---
+hathor:
+  podcast_directory: /podcasts
+  database_connection_string: sqlite:////data/hathor.sql
+  google_api_key: abc1234
+logging:
+  logging_file: /data/hathor.log
+  console_logging: true
+  log_level: 20
+```
+
+Run a podcast sync, mounting your local directories:
+
+```bash
+docker run --rm \
+  -v /home/user/podcasts:/podcasts \
+  -v /home/user/hathor-data:/data \
+  -v /home/user/hathor-config:/config \
+  hathor -c /config/hathor_config.yml podcast sync
+```
+
+To use `audio-tool`, override the entrypoint:
+
+```bash
+docker run --rm \
+  --entrypoint audio-tool \
+  -v /home/user/podcasts:/podcasts \
+  hathor tags-show /podcasts/episode.mp3
+```
+
 ## Development
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on setting up a local dev environment, running tests, and writing plugins.
