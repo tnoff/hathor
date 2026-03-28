@@ -129,6 +129,18 @@ def test_generate_id3_no_header():
             metadata.picture_extract('/fake/file.mp3', '/fake/out.jpg')
         assert 'Invalid file' in str(error.value)
 
+def test_audio_picture_extract_unknown_mime():
+    mock_picture = MagicMock()
+    mock_picture.mime = 'application/octet-stream'
+    mock_id3 = MagicMock()
+    mock_id3.__iter__ = MagicMock(return_value=iter(['APIC']))
+    mock_id3.__getitem__ = MagicMock(return_value=mock_picture)
+    with patch('hathor.audio.metadata.ID3', return_value=mock_id3):
+        with patch('hathor.audio.metadata.guess_extension', return_value=None):
+            with pytest.raises(AudioFileException) as error:
+                metadata.picture_extract('/fake/file.mp3', '/fake/out.bin')
+            assert 'Unrecognised picture mimetype' in str(error.value)
+
 def test_tags_update_type_error():
     mock_audio = MagicMock()
     mock_audio.__iter__ = MagicMock(return_value=iter([]))
