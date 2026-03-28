@@ -31,7 +31,7 @@ def tags_update(_ctx, input_file, key_values):
     '''
     data = {}
     for item in key_values.split(','):
-        parts = item.split('=')
+        parts = item.split('=', 1)
         data[parts[0]] = parts[1]
     result = metadata.tags_update(input_file, data)
     click.echo(dumps(result, indent=4))

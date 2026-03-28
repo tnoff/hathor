@@ -7,3 +7,4 @@ pytest-cov==7.1.0
 tox==4.50.3
 pylint==4.0.5
 requests-mock==1.12.1
+bandit==1.9.4

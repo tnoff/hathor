@@ -22,7 +22,7 @@ tox
 Run tests only (no lint):
 
 ```bash
-pytest --cov=hathor/ --cov-report=html --cov-fail-under=95 tests/
+pytest --cov=hathor --cov-report=html --cov-fail-under=98 tests/
 ```
 
 Run a single test file:
