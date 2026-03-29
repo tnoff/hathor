@@ -6,7 +6,7 @@ on:
 
 jobs:
   store-coverage:
-    uses: tnoff/github-workflows/.github/workflows/coverage-store.yml@a67b99238aa5f23f5015cab31d81da16101f42f1
+    uses: tnoff/github-workflows/.github/workflows/coverage-store.yml@ace23270fbc86eea0152c1cd2b186a03d9839072
     with:
       coverage_source: hathor
       install_command: pip install -r requirements.txt -r tests/requirements.txt
