@@ -4,23 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hathor"
-dynamic = ["version"]
+dynamic = ["version", "dependencies"]
 description = "Hathor Audio File Manager"
 authors = [
     {name = "Tyler D. North", email = "me@tyler-north.com"}
 ]
 requires-python = ">=3.10"
-dependencies = [
-    "click==8.3.1",
-    "feedparser==6.0.12",
-    "google-api-python-client==2.193.0",
-    "mutagen==1.47.0",
-    "pyaml-env==1.2.2",
-    "requests==2.33.0",
-    "SQLAlchemy==2.0.48",
-    "validators==0.35.0",
-    "yt-dlp==2026.3.17",
-]
 
 [project.scripts]
 hathor = "hathor.cli:main"
@@ -28,6 +17,7 @@ audio-tool = "hathor.audio.cli:main"
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}
+dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.packages.find]
 exclude = ["tests*"]
