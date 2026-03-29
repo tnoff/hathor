@@ -6,6 +6,15 @@ on:
 jobs:
   check-pins:
     uses: tnoff/github-workflows/.github/workflows/check-action-pins.yml@ace23270fbc86eea0152c1cd2b186a03d9839072
+  coverage:
+    uses: tnoff/github-workflows/.github/workflows/coverage-check.yml@ace23270fbc86eea0152c1cd2b186a03d9839072
+    permissions:
+      contents: read
+      actions: read
+    with:
+      coverage_source: hathor
+      install_command: pip install -r requirements.txt -r tests/requirements.txt
+      python_version: 3.14
   build:
     name: Tox
     runs-on: ubuntu-24.04
