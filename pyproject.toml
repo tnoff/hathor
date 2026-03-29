@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hathor"
+dynamic = ["version", "dependencies"]
+description = "Hathor Audio File Manager"
+authors = [
+    {name = "Tyler D. North", email = "me@tyler-north.com"}
+]
+requires-python = ">=3.10"
+
+[project.scripts]
+hathor = "hathor.cli:main"
+audio-tool = "hathor.audio.cli:main"
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+exclude = ["tests*"]

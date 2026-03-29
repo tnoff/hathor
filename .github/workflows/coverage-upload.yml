@@ -1,0 +1,13 @@
+name: Coverage Upload
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  store-coverage:
+    uses: tnoff/github-workflows/.github/workflows/coverage-store.yml@a67b99238aa5f23f5015cab31d81da16101f42f1
+    with:
+      coverage_source: hathor
+      install_command: pip install -r requirements.txt -r tests/requirements.txt
+      python_version: 3.14
