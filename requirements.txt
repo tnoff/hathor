@@ -3,7 +3,7 @@ feedparser==6.0.12
 google-api-python-client==2.193.0
 mutagen==1.47.0
 pyaml-env==1.2.2
-requests==2.33.0
+requests==2.33.1
 SQLAlchemy==2.0.48
 validators==0.35.0
 yt-dlp==2026.3.17
