@@ -4,7 +4,7 @@ moviepy==2.2.1
 # Moviepy doesn't play well with this one
 pillow
 pytest-cov==7.1.0
-tox==4.52.0
+tox==4.52.1
 pylint==4.0.5
 requests-mock==1.12.1
 bandit==1.9.4
