@@ -1,4 +1,4 @@
-click==8.3.2
+click==8.3.3
 feedparser==6.0.12
 google-api-python-client==2.194.0
 mutagen==1.47.0
