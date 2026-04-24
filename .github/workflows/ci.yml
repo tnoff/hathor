@@ -5,15 +5,16 @@ on:
 
 jobs:
   check-pins:
-    uses: tnoff/github-workflows/.github/workflows/check-action-pins.yml@67a771844f0c59a3e310920197cc173be4d5805b
+    uses: tnoff/github-workflows/.github/workflows/check-action-pins.yml@1dcefc7c5dfeb21105e3256bf21fc97b8552252e
   coverage:
-    uses: tnoff/github-workflows/.github/workflows/coverage-check.yml@67a771844f0c59a3e310920197cc173be4d5805b
+    uses: tnoff/github-workflows/.github/workflows/coverage-check.yml@1dcefc7c5dfeb21105e3256bf21fc97b8552252e
     permissions:
       contents: read
       actions: read
+      pull-requests: write
     with:
       coverage_source: hathor
-      install_command: pip install -r requirements.txt -r tests/requirements.txt
+      install_command: pip install .[test]
       python_version: 3.14
   build:
     name: Tox
