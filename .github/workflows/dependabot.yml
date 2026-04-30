@@ -8,7 +8,7 @@ jobs:
   bump-version:
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@1dcefc7c5dfeb21105e3256bf21fc97b8552252e
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@06f676738efdf3f327af0059b3ce0c6f187e1b5c
     with:
       paths: '["pyproject.toml"]'
       version_file: './VERSION'
