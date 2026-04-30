@@ -1,12 +1,12 @@
 from contextlib import contextmanager
+from pathlib import Path
+from shutil import copyfile
 from tempfile import NamedTemporaryFile
+import os
 import random
 import string
 
-from moviepy.audio.AudioClip import AudioClip
-from moviepy.video.VideoClip import ImageClip
-import numpy as np
-from PIL import Image
+FIXTURES_DIR = Path(__file__).parent / 'fixtures'
 
 def random_string(prefix: str = '', suffix: str = '', length: int = 10):
     chars = string.ascii_lowercase + string.digits
@@ -14,31 +14,27 @@ def random_string(prefix: str = '', suffix: str = '', length: int = 10):
     return prefix + tempy + suffix
 
 @contextmanager
-def temp_audio_file(duration=2, suffix='.mp3'):
-    # logic taken from https://zulko.github.io/moviepy/ref/AudioClip.html?highlight=sin
+def temp_audio_file(suffix='.mp3'):
+    src = FIXTURES_DIR / f'test_audio{suffix}'
+    with NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+        copyfile(src, temp_file.name)
     try:
-        with NamedTemporaryFile(suffix=suffix) as temp_file:
-            audio_frames = lambda t: 2 *[np.sin(404 * 2 * np.pi * t)]
-            audioclip = AudioClip(audio_frames, duration=duration)
-            if suffix == '.mp3':
-                audioclip.write_audiofile(temp_file.name, fps=44100, logger=None)
-            else:
-                image = ImageClip(np.random.rand(30, 30, 3) * 255)
-                videoclip = image.with_audio(audioclip)
-                videoclip.duration = duration
-                videoclip.fps = 24
-                videoclip.write_videofile(temp_file.name, logger=None)
-
-            yield temp_file.name
-    except FileNotFoundError:
-        pass
-
+        yield temp_file.name
+    finally:
+        try:
+            os.unlink(temp_file.name)
+        except FileNotFoundError:
+            pass
 
 @contextmanager
 def temp_image_file(suffix='.jpg'):
-    # stolen from http://stackoverflow.com/questions/10901049/create-set-of-random-jpgs
-    with NamedTemporaryFile(suffix=suffix) as temp_file:
-        randoms = np.random.rand(30, 30, 3) * 255
-        im_out = Image.fromarray(randoms.astype('uint8')).convert('RGB')
-        im_out.save(temp_file.name)
+    src = FIXTURES_DIR / f'test_image{suffix}'
+    with NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+        copyfile(src, temp_file.name)
+    try:
         yield temp_file.name
+    finally:
+        try:
+            os.unlink(temp_file.name)
+        except FileNotFoundError:
+            pass

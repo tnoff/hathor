@@ -1,0 +1,18 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "matchDepTypes": ["devDependencies"],
+      "matchPackageNames": ["pytest", "pytest-cov", "pytest-mock", "requests-mock", "tox", "pylint", "bandit"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "automerge": true
+    },
+    {
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    }
+  ]
+}
