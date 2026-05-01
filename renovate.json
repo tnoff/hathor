@@ -3,6 +3,7 @@
   "extends": [
     "config:recommended"
   ],
+  "enabledManagers": ["gitlabci", "gitlabci-include", "pep621", "dockerfile"],
   "packageRules": [
     {
       "matchDepTypes": ["devDependencies"],
