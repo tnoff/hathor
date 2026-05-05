@@ -36,7 +36,7 @@ bump-version:
 
 docker-build:
   stage: validate
-  image: docker.io/moby/buildkit:v0.18.0
+  image: docker.io/moby/buildkit:v0.29.0
   script:
     - |
       buildctl --addr tcp://buildkitd.gitlab-runner.svc.cluster.local:1234 build \
