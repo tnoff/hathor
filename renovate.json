@@ -7,16 +7,14 @@
   "rebaseWhen": "behind-base-branch",
   "packageRules": [
     {
-      "matchDepTypes": ["test"],
       "matchPackageNames": ["pytest", "pytest-cov", "pytest-mock", "requests-mock", "tox", "pylint", "bandit"],
-      "matchUpdateTypes": ["major", "minor", "patch"],
       "additionalBranchPrefix": "test-",
       "automerge": true
     },
     {
-      "matchUpdateTypes": ["patch"],
-      "additionalBranchPrefix": "dev-",
-      "automerge": true
+      "matchManagers": ["pep621", "dockerfile"],
+      "matchPackageNames": ["!pytest", "!pytest-cov", "!pytest-mock", "!requests-mock", "!tox", "!pylint", "!bandit"],
+      "additionalBranchPrefix": "dev-"
     }
   ]
 }
