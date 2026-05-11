@@ -1,22 +1,25 @@
 include:
   - project: 'tnoff-projects/github-workflows'
-    ref: 3da3fbad9511bedebfa258d09af3267697709fcb
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
     file: '/gitlab/tag.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: 3da3fbad9511bedebfa258d09af3267697709fcb
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
     file: '/gitlab/discord-notify.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: 3da3fbad9511bedebfa258d09af3267697709fcb
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
     file: '/gitlab/renovate.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: 3da3fbad9511bedebfa258d09af3267697709fcb
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
     file: '/gitlab/trufflehog.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: 3da3fbad9511bedebfa258d09af3267697709fcb
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
     file: '/gitlab/trufflehog-image.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: 3da3fbad9511bedebfa258d09af3267697709fcb
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
     file: '/gitlab/bump-version.yml'
+  - project: 'tnoff-projects/github-workflows'
+    ref: 5872f0029aac5cb47856ee99b28f5bf080869d18
+    file: '/gitlab/release.yml'
 
 default:
   tags:
@@ -26,6 +29,7 @@ stages:
   - validate
   - test
   - tag
+  - release
   - notify
   - renovate
 
@@ -33,6 +37,7 @@ bump-version:
   extends: .bump-version
   variables:
     GITLAB_PUSH_TOKEN: $RENOVATE_TOKEN
+    BUMP_CHANGELOG: 'true'
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^renovate\/dev-/
 
@@ -172,6 +177,16 @@ tag-build:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
       when: on_success
 
+release:
+  extends: .release
+  stage: release
+  needs:
+    - job: tag-build
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
+      when: on_success
+
 notify-mr:
   extends: .discord-notify
   stage: notify
@@ -193,6 +208,19 @@ notify-tag-failure:
   variables:
     NOTIFY_TYPE: failure
     DISCORD_WEBHOOK_URL: $DISCORD_BUILD_FAILURE_WEBHOOK
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
+      when: on_failure
+
+notify-release-failure:
+  extends: .discord-notify
+  stage: notify
+  needs: [release]
+  allow_failure: true
+  variables:
+    NOTIFY_TYPE: failure
+    DISCORD_WEBHOOK_URL: $DISCORD_BUILD_FAILURE_WEBHOOK
+    NOTIFY_MESSAGE: 'Release job failed'
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
       when: on_failure

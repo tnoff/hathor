@@ -1,0 +1,21 @@
+# Files excluded from `git archive` output (and therefore from the
+# auto-generated source tarballs attached to GitLab Releases). Does not
+# affect normal clones or the sdist/wheel produced by setuptools/build —
+# those follow pyproject.toml's include rules.
+
+.claude/         export-ignore
+.github/         export-ignore
+tests/           export-ignore
+
+.gitattributes   export-ignore
+.gitlab-ci.yml   export-ignore
+.pylintrc        export-ignore
+.pylintrc.test   export-ignore
+AGENTS.md        export-ignore
+CHANGELOG.md     export-ignore
+CONTRIBUTING.md  export-ignore
+DEVELOPMENT.md   export-ignore
+Dockerfile       export-ignore
+README.md        export-ignore
+renovate.json    export-ignore
+tox.ini          export-ignore
