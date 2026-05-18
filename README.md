@@ -84,6 +84,8 @@ For **Youtube**, the broadcast ID is the channel ID from the channel URL. For ex
 
 You may need to use 3rd party tools to find the channel ID of a particular uploader, such as [ytlarge](https://ytlarge.com/youtube/channel-id-finder/).
 
+Note: when a YouTube live broadcast has just ended, hathor will skip the download until YouTube finishes producing the on-demand VOD (usually minutes to a couple hours, depending on length). The episode is automatically retried on the next sync.
+
 
 ### Downloading Podcasts
 

@@ -1,7 +1,7 @@
+import re
 from datetime import datetime
 from logging import RootLogger
 from mimetypes import guess_extension, guess_type
-from re import match
 from pathlib import Path
 from time import mktime
 
@@ -15,6 +15,18 @@ from yt_dlp.utils import DownloadError
 
 from hathor.exc import FunctionUndefined, HathorException
 from hathor import utils
+
+_YOUTUBE_VIDEO_ID_RE = re.compile(
+    r'(?:youtube\.com/(?:watch\?(?:[^ ]*&)?v=|live/|embed/|shorts/)|youtu\.be/)'
+    r'(?P<id>[A-Za-z0-9_-]{11})'
+)
+
+def extract_youtube_video_id(youtube_url: str) -> str | None:
+    '''Return the 11-char videoId from a YouTube URL, or None if not parseable.'''
+    if not youtube_url:
+        return None
+    m = _YOUTUBE_VIDEO_ID_RE.search(youtube_url)
+    return m.group('id') if m else None
 
 def curl_download(episode_url: str, output_path: Path) -> int:
     '''
@@ -60,7 +72,7 @@ def verify_title_filters(filters: list[str], title: str) -> bool:
     '''
     valid = True
     for filty in filters:
-        matches = match(filty, title)
+        matches = re.match(filty, title)
         if not matches:
             valid = False
             break
@@ -216,16 +228,65 @@ class YoutubeManager(ArchiveInterface):
             req = youtube_api.search().list_next(req, response) #pylint:disable=no-member
         return archive_data
 
+    def _youtube_vod_ready(self, download_url: str) -> bool:
+        '''
+        Return False iff the URL points at a YouTube video that is currently
+        live, scheduled, or a finished live still being processed into a VOD.
+        Return True otherwise (regular VODs, fully-processed live VODs, and
+        any case where we cannot decide confidently).
+        '''
+        video_id = extract_youtube_video_id(download_url)
+        if not video_id:
+            return True
+
+        try:
+            youtube_api = build('youtube', 'v3', developerKey=self.google_api_key)
+            resp = youtube_api.videos().list( #pylint:disable=no-member
+                part='snippet,liveStreamingDetails,contentDetails',
+                id=video_id,
+                fields='items(snippet/liveBroadcastContent,'
+                       'liveStreamingDetails/actualEndTime,'
+                       'contentDetails/duration)',
+            ).execute()
+        except Exception as e: #pylint:disable=broad-except
+            self.logger.warning(f'YouTube liveness check failed for {download_url}: {str(e)}')
+            return True
+
+        items = resp.get('items') or []
+        if not items:
+            return True
+
+        item = items[0]
+        broadcast = (item.get('snippet') or {}).get('liveBroadcastContent')
+        if broadcast in ('live', 'upcoming'):
+            self.logger.info(f'Deferring {download_url}: broadcast is {broadcast}')
+            return False
+
+        live_details = item.get('liveStreamingDetails') or {}
+        duration = (item.get('contentDetails') or {}).get('duration')
+        if live_details.get('actualEndTime') and duration in (None, 'PT0S'):
+            self.logger.info(f'Deferring {download_url}: live ended, VOD still processing')
+            return False
+
+        return True
+
     def episode_download(self, download_url: str, output_prefix: str, **_) -> (Path, int):
         '''
         Download episode from url
         download_url    : URL to download from
         output_prefix   : Name of file, should not include suffix
         '''
+        if not self._youtube_vod_ready(download_url):
+            return None, None
         options = {
             'outtmpl' : f'{output_prefix}.%(ext)s',
             'noplaylist' : True,
-            'format': 'bestvideo+bestaudio',
+            'format': (
+                'bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]'
+                '/bestvideo[vcodec^=vp9]+bestaudio'
+                '/bestvideo+bestaudio'
+                '/best'
+            ),
             'logger' : self.logger,
         }
         try:

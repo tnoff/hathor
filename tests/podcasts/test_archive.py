@@ -1,6 +1,8 @@
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
+import random
+import string
 from tempfile import TemporaryDirectory
 from time import struct_time
 
@@ -11,7 +13,7 @@ from yt_dlp.utils import DownloadError
 from hathor.client import HathorClient
 from hathor.exc import HathorException, FunctionUndefined
 from hathor.podcast.archive import ArchiveInterface, RSSManager, YoutubeManager
-from hathor.podcast.archive import verify_title_filters
+from hathor.podcast.archive import extract_youtube_video_id, verify_title_filters
 
 from tests import utils as test_utils
 from tests.data.rss_feed import SIMPLE_RSS_FEED
@@ -335,3 +337,193 @@ def test_youtube_broadcast_download_error(mocker):
     file_path, size = manager.episode_download('foo', 'bar')
     assert file_path is None
     assert size is None
+
+
+_VIDEO_ID_ALPHABET = string.ascii_letters + string.digits + '-_'
+
+
+def random_video_id() -> str:
+    return ''.join(random.choices(_VIDEO_ID_ALPHABET, k=11))
+
+
+def random_past_iso_timestamp() -> str:
+    minutes_ago = random.randint(1, 60 * 24 * 30)
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).isoformat()
+
+
+def random_duration() -> str:
+    hours = random.randint(0, 4)
+    minutes = random.randint(1, 59)
+    seconds = random.randint(1, 59)
+    return f'PT{hours}H{minutes}M{seconds}S'
+
+
+@pytest.mark.parametrize('url_template,should_match', [
+    ('https://www.youtube.com/watch?v={vid}', True),
+    ('https://youtube.com/watch?v={vid}&t=10s', True),
+    ('https://www.youtube.com/live/{vid}', True),
+    ('https://youtu.be/{vid}', True),
+    ('https://www.youtube.com/embed/{vid}', True),
+    ('https://www.youtube.com/shorts/{vid}', True),
+    ('https://example.com/watch?v={vid}', False),
+])
+def test_extract_youtube_video_id_url_shapes(url_template, should_match):
+    vid = random_video_id()
+    result = extract_youtube_video_id(url_template.format(vid=vid))
+    assert result == (vid if should_match else None)
+
+
+@pytest.mark.parametrize('input_url', ['foo', ''])
+def test_extract_youtube_video_id_unparseable(input_url):
+    assert extract_youtube_video_id(input_url) is None
+
+
+class MockVideosRequest():
+    def __init__(self, response):
+        self._response = response
+
+    def execute(self):
+        return self._response
+
+
+class MockVideos():
+    def __init__(self, response):
+        self._response = response
+        self.list_calls = []
+
+    def list(self, **kwargs):
+        self.list_calls.append(kwargs)
+        return MockVideosRequest(self._response)
+
+
+class MockYoutubeFull():
+    '''Mock that supports both search() (existing) and videos() (new).'''
+    def __init__(self, videos_response):
+        self.videos_mock = MockVideos(videos_response)
+
+    def search(self):
+        return MockYoutubeSearch()
+
+    def videos(self):
+        return self.videos_mock
+
+
+def make_videos_build(videos_response):
+    holder = {}
+    def builder(_typer, _version, developerKey=None): #pylint:disable=invalid-name,unused-argument
+        client = MockYoutubeFull(videos_response)
+        holder['client'] = client
+        return client
+    return builder, holder
+
+
+def _live_url() -> str:
+    return f'https://www.youtube.com/live/{random_video_id()}'
+
+
+def test_youtube_download_skips_live_broadcast(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    builder, _ = make_videos_build({
+        'items': [{
+            'snippet': {'liveBroadcastContent': 'live'},
+            'liveStreamingDetails': {},
+            'contentDetails': {'duration': 'PT0S'},
+        }]
+    })
+    mocker.patch('hathor.podcast.archive.build', side_effect=builder)
+    yt_mock = mocker.patch('hathor.podcast.archive.YoutubeDL')
+    file_path, size = manager.episode_download(_live_url(), 'bar')
+    assert file_path is None
+    assert size is None
+    yt_mock.assert_not_called()
+
+
+def test_youtube_download_skips_upcoming_broadcast(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    builder, _ = make_videos_build({
+        'items': [{
+            'snippet': {'liveBroadcastContent': 'upcoming'},
+            'liveStreamingDetails': {},
+            'contentDetails': {},
+        }]
+    })
+    mocker.patch('hathor.podcast.archive.build', side_effect=builder)
+    yt_mock = mocker.patch('hathor.podcast.archive.YoutubeDL')
+    file_path, size = manager.episode_download(_live_url(), 'bar')
+    assert file_path is None
+    assert size is None
+    yt_mock.assert_not_called()
+
+
+def test_youtube_download_skips_live_still_processing(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    builder, _ = make_videos_build({
+        'items': [{
+            'snippet': {'liveBroadcastContent': 'none'},
+            'liveStreamingDetails': {'actualEndTime': random_past_iso_timestamp()},
+            'contentDetails': {'duration': 'PT0S'},
+        }]
+    })
+    mocker.patch('hathor.podcast.archive.build', side_effect=builder)
+    yt_mock = mocker.patch('hathor.podcast.archive.YoutubeDL')
+    file_path, size = manager.episode_download(_live_url(), 'bar')
+    assert file_path is None
+    assert size is None
+    yt_mock.assert_not_called()
+
+
+def test_youtube_download_proceeds_for_processed_live_vod(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    builder, _ = make_videos_build({
+        'items': [{
+            'snippet': {'liveBroadcastContent': 'none'},
+            'liveStreamingDetails': {'actualEndTime': random_past_iso_timestamp()},
+            'contentDetails': {'duration': random_duration()},
+        }]
+    })
+    mocker.patch('hathor.podcast.archive.build', side_effect=builder)
+    with test_utils.temp_audio_file(suffix='.mp4') as temp_audio_file:
+        mocker.patch('hathor.podcast.archive.YoutubeDL',
+                     side_effect=generate_mock_youtube(temp_audio_file))
+        _file_path, size = manager.episode_download(_live_url(), 'bar')
+        assert size == Path(temp_audio_file).stat().st_size
+
+
+def test_youtube_download_proceeds_for_regular_vod(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    builder, _ = make_videos_build({
+        'items': [{
+            'snippet': {'liveBroadcastContent': 'none'},
+            'contentDetails': {'duration': random_duration()},
+        }]
+    })
+    mocker.patch('hathor.podcast.archive.build', side_effect=builder)
+    with test_utils.temp_audio_file(suffix='.mp4') as temp_audio_file:
+        mocker.patch('hathor.podcast.archive.YoutubeDL',
+                     side_effect=generate_mock_youtube(temp_audio_file))
+        _file_path, size = manager.episode_download(
+            f'https://www.youtube.com/watch?v={random_video_id()}', 'bar')
+        assert size == Path(temp_audio_file).stat().st_size
+
+
+def test_youtube_download_proceeds_when_api_check_fails(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    def boom(*_args, **_kwargs):
+        raise RuntimeError('api unreachable')
+    mocker.patch('hathor.podcast.archive.build', side_effect=boom)
+    with test_utils.temp_audio_file(suffix='.mp4') as temp_audio_file:
+        mocker.patch('hathor.podcast.archive.YoutubeDL',
+                     side_effect=generate_mock_youtube(temp_audio_file))
+        _file_path, size = manager.episode_download(_live_url(), 'bar')
+        assert size == Path(temp_audio_file).stat().st_size
+
+
+def test_youtube_download_proceeds_when_video_not_found(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    builder, _ = make_videos_build({'items': []})
+    mocker.patch('hathor.podcast.archive.build', side_effect=builder)
+    with test_utils.temp_audio_file(suffix='.mp4') as temp_audio_file:
+        mocker.patch('hathor.podcast.archive.YoutubeDL',
+                     side_effect=generate_mock_youtube(temp_audio_file))
+        _file_path, size = manager.episode_download(_live_url(), 'bar')
+        assert size == Path(temp_audio_file).stat().st_size

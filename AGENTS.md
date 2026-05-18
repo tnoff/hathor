@@ -1,40 +1,8 @@
 # AGENTS.md
 
-This file provides guidance to AI coding agents when working with code in this repository.
+This file provides guidance to AI coding agents working in this repository. It documents code-internal structure that isn't covered by the user-facing docs.
 
-## Commands
-
-**Install:**
-```bash
-pip install -e .
-pip install -r requirements.txt -r tests/requirements.txt
-```
-
-**Run all tests with lint and coverage:**
-```bash
-tox
-```
-
-**Run tests only (no lint):**
-```bash
-pytest --cov=hathor/ --cov-report=html --cov-fail-under=95 tests/
-```
-
-**Run a single test file:**
-```bash
-pytest tests/podcasts/test_archive.py
-```
-
-**Run a single test:**
-```bash
-pytest tests/podcasts/test_archive.py::TestClassName::test_method_name
-```
-
-**Lint:**
-```bash
-pylint hathor/
-pylint --rcfile .pylintrc.test tests/
-```
+For setup, test, and lint commands see [DEVELOPMENT.md](DEVELOPMENT.md). For user-facing usage (CLI, config schema, Docker, archive types) see [README.md](README.md).
 
 ## Architecture
 
@@ -51,7 +19,7 @@ Three SQLAlchemy models: `Podcast`, `PodcastEpisode`, `PodcastTitleFilter`. Each
 **`hathor/podcast/archive.py`**
 Archive backends behind `ArchiveInterface`. Two implementations:
 - `RSSManager` — parses RSS feeds via `feedparser`, downloads files via HTTP (`curl_download`)
-- `YoutubeManager` — uses Google API to list videos, downloads via `yt-dlp`
+- `YoutubeManager` — uses Google API to list videos, downloads via `yt-dlp`. Before download, calls `videos.list` to check `liveBroadcastContent` / `liveStreamingDetails.actualEndTime` / `contentDetails.duration` and defers (returns `(None, None)`) when the video is live, upcoming, or a finished live still being processed into a VOD — those return to the queue for the next sync
 
 `ARCHIVE_TYPES` dict maps string keys (`'rss'`, `'youtube'`) to classes. `HathorClient._archive_manager()` instantiates the right one.
 
@@ -59,14 +27,14 @@ Archive backends behind `ArchiveInterface`. Two implementations:
 Audio tag manipulation via `mutagen`. Used by `HathorClient.__episode_download_input` to set tags after download.
 
 **`hathor/cli.py`**
-Click-based CLI exposing all `HathorClient` methods. Config is loaded from `~/.hathor_config.yml` (or `-c` flag) via `pyaml_env`. The config has `hathor:` and `logging:` sections.
+Click-based CLI exposing all `HathorClient` methods. Config is loaded via `pyaml_env` from the path described in README.md.
 
 **`hathor/audio/cli.py`**
 Separate CLI (`audio-tool`) for direct audio file tag operations.
 
 ### Plugin System
 
-Place Python files in `hathor/plugins/`. Functions named after a `HathorClient` method will be called after that method with signature `(client, result, *args, **kwargs)` and must return the result. Plugins are auto-discovered at client init via `load_plugins()`.
+Place Python files in `hathor/plugins/`. They are auto-discovered at client init via `load_plugins()`. See [DEVELOPMENT.md](DEVELOPMENT.md#plugins) for the function signature, naming convention, and an example.
 
 ### Test Layout
 
