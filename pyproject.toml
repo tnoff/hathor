@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 dependencies = [
     "click==8.4.2",
     "feedparser==6.0.12",
-    "google-api-python-client==2.197.0",
+    "google-api-python-client==2.198.0",
     "mutagen==1.48.1",
     "pyaml-env==1.2.2",
     "requests==2.34.2",
