@@ -17,7 +17,7 @@ dependencies = [
     "mutagen==1.48.1",
     "pyaml-env==1.2.2",
     "requests==2.34.2",
-    "SQLAlchemy==2.0.50",
+    "SQLAlchemy==2.0.51",
     "validators==0.35.0",
     "yt-dlp==2026.6.9",
 ]
