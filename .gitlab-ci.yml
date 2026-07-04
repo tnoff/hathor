@@ -48,8 +48,12 @@ stages:
 # behaviour (python source, deps, version, Dockerfile itself). Doc-only or
 # test-only changes get an image rebuild skipped — that's the optimization
 # win on the OKE runner with concurrent=2, where these jobs otherwise burn
-# slots needed by the tox matrix. Fork MRs keep the manual gate;
-# default-branch builds always run.
+# slots needed by the tox matrix. Fork MRs keep the manual gate.
+#
+# Deliberately NOT run on the default branch: there, docker-push already
+# rebuilds and pushes the image directly and in parallel, so a separate
+# build-check is just a redundant second build, and a post-push image scan
+# gates nothing (the image is already in the registry).
 .image-build-rules:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_PROJECT_ID != $CI_PROJECT_ID
@@ -60,7 +64,6 @@ stages:
         - hathor/**/*
         - pyproject.toml
         - VERSION
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
 
 bump-version:
   extends: .bump-version
