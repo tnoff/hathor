@@ -14,7 +14,7 @@ dependencies = [
     "click==8.4.2",
     "feedparser==6.0.12",
     "google-api-python-client==2.197.0",
-    "mutagen==1.47.0",
+    "mutagen==1.48.1",
     "pyaml-env==1.2.2",
     "requests==2.34.2",
     "SQLAlchemy==2.0.50",
