@@ -1,33 +1,36 @@
 include:
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/tag.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/discord-notify.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/renovate.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/branch-cleanup.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/trufflehog.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/trufflehog-image.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/bump-version.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
+    file: '/gitlab/assemble-changelog.yml'
+  - project: 'tnoff-projects/github-workflows'
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/release.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/buildkit-build-check.yml'
   - project: 'tnoff-projects/github-workflows'
-    ref: cfe4637ce67d24b088e57e2f26db6ed9cc047f5b
+    ref: 54fe29a3aad737c40f2b89ae2f25d7f48edeb127
     file: '/gitlab/tox-pipeline.yml'
 
 default:
@@ -68,9 +71,24 @@ bump-version:
   extends: .bump-version
   variables:
     GITLAB_PUSH_TOKEN: $RENOVATE_TOKEN
+    # Writes a per-MR changelog.d/<slug>.md fragment (conflict-free) instead of
+    # prepending the shared CHANGELOG.md. Folded at release by assemble-changelog.
     BUMP_CHANGELOG: 'true'
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^renovate\/dev-/
+
+# Folds accumulated changelog.d/*.md fragments into CHANGELOG.md on the default
+# branch, deletes them, and pushes back (idempotent — no-op when the dir is
+# empty). The push (via RENOVATE_TOKEN) fires a follow-up pipeline in which the
+# dir is empty, so push:tag's GATE_ON_FRAGMENTS passes and tag/release run
+# against the assembled tree. Runs in .pre, before push:tag.
+"assemble-changelog":
+  extends: .assemble-changelog
+  stage: .pre
+  variables:
+    GITLAB_PUSH_TOKEN: $RENOVATE_TOKEN
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
 
 "pr-check:build":
   extends: .buildkit-build-check
@@ -116,6 +134,10 @@ bump-version:
 "push:tag":
   extends: .tag
   stage: push
+  variables:
+    # Defer tag/release to the post-assemble follow-up pipeline while changelog
+    # fragments are still pending (option a); .release skips via TAG_CREATED.
+    GATE_ON_FRAGMENTS: 'true'
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
       when: on_success
