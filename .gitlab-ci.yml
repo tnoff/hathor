@@ -177,42 +177,6 @@ bump-version:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: always
 
-"notify:tag-failure":
-  extends: .discord-notify
-  stage: notify
-  needs: ["push:tag"]
-  variables:
-    NOTIFY_TYPE: failure
-    DISCORD_WEBHOOK_URL: $DISCORD_BUILD_FAILURE_WEBHOOK
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
-      when: on_failure
-
-"notify:release-failure":
-  extends: .discord-notify
-  stage: notify
-  needs: ["push:release"]
-  allow_failure: true
-  variables:
-    NOTIFY_TYPE: failure
-    DISCORD_WEBHOOK_URL: $DISCORD_BUILD_FAILURE_WEBHOOK
-    NOTIFY_MESSAGE: 'Release job failed'
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE != "schedule"
-      when: on_failure
-
-"notify:renovate-failure":
-  extends: .discord-notify
-  stage: renovate
-  needs: [renovate]
-  variables:
-    NOTIFY_TYPE: failure
-    DISCORD_WEBHOOK_URL: $DISCORD_BUILD_FAILURE_WEBHOOK
-    NOTIFY_MESSAGE: 'Renovate failed'
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: on_failure
-
 "notify:merged":
   extends: .discord-notify
   stage: notify
@@ -246,14 +210,3 @@ branch-cleanup:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
 
-"notify:cleanup-failure":
-  extends: .discord-notify
-  stage: renovate
-  needs: [branch-cleanup]
-  variables:
-    NOTIFY_TYPE: failure
-    DISCORD_WEBHOOK_URL: $DISCORD_BUILD_FAILURE_WEBHOOK
-    NOTIFY_MESSAGE: 'Branch cleanup failed'
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: on_failure
