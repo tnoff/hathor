@@ -274,20 +274,20 @@ class MockYoutube():
 def google_api_build(_typer, _version, developerKey=None): #pylint:disable=invalid-name,unused-argument
     return MockYoutube()
 
-def test_youtube_brodcast_update(mocker):
+def test_youtube_broadcast_update(mocker):
     manager = YoutubeManager(logging, google_api_key='derp')
     mocker.patch('hathor.podcast.archive.build', side_effect=google_api_build)
     episode_list = manager.broadcast_update('foo')
     assert len(episode_list) == 2
 
-def test_youtube_brodcast_update_max_results(mocker):
+def test_youtube_broadcast_update_max_results(mocker):
     manager = YoutubeManager(logging, google_api_key='derp')
     mocker.patch('hathor.podcast.archive.build', side_effect=google_api_build)
     episode_list = manager.broadcast_update('foo', max_results=1)
     assert len(episode_list) == 1
     assert episode_list[0]['title'] == 'Episode 0'
 
-def test_youtube_brodcast_update_filters(mocker):
+def test_youtube_broadcast_update_filters(mocker):
     manager = YoutubeManager(logging, google_api_key='derp')
     mocker.patch('hathor.podcast.archive.build', side_effect=google_api_build)
     episode_list = manager.broadcast_update('foo', filters=[r'^Episode 1'])
@@ -367,7 +367,7 @@ def random_duration() -> str:
     ('https://www.youtube.com/shorts/{vid}', True),
     ('https://example.com/watch?v={vid}', False),
 ])
-def test_extract_youtube_video_id_url_shapes(url_template, should_match):
+def test_extract_youtube_video_id_from_url_shapes(url_template, should_match):
     vid = random_video_id()
     result = extract_youtube_video_id(url_template.format(vid=vid))
     assert result == (vid if should_match else None)

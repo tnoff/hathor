@@ -100,7 +100,7 @@ def test_podcast_update():
                               artist_name='foobar1234',
                               automatic_download=False)
 
-def test_podcast_update_invalid_max_download():
+def test_podcast_update_rejects_negative_max_allowed():
     with TemporaryDirectory() as tmp_dir:
         client = HathorClient(podcast_directory=tmp_dir)
         client.podcast_create('rss', 'foo1234', 'temp pod name')
