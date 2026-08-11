@@ -1,2 +1,0 @@
-Added ffmpeg to the docker image. Youtube serves most formats as separate video and audio streams, and yt-dlp aborts the download rather than degrading when it has nothing to merge them with, so youtube archives could not be downloaded from the image at all.
-Added the deno javascript runtime to the docker image so yt-dlp can solve youtube's JS challenges (EJS). Without a runtime yt-dlp warns that some formats may be missing and drops the formats behind a challenge.

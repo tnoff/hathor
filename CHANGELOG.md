@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.18] - 2026-08-11
+
+### Changed
+
+- Added ffmpeg to the docker image. Youtube serves most formats as separate video and audio streams, and yt-dlp aborts the download rather than degrading when it has nothing to merge them with, so youtube archives could not be downloaded from the image at all.
+- Added the deno javascript runtime to the docker image so yt-dlp can solve youtube's JS challenges (EJS). Without a runtime yt-dlp warns that some formats may be missing and drops the formats behind a challenge.
+
 ## [2.1.17] - 2026-07-31
 
 ### Changed
