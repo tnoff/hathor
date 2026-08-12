@@ -1,2 +1,0 @@
-Youtube downloads are now paced by default (sleep_requests, sleep_interval, max_sleep_interval). Downloading a backlog back to back was returning HTTP 429 and then the "Sign in to confirm you're not a bot" page, after which nothing would download.
-Added a ytdlp_options setting, merged over hathor's own yt-dlp options, so the pacing can be tuned and anything else yt-dlp accepts (a proxy, a different format) can be set. The output template and logger stay under hathor's control.

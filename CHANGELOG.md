@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.19] - 2026-08-12
+
+### Changed
+
+- Youtube downloads are now paced by default (sleep_requests, sleep_interval, max_sleep_interval). Downloading a backlog back to back was returning HTTP 429 and then the "Sign in to confirm you're not a bot" page, after which nothing would download.
+- Added a ytdlp_options setting, merged over hathor's own yt-dlp options, so the pacing can be tuned and anything else yt-dlp accepts (a proxy, a different format) can be set. The output template and logger stay under hathor's control.
+
 ## [2.1.18] - 2026-08-11
 
 ### Changed
