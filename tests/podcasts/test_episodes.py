@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory, NamedTemporaryFile
@@ -352,6 +353,41 @@ def test_episode_download_no_return(mocker):
         client.episode_download([episode_list[0]['id']])
         episode_list = client.episode_list()
         assert len(episode_list) == 0
+
+class MockYoutubeDLOptions():
+    def __init__(self, audio_file):
+        self.audio_file = audio_file
+
+    def extract_info(self, _download_url, **_):
+        return {
+            'requested_downloads': [
+                {
+                    'filepath': Path(self.audio_file),
+                },
+            ],
+        }
+
+def test_episode_download_uses_client_ytdlp_options(mocker):
+    captured = {}
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo',
+                              ytdlp_options={'sleep_requests': 7})
+
+        new_pod = client.podcast_create('youtube', '1234', 'bar')
+        mocker.patch.object(YoutubeManager, 'broadcast_update', return_value=mock_episode_data_two)
+        client.episode_sync(include_podcasts=[new_pod['id']])
+        episode_list = client.episode_list(only_files=False)
+
+        with temp_audio_file(suffix='.mp4') as temp_audio:
+            @contextmanager
+            def mock_youtube_client(options):
+                captured.update(options)
+                yield MockYoutubeDLOptions(temp_audio)
+
+            mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_youtube_client)
+            client.episode_download([episode_list[0]['id']])
+
+    assert captured['sleep_requests'] == 7
 
 def test_episode_download_update_tags(mocker):
     with TemporaryDirectory() as tmp_dir:

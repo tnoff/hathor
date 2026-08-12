@@ -79,7 +79,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
                  datetime_output_format: str = DEFAULT_DATETIME_FORMAT,
                  logger: RootLogger | None = None,
                  database_connection_string: str | None = None,
-                 google_api_key: str | None = None):
+                 google_api_key: str | None = None,
+                 ytdlp_options: dict | None = None):
         '''
         Initialize the hathor client
         podcast_directory               :   Directory where new podcasts will be placed by default
@@ -87,6 +88,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         database_connection_string      :   Sqlalchemy connection string, if None db will be stored in memory
         google_api_key                  :   Key for accessing google API for youtube
         logger                          :   Logger for client to use
+        ytdlp_options                   :   Extra options passed to yt-dlp, merged over hathor's own
         '''
         self.podcast_directory = None
         if podcast_directory:
@@ -106,6 +108,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         if not google_api_key:
             self.logger.debug("No google api key given, will not be to able to access google api")
         self.google_api_key = google_api_key
+        self.ytdlp_options = ytdlp_options or {}
 
         self.plugins = load_plugins()
 
@@ -125,7 +128,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
 
     def _archive_manager(self, archive_type):
         return ARCHIVE_TYPES[archive_type](self.logger,
-                                           **{'google_api_key' : self.google_api_key})
+                                           **{'google_api_key' : self.google_api_key,
+                                              'ytdlp_options' : self.ytdlp_options})
 
     def _database_select(self, table, given_input):
         if not given_input:

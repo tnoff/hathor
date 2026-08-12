@@ -47,6 +47,10 @@ hathor:
   database_connection_string: sqlite:////home/user/foo.sql
   google_api_key: abc1234
   datetime_output_format: "%Y-%m-%d"
+  ytdlp_options:
+    sleep_requests: 1
+    sleep_interval: 2
+    max_sleep_interval: 6
 logging:
   logging_file: /home/user/foo.log
   console_logging: true
@@ -54,6 +58,23 @@ logging:
   logging_file_backup_count: 5
   logging_file_max_bytes: 102400
 ```
+
+#### yt-dlp Options
+
+`ytdlp_options` is passed through to yt-dlp when downloading a youtube archive.
+It is merged over hathor's own options, so it can override the download format
+or add anything yt-dlp accepts, for example a `proxy`. The output template and
+logger are not overridable, since hathor reads the downloaded file path back out
+of the result and routes yt-dlp's output through its own logger.
+
+The pacing keys shown above are the defaults. They exist because youtube rate
+limits an unpaced client: downloading a backlog back to back returns `HTTP Error
+429` on the first request of each video, which escalates into `Sign in to confirm
+you're not a bot`, and from then on nothing downloads until the client backs off.
+`sleep_requests` spaces out requests within a single extraction, while
+`sleep_interval` and `max_sleep_interval` put a randomised gap in front of each
+download. Raise them if you are still being throttled; lower them at your own
+risk.
 
 ### Podcast Archives
 

@@ -338,6 +338,49 @@ def test_youtube_broadcast_download_error(mocker):
     assert file_path is None
     assert size is None
 
+def capture_ytdlp_options(temp_audio_file, captured):
+    @contextmanager
+    def mock_youtube_client(options):
+        captured.update(options)
+        yield MockYoutubeDL(temp_audio_file)
+    return mock_youtube_client
+
+def download_with_options(mocker, manager, captured):
+    with test_utils.temp_audio_file(suffix='.mp4') as temp_audio_file:
+        mocker.patch('hathor.podcast.archive.YoutubeDL',
+                     side_effect=capture_ytdlp_options(temp_audio_file, captured))
+        manager.episode_download('foo', 'bar')
+
+def test_youtube_download_paces_requests_by_default(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    captured = {}
+    download_with_options(mocker, manager, captured)
+    assert captured['sleep_requests'] == 1
+    assert captured['sleep_interval'] == 2
+    assert captured['max_sleep_interval'] == 6
+
+def test_youtube_download_ytdlp_options_override_pacing(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123',
+                             ytdlp_options={'sleep_requests': 5, 'proxy': 'socks5://localhost:1080'})
+    captured = {}
+    download_with_options(mocker, manager, captured)
+    assert captured['sleep_requests'] == 5
+    assert captured['proxy'] == 'socks5://localhost:1080'
+    # untouched keys keep their defaults
+    assert captured['max_sleep_interval'] == 6
+
+def test_youtube_download_ytdlp_options_cannot_override_output(mocker):
+    manager = YoutubeManager(logging, google_api_key='foo123',
+                             ytdlp_options={'outtmpl': 'nope', 'logger': None})
+    captured = {}
+    download_with_options(mocker, manager, captured)
+    assert captured['outtmpl'] == 'bar.%(ext)s'
+    assert captured['logger'] is logging
+
+def test_youtube_manager_ytdlp_options_default_empty():
+    manager = YoutubeManager(logging, google_api_key='foo123')
+    assert manager.ytdlp_options == {}
+
 
 _VIDEO_ID_ALPHABET = string.ascii_letters + string.digits + '-_'
 

@@ -21,6 +21,23 @@ _YOUTUBE_VIDEO_ID_RE = re.compile(
     r'(?P<id>[A-Za-z0-9_-]{11})'
 )
 
+# Youtube rate limits an unpaced client hard. Downloading a backlog back to back
+# earns HTTP 429 on the first request of each video, which youtube escalates into
+# "Sign in to confirm you're not a bot" -- at which point nothing downloads until
+# the client backs off, and no amount of retrying helps.
+#
+# sleep_requests spaces out the requests within a single extraction (webpage,
+# player JS, the various player API calls); sleep_interval/max_sleep_interval put
+# a randomised gap in front of each download, so a sync of many episodes does not
+# arrive as an evenly spaced machine-looking burst.
+#
+# Overridable per deployment through the ytdlp_options setting.
+YOUTUBE_PACING_YTDLP_OPTIONS = {
+    'sleep_requests': 1,
+    'sleep_interval': 2,
+    'max_sleep_interval': 6,
+}
+
 def extract_youtube_video_id(youtube_url: str) -> str | None:
     '''Return the 11-char videoId from a YouTube URL, or None if not parseable.'''
     if not youtube_url:
@@ -183,6 +200,7 @@ class YoutubeManager(ArchiveInterface):
         self.google_api_key = kwargs.get('google_api_key', None)
         if not self.google_api_key:
             raise HathorException('Google API Key not passed')
+        self.ytdlp_options = kwargs.get('ytdlp_options', None) or {}
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None, **_):
         '''
@@ -279,7 +297,6 @@ class YoutubeManager(ArchiveInterface):
         if not self._youtube_vod_ready(download_url):
             return None, None
         options = {
-            'outtmpl' : f'{output_prefix}.%(ext)s',
             'noplaylist' : True,
             'format': (
                 'bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]'
@@ -287,6 +304,11 @@ class YoutubeManager(ArchiveInterface):
                 '/bestvideo+bestaudio'
                 '/best'
             ),
+            **YOUTUBE_PACING_YTDLP_OPTIONS,
+            **self.ytdlp_options,
+            # Not overridable: the episode file path is read back out of the
+            # download result, and yt-dlp's output belongs on hathor's logger.
+            'outtmpl' : f'{output_prefix}.%(ext)s',
             'logger' : self.logger,
         }
         try:
