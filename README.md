@@ -242,6 +242,73 @@ docker run --rm \
   hathor tags-show /podcasts/episode.mp3
 ```
 
+### Egressing Through a VPN
+
+Syncing a youtube archive makes two kinds of outbound call: the yt-dlp media
+fetch, and a YouTube Data API call that defers episodes still live or still
+processing. Setting a yt-dlp proxy would only cover the first, so the simplest
+complete option is to put the whole container inside a VPN container's network
+namespace.
+
+With [gluetun](https://github.com/qdm12/gluetun) and a WireGuard key:
+
+```yaml
+services:
+  gluetun:
+    image: docker.io/qmcgaw/gluetun:v3.41.3
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      VPN_SERVICE_PROVIDER: mullvad
+      VPN_TYPE: wireguard
+      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY}
+      WIREGUARD_ADDRESSES: ${WIREGUARD_ADDRESSES}
+      # gluetun picks one hostname per connection and holds it for the life of
+      # the container. Prefer an explicit hostname list to SERVER_CITIES: a
+      # multi-city list sticks to a single city (gluetun #3328), and a hostname
+      # list is the only way to drop one specific exit server from rotation.
+      # Check these against your gluetun version: unrecognised names are only
+      # WARNed about ("are not in choices") and then silently dropped, which
+      # shrinks the pool without failing anything.
+      SERVER_HOSTNAMES: us-lax-wg-101,us-sjc-wg-302,us-chi-wg-201
+
+  hathor:
+    image: hathor
+    # Excluded from `docker compose up`; `docker compose run` still starts it.
+    profiles: ["cli"]
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    # Downloads land owned by this uid rather than root.
+    user: "1000:1000"
+    volumes:
+      - /home/user/podcasts:/podcasts
+      - /home/user/hathor-data:/data
+      - /home/user/hathor-config:/config
+    entrypoint: ["hathor", "-c", "/config/hathor_config.yml"]
+```
+
+```bash
+docker compose run --rm hathor podcast sync
+```
+
+A few things worth knowing:
+
+- Episode file paths are stored in the database as absolute paths. If the
+  container shares a database with a non-container hathor, mount each host
+  directory at the *same* absolute path inside the container — remapping the
+  library under `/podcasts` will leave the database pointing at files the
+  container cannot see.
+- gluetun's firewall acts as a killswitch. If the tunnel drops, hathor loses
+  network access rather than falling back to the default route.
+- A sync that fails with `HTTP Error 403: Forbidden` on the media fetch, while
+  extraction of the same video succeeds, means the exit IP has been flagged
+  rather than the episode being unavailable. Remove that server from
+  `SERVER_HOSTNAMES` and recreate the gluetun container to move to a new exit.
+
 ## Development
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on setting up a local dev environment, running tests, and writing plugins.

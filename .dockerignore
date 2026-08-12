@@ -1,0 +1,40 @@
+# The Dockerfile is `COPY . .`, so without this every local artifact in a working
+# checkout is sent to the daemon as build context and copied into the image. CI
+# builds from a clean checkout and barely notices; a local checkout carrying a
+# virtualenv and coverage output runs into the hundreds of megabytes. None of it
+# is needed to `pip install .`.
+
+# VCS + CI
+.git
+.gitattributes
+.github
+.gitlab-ci.yml
+renovate.json
+
+# Local virtualenvs
+venv/
+.venv/
+env/
+
+# Test + lint artifacts
+.tox/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+cover/
+tests/
+tox.ini
+.pylintrc
+.pylintrc.test
+
+# Build output
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.swp
+
+# Local editor/agent config
+.claude/
