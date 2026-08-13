@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-08-13
+
+### Changed
+
+- Added a twitch archive type, for downloading a channel's past broadcasts. The broadcast ID is the channel login name, and hathor fetches past broadcasts only, leaving channel highlights and uploaded videos alone. Needs a twitch_client_id and twitch_client_secret from a registered twitch application.
+- A broadcast that is still live, or one twitch has not finished processing into a VOD, is skipped and retried on the next sync, so a partial stream is never downloaded.
+
 ## [2.1.19] - 2026-08-12
 
 ### Changed
