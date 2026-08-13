@@ -80,6 +80,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
                  logger: RootLogger | None = None,
                  database_connection_string: str | None = None,
                  google_api_key: str | None = None,
+                 twitch_client_id: str | None = None,
+                 twitch_client_secret: str | None = None,
                  ytdlp_options: dict | None = None):
         '''
         Initialize the hathor client
@@ -87,6 +89,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         datetime_output_format          :   Python datetime output format
         database_connection_string      :   Sqlalchemy connection string, if None db will be stored in memory
         google_api_key                  :   Key for accessing google API for youtube
+        twitch_client_id                :   Client id for accessing the twitch api
+        twitch_client_secret            :   Client secret for accessing the twitch api
         logger                          :   Logger for client to use
         ytdlp_options                   :   Extra options passed to yt-dlp, merged over hathor's own
         '''
@@ -108,6 +112,10 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         if not google_api_key:
             self.logger.debug("No google api key given, will not be to able to access google api")
         self.google_api_key = google_api_key
+        if not (twitch_client_id and twitch_client_secret):
+            self.logger.debug("No twitch credentials given, will not be to able to access twitch api")
+        self.twitch_client_id = twitch_client_id
+        self.twitch_client_secret = twitch_client_secret
         self.ytdlp_options = ytdlp_options or {}
 
         self.plugins = load_plugins()
@@ -129,6 +137,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
     def _archive_manager(self, archive_type):
         return ARCHIVE_TYPES[archive_type](self.logger,
                                            **{'google_api_key' : self.google_api_key,
+                                              'twitch_client_id' : self.twitch_client_id,
+                                              'twitch_client_secret' : self.twitch_client_secret,
                                               'ytdlp_options' : self.ytdlp_options})
 
     def _database_select(self, table, given_input):

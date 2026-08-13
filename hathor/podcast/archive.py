@@ -9,7 +9,7 @@ from feedparser import parse
 from googleapiclient.discovery import build
 from validators import url
 
-from requests import get
+from requests import get, post
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
@@ -20,6 +20,18 @@ _YOUTUBE_VIDEO_ID_RE = re.compile(
     r'(?:youtube\.com/(?:watch\?(?:[^ ]*&)?v=|live/|embed/|shorts/)|youtu\.be/)'
     r'(?P<id>[A-Za-z0-9_-]{11})'
 )
+
+_TWITCH_VIDEO_ID_RE = re.compile(r'twitch\.tv/videos/(?P<id>\d+)')
+
+TWITCH_OAUTH_URL = 'https://id.twitch.tv/oauth2/token'
+TWITCH_API_URL = 'https://api.twitch.tv/helix'
+TWITCH_REQUEST_TIMEOUT = 30
+# Helix caps a page at 100 items
+TWITCH_PAGE_SIZE = 100
+# While a broadcast is still being recorded, and for a while after it ends, twitch
+# serves a placeholder in place of the real thumbnail. It is the only field on the
+# video object that marks a VOD as not yet finished.
+TWITCH_PROCESSING_THUMBNAIL = '404_processing'
 
 # Youtube rate limits an unpaced client hard. Downloading a backlog back to back
 # earns HTTP 429 on the first request of each video, which youtube escalates into
@@ -37,6 +49,20 @@ YOUTUBE_PACING_YTDLP_OPTIONS = {
     'sleep_interval': 2,
     'max_sleep_interval': 6,
 }
+
+def twitch_timestamp(timestamp: str) -> datetime:
+    '''
+    Parse an RFC3339 timestamp from the twitch api
+    timestamp : Timestamp string, such as 2026-08-11T17:55:36Z
+    '''
+    return datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+
+def extract_twitch_video_id(twitch_url: str) -> str | None:
+    '''Return the numeric video id from a Twitch VOD URL, or None if not parseable.'''
+    if not twitch_url:
+        return None
+    m = _TWITCH_VIDEO_ID_RE.search(twitch_url)
+    return m.group('id') if m else None
 
 def extract_youtube_video_id(youtube_url: str) -> str | None:
     '''Return the 11-char videoId from a YouTube URL, or None if not parseable.'''
@@ -320,8 +346,174 @@ class YoutubeManager(ArchiveInterface):
             self.logger.error(f'Error downloading youtube url: {download_url}, {str(e)}')
             return None, None
 
+class TwitchManager(ArchiveInterface):
+    '''
+    Twitch Archive Manager
+
+    Downloads past broadcasts (VODs) from a twitch channel. Live streams are
+    skipped, and picked up on a later sync once twitch has finished the VOD.
+    '''
+    def __init__(self, logger, **kwargs):
+        ArchiveInterface.__init__(self, logger)
+        self.twitch_client_id = kwargs.get('twitch_client_id', None)
+        self.twitch_client_secret = kwargs.get('twitch_client_secret', None)
+        if not self.twitch_client_id or not self.twitch_client_secret:
+            raise HathorException('Twitch client id and client secret not passed')
+        self.ytdlp_options = kwargs.get('ytdlp_options', None) or {}
+        self._access_token = None
+
+    def _token(self) -> str:
+        '''
+        Fetch an app access token, and reuse it for the life of the manager.
+        Only public data is read, so the client credentials grant is enough and
+        no user ever has to log in.
+        '''
+        if self._access_token:
+            return self._access_token
+        response = post(TWITCH_OAUTH_URL, params={
+            'client_id': self.twitch_client_id,
+            'client_secret': self.twitch_client_secret,
+            'grant_type': 'client_credentials',
+        }, timeout=TWITCH_REQUEST_TIMEOUT)
+        response.raise_for_status()
+        self._access_token = response.json()['access_token']
+        return self._access_token
+
+    def _api_get(self, endpoint: str, params: dict) -> dict:
+        '''
+        Call a helix endpoint
+        endpoint : Helix endpoint name, such as "videos"
+        params   : Query params
+        '''
+        response = get(f'{TWITCH_API_URL}/{endpoint}', params=params, headers={
+            'Client-Id': self.twitch_client_id,
+            'Authorization': f'Bearer {self._token()}',
+        }, timeout=TWITCH_REQUEST_TIMEOUT)
+        response.raise_for_status()
+        return response.json()
+
+    def _user_id(self, channel_name: str) -> str:
+        '''
+        Resolve a channel login name to the numeric user id helix wants
+        channel_name : Twitch channel login name
+        '''
+        data = self._api_get('users', {'login': channel_name})
+        users = data.get('data') or []
+        if not users:
+            raise HathorException(f'No twitch channel found for: {channel_name}')
+        return users[0]['id']
+
+    def broadcast_update(self, broadcast_id, max_results=None, filters=None, **_):
+        '''
+        Get latest episodes from broadcast
+        broadcast_id    : Twitch channel login name
+        max_results     : Return max N results
+        filters         : List of regex filters
+        '''
+        self.logger.debug(f'Getting episodes for twitch broadcast: {broadcast_id}')
+        archive_data = []
+        filters = filters or []
+        user_id = self._user_id(broadcast_id)
+
+        params = {
+            'user_id': user_id,
+            # Past broadcasts only, so channel highlights and uploaded videos
+            # are left alone
+            'type': 'archive',
+            'first': TWITCH_PAGE_SIZE,
+        }
+        while True:
+            response = self._api_get('videos', params)
+            for item in response.get('data') or []:
+                title = utils.clean_string(item['title'])
+                if not verify_title_filters(filters, title):
+                    self.logger.debug(f'Title: {title} , does not pass filters, skipping')
+                    continue
+
+                description = utils.clean_string(item.get('description') or '') or None
+                episode_data = {
+                    'title' : title,
+                    'description' : description,
+                    'download_link' : item['url'],
+                    'date' : twitch_timestamp(item['published_at']),
+                }
+                archive_data.append(episode_data)
+                if max_results and len(archive_data) >= max_results:
+                    self.logger.debug(f'At max results: {max_results}, exiting early')
+                    return archive_data
+            cursor = (response.get('pagination') or {}).get('cursor')
+            if not cursor:
+                return archive_data
+            params['after'] = cursor
+
+    def _twitch_vod_ready(self, download_url: str) -> bool:
+        '''
+        Return False iff the URL points at a VOD that twitch is still recording
+        or still processing. Return True otherwise (finished VODs, and any case
+        where we cannot decide confidently).
+        '''
+        video_id = extract_twitch_video_id(download_url)
+        if not video_id:
+            return True
+
+        try:
+            response = self._api_get('videos', {'id': video_id})
+            videos = response.get('data') or []
+            if not videos:
+                return True
+
+            video = videos[0]
+            if TWITCH_PROCESSING_THUMBNAIL in (video.get('thumbnail_url') or ''):
+                self.logger.info(f'Deferring {download_url}: VOD still processing')
+                return False
+
+            # A broadcast that is still going shows up in the archive list right
+            # away, and downloading it now would capture a partial stream. The
+            # live stream carries the same id as the VOD's stream_id.
+            stream_id = video.get('stream_id')
+            user_id = video.get('user_id')
+            if stream_id and user_id:
+                streams = self._api_get('streams', {'user_id': user_id})
+                for stream in streams.get('data') or []:
+                    if stream.get('id') == stream_id:
+                        self.logger.info(f'Deferring {download_url}: broadcast is still live')
+                        return False
+        except Exception as e: #pylint:disable=broad-except
+            self.logger.warning(f'Twitch liveness check failed for {download_url}: {str(e)}')
+            return True
+
+        return True
+
+    def episode_download(self, download_url: str, output_prefix: str, **_) -> (Path, int):
+        '''
+        Download episode from url
+        download_url    : URL to download from
+        output_prefix   : Name of file, should not include suffix
+        '''
+        if not self._twitch_vod_ready(download_url):
+            return None, None
+        options = {
+            'noplaylist' : True,
+            # Twitch serves muxed HLS variants, the split streams are a fallback
+            'format': 'bestvideo+bestaudio/best',
+            **self.ytdlp_options,
+            # Not overridable: the episode file path is read back out of the
+            # download result, and yt-dlp's output belongs on hathor's logger.
+            'outtmpl' : f'{output_prefix}.%(ext)s',
+            'logger' : self.logger,
+        }
+        try:
+            with YoutubeDL(options) as yt:
+                data = yt.extract_info(download_url, download=True)
+                file_path = Path(data['requested_downloads'][0]['filepath'])
+                return file_path, file_path.stat().st_size
+        except DownloadError as e:
+            self.logger.error(f'Error downloading twitch url: {download_url}, {str(e)}')
+            return None, None
+
 ARCHIVE_TYPES = {
     'rss' : RSSManager,
+    'twitch' : TwitchManager,
     'youtube' : YoutubeManager,
 }
 

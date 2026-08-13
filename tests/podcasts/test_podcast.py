@@ -303,3 +303,13 @@ def test_podcast_sync_include(mocker):
             client.podcast_sync(include_podcasts=[new_pod['id']])
             episode_list = client.episode_list()
             assert len(episode_list) == 2
+
+def test_podcast_create_twitch():
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir,
+                              twitch_client_id='id123',
+                              twitch_client_secret='secret123')
+        client.podcast_create('twitch', 'somechannel', 'twitch pod name')
+        podcast_list = client.podcast_list()
+        assert podcast_list[0]['archive_type'] == 'twitch'
+        assert podcast_list[0]['broadcast_id'] == 'somechannel'

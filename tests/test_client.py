@@ -19,3 +19,15 @@ def test_ytdlp_options_default_empty():
 def test_ytdlp_options_stored():
     client = HathorClient(ytdlp_options={'sleep_requests': 4})
     assert client.ytdlp_options == {'sleep_requests': 4}
+
+
+def test_twitch_credentials_default_none():
+    client = HathorClient()
+    assert client.twitch_client_id is None
+    assert client.twitch_client_secret is None
+
+
+def test_twitch_credentials_stored():
+    client = HathorClient(twitch_client_id='id123', twitch_client_secret='secret123')
+    assert client.twitch_client_id == 'id123'
+    assert client.twitch_client_secret == 'secret123'

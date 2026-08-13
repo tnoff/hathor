@@ -46,6 +46,8 @@ hathor:
   podcast_directory: /home/user/foo
   database_connection_string: sqlite:////home/user/foo.sql
   google_api_key: abc1234
+  twitch_client_id: abc1234
+  twitch_client_secret: xyz9876
   datetime_output_format: "%Y-%m-%d"
   ytdlp_options:
     sleep_requests: 1
@@ -61,7 +63,7 @@ logging:
 
 #### yt-dlp Options
 
-`ytdlp_options` is passed through to yt-dlp when downloading a youtube archive.
+`ytdlp_options` is passed through to yt-dlp when downloading a youtube or twitch archive.
 It is merged over hathor's own options, so it can override the download format
 or add anything yt-dlp accepts, for example a `proxy`. The output template and
 logger are not overridable, since hathor reads the downloaded file path back out
@@ -82,6 +84,7 @@ When creating a new podcast record, users will need to specify where the podcast
 from, we call that the "archive". The following archives are supported:
 
 - Youtube
+- Twitch
 - RSS Feeds
 
 #### Google API Keys
@@ -89,6 +92,15 @@ from, we call that the "archive". The following archives are supported:
 To download podcasts from youtube, users will need a [Google API secret key](https://console.developers.google.com).
 
 This can be placed in the settings file under `google_api_key`, or passed directly when initializing the client.
+
+#### Twitch API Credentials
+
+To download podcasts from twitch, users will need to register an application in the
+[Twitch developer console](https://dev.twitch.tv/console/apps), which gives a client ID and a client secret.
+
+These can be placed in the settings file under `twitch_client_id` and `twitch_client_secret`, or passed
+directly when initializing the client. Hathor only reads public data, so it authenticates with the client
+credentials grant and no twitch user ever has to log in.
 
 #### Broadcast ID
 
@@ -106,6 +118,23 @@ For **Youtube**, the broadcast ID is the channel ID from the channel URL. For ex
 You may need to use 3rd party tools to find the channel ID of a particular uploader, such as [ytlarge](https://ytlarge.com/youtube/channel-id-finder/).
 
 Note: when a YouTube live broadcast has just ended, hathor will skip the download until YouTube finishes producing the on-demand VOD (usually minutes to a couple hours, depending on length). The episode is automatically retried on the next sync.
+
+For **Twitch**, the broadcast ID is the channel login name, the last part of the channel URL. For example, given
+`https://www.twitch.tv/somechannel`, the broadcast ID is `somechannel`:
+
+```
+$ hathor podcast create "twitch" "somechannel" "podcast-name"
+```
+
+Only past broadcasts are fetched. Channel highlights and uploaded videos are left alone.
+
+Note: a broadcast that is still live, or one that twitch has not finished processing into a VOD, is skipped
+and retried on the next sync, so a partial stream is never downloaded.
+
+Note: twitch deletes VODs on a schedule, after 7 days for most channels and 14 days for Affiliates and
+Partners. Unlike the other archives, if a sync does not run inside that window the broadcast is gone before
+hathor ever sees it, so twitch podcasts need syncs to run on a reliable schedule. Past broadcasts are also
+usually much larger than podcast episodes, so consider setting `max_allowed` on the podcast.
 
 
 ### Downloading Podcasts
