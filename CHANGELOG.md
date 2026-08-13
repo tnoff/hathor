@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-08-13
+
+### Changed
+
+- Moving a podcast's files to a new location now works when the old and new directories are on different filesystems, or on different mount points of the same filesystem. The move used os.rename, which fails with an "Invalid cross-device link" error in both cases, the second being what two bind mounts of one drive look like inside a container.
+- The new file location is written to the database only after the files have been moved, and the old directory is no longer deleted when it resolves to the same directory as the new one. A failed move used to leave the podcast pointing at the new directory while the files were still in the old one, and re-running the command from that state deleted every file it had just moved.
+
 ## [2.2.0] - 2026-08-13
 
 ### Changed
