@@ -7,6 +7,7 @@ from time import mktime
 
 from feedparser import parse
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from validators import url
 
 from requests import get, post
@@ -50,6 +51,32 @@ YOUTUBE_PACING_YTDLP_OPTIONS = {
     'max_sleep_interval': 6,
 }
 
+# The data api bills per call, against a default of 10,000 units a day.
+# search.list costs 100 units a call; playlistItems.list reads the same fields
+# off the channel's uploads playlist for 1. A channel's uploads playlist id is
+# its channel id with the leading "UC" swapped for "UU", so the cheap path
+# needs no extra lookup.
+YOUTUBE_CHANNEL_ID_PREFIX = 'UC'
+YOUTUBE_UPLOADS_PLAYLIST_PREFIX = 'UU'
+# Largest page the api allows. The default is 5, which spends a call on every
+# fifth video.
+YOUTUBE_PAGE_SIZE = 50
+# Results come back newest first, so a run that recognises this many videos in
+# a row has caught up with what is already stored and can stop paging. A streak
+# rather than a single video because premieres and finished live streams do not
+# always land in strict publish order.
+YOUTUBE_KNOWN_STREAK_STOP = 3
+# Hard ceiling on pages walked in one sync, so no podcast can ever page through
+# a whole channel -- an aggressive title filter or a wiped database would
+# otherwise walk to the oldest upload.
+YOUTUBE_MAX_PAGES = 20
+# Handed to execute(). The client retries 429, 5xx and the rate-limit flavours
+# of 403 with randomised exponential backoff, and leaves quotaExceeded alone --
+# that one does not recover inside a run.
+YOUTUBE_NUM_RETRIES = 4
+# 403 reasons that mean the daily quota is spent
+YOUTUBE_QUOTA_REASONS = ('quotaExceeded', 'dailyLimitExceeded')
+
 def twitch_timestamp(timestamp: str) -> datetime:
     '''
     Parse an RFC3339 timestamp from the twitch api
@@ -70,6 +97,20 @@ def extract_youtube_video_id(youtube_url: str) -> str | None:
         return None
     m = _YOUTUBE_VIDEO_ID_RE.search(youtube_url)
     return m.group('id') if m else None
+
+def youtube_quota_exhausted(error: HttpError) -> bool:
+    '''
+    Check whether an api error means the daily quota is spent. Retrying will not
+    clear it, the quota resets on googles clock.
+    error : Error raised by the google api client
+    '''
+    details = error.error_details or []
+    if isinstance(details, dict):
+        details = [details]
+    for detail in details:
+        if isinstance(detail, dict) and detail.get('reason') in YOUTUBE_QUOTA_REASONS:
+            return True
+    return False
 
 def curl_download(episode_url: str, output_path: Path) -> int:
     '''
@@ -227,38 +268,95 @@ class YoutubeManager(ArchiveInterface):
         if not self.google_api_key:
             raise HathorException('Google API Key not passed')
         self.ytdlp_options = kwargs.get('ytdlp_options', None) or {}
+        # Built once and reused. Every call off it goes through _execute
+        self.youtube_api = build('youtube', 'v3', developerKey=self.google_api_key)
 
-    def broadcast_update(self, broadcast_id, max_results=None, filters=None, **_):
+    def _execute(self, request):
+        '''
+        Run an api request, retrying the transient rate limits and turning a
+        spent quota into something readable
+        request : Request object from the google api client
+        '''
+        try:
+            return request.execute(num_retries=YOUTUBE_NUM_RETRIES)
+        except HttpError as error:
+            if youtube_quota_exhausted(error):
+                raise HathorException('Youtube api daily quota exceeded') from error
+            raise
+
+    def _uploads_playlist_id(self, broadcast_id: str) -> str:
+        '''
+        Find the uploads playlist that holds a channels videos
+        broadcast_id : Youtube channel id
+        '''
+        if broadcast_id.startswith(YOUTUBE_CHANNEL_ID_PREFIX):
+            suffix = broadcast_id[len(YOUTUBE_CHANNEL_ID_PREFIX):]
+            return f'{YOUTUBE_UPLOADS_PLAYLIST_PREFIX}{suffix}'
+        # Older channel ids do not carry the uploads id in their name, so ask.
+        # One unit, and only for channels that need it.
+        response = self._execute(self.youtube_api.channels().list( #pylint:disable=no-member
+            part='contentDetails',
+            id=broadcast_id,
+            fields='items(contentDetails/relatedPlaylists/uploads)',
+        ))
+        items = response.get('items') or []
+        if not items:
+            raise HathorException(f'No youtube channel found for: {broadcast_id}')
+        return items[0]['contentDetails']['relatedPlaylists']['uploads']
+
+    def broadcast_update(self, broadcast_id, max_results=None, filters=None, known_urls=None, **_):
         '''
         Get latest episodes from broadcast
         broadcast_id    : Youtube channel id
         max_results     : Return max N results
         filters         : List of regex filters
+        known_urls      : Download urls already stored for this podcast. Paging stops
+                          once YOUTUBE_KNOWN_STREAK_STOP of them turn up in a row
         '''
         self.logger.debug(f'Getting episodes for youtube broadcast: {broadcast_id}')
         archive_data = []
         filters = filters or []
-        youtube_api = build('youtube', 'v3', developerKey=self.google_api_key)
-
+        known_ids = set()
+        for known_url in known_urls or []:
+            video_id = extract_youtube_video_id(known_url)
+            if video_id:
+                known_ids.add(video_id)
 
         data_inputs = {
-            'part': 'id,snippet',
-            'channelId': broadcast_id,
-            'type': 'video',
-            'fields': 'nextPageToken,items(id(videoId),snippet(publishedAt,title,description))',
-            'order': 'date',
+            'part': 'snippet,contentDetails',
+            'playlistId': self._uploads_playlist_id(broadcast_id),
+            'maxResults': YOUTUBE_PAGE_SIZE,
+            'fields': 'nextPageToken,items(snippet(title,description,resourceId/videoId),'
+                      'contentDetails/videoPublishedAt)',
         }
-        req = youtube_api.search().list(**data_inputs) #pylint:disable=no-member
+        playlist_items = self.youtube_api.playlistItems() #pylint:disable=no-member
+        req = playlist_items.list(**data_inputs)
+        pages = 0
+        known_streak = 0
         while req is not None:
-            response = req.execute()
+            response = self._execute(req)
+            pages += 1
             for item in response['items']:
+                video_id = item['snippet']['resourceId']['videoId']
+                # Checked ahead of the title filters, so a filter that matches
+                # rarely cannot keep the walk going to the end of the channel
+                if video_id in known_ids:
+                    known_streak += 1
+                    if known_streak >= YOUTUBE_KNOWN_STREAK_STOP:
+                        self.logger.debug(f'Saw {known_streak} known videos in a row, caught up on {broadcast_id}')
+                        return archive_data
+                    continue
+                known_streak = 0
+
                 title = utils.clean_string(item['snippet']['title'])
                 if not verify_title_filters(filters, title):
                     self.logger.debug(f'Title: {title} , does not pass filters, skipping')
                     continue
 
-                download_url = f'https://www.youtube.com/watch?v={item["id"]["videoId"]}'
-                date = datetime.fromisoformat(item['snippet']['publishedAt'])
+                download_url = f'https://www.youtube.com/watch?v={video_id}'
+                # snippet.publishedAt is when the video joined the playlist, the
+                # date the episode wants is when the video itself went up
+                date = datetime.fromisoformat(item['contentDetails']['videoPublishedAt'])
                 episode_data = {
                     'title' : title,
                     'description' : utils.clean_string(item['snippet']['description']),
@@ -269,7 +367,10 @@ class YoutubeManager(ArchiveInterface):
                 if max_results and len(archive_data) >= max_results:
                     self.logger.debug(f'At max results: {max_results}, exiting early')
                     return archive_data
-            req = youtube_api.search().list_next(req, response) #pylint:disable=no-member
+            if pages >= YOUTUBE_MAX_PAGES:
+                self.logger.warning(f'Hit page ceiling {YOUTUBE_MAX_PAGES} on broadcast {broadcast_id}, stopping')
+                return archive_data
+            req = playlist_items.list_next(req, response)
         return archive_data
 
     def _youtube_vod_ready(self, download_url: str) -> bool:
@@ -284,14 +385,13 @@ class YoutubeManager(ArchiveInterface):
             return True
 
         try:
-            youtube_api = build('youtube', 'v3', developerKey=self.google_api_key)
-            resp = youtube_api.videos().list( #pylint:disable=no-member
+            resp = self._execute(self.youtube_api.videos().list( #pylint:disable=no-member
                 part='snippet,liveStreamingDetails,contentDetails',
                 id=video_id,
                 fields='items(snippet/liveBroadcastContent,'
                        'liveStreamingDetails/actualEndTime,'
                        'contentDetails/duration)',
-            ).execute()
+            ))
         except Exception as e: #pylint:disable=broad-except
             self.logger.warning(f'YouTube liveness check failed for {download_url}: {str(e)}')
             return True

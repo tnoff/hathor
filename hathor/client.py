@@ -118,6 +118,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         self.twitch_client_id = twitch_client_id
         self.twitch_client_secret = twitch_client_secret
         self.ytdlp_options = ytdlp_options or {}
+        self._archive_managers = {}
 
         self.plugins = load_plugins()
 
@@ -136,11 +137,20 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         self.close()
 
     def _archive_manager(self, archive_type):
-        return ARCHIVE_TYPES[archive_type](self.logger,
-                                           **{'google_api_key' : self.google_api_key,
-                                              'twitch_client_id' : self.twitch_client_id,
-                                              'twitch_client_secret' : self.twitch_client_secret,
-                                              'ytdlp_options' : self.ytdlp_options})
+        # Kept for the life of the client. Managers are built from client config
+        # that does not change, and they hold things worth reusing across the
+        # episodes of a download run -- a google api client, a twitch token
+        try:
+            return self._archive_managers[archive_type]
+        except KeyError:
+            pass
+        manager = ARCHIVE_TYPES[archive_type](self.logger,
+                                              **{'google_api_key' : self.google_api_key,
+                                                 'twitch_client_id' : self.twitch_client_id,
+                                                 'twitch_client_secret' : self.twitch_client_secret,
+                                                 'ytdlp_options' : self.ytdlp_options})
+        self._archive_managers[archive_type] = manager
+        return manager
 
     def _database_select(self, table, given_input):
         if not given_input:
@@ -475,9 +485,16 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
                 self.db_session.query(PodcastTitleFilter).\
                 filter(PodcastTitleFilter.podcast_id == podcast.id)]
 
+            # Handed to the archive manager so it can stop paging once it reaches
+            # episodes already stored. The per-episode checks below still run,
+            # managers are free to ignore this
+            known_urls = {row[0] for row in self.db_session.query(PodcastEpisode.download_url).\
+                filter(PodcastEpisode.podcast_id == podcast.id)}
+
             current_episodes = manager.broadcast_update(podcast.broadcast_id,
                                                         max_results=max_results,
-                                                        filters=compiled_filters)
+                                                        filters=compiled_filters,
+                                                        known_urls=known_urls)
             for episode in current_episodes:
                 episode_processed_url = episode['download_link']
                 # Patreon keeps the same basic url but changes up the query params

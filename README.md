@@ -119,6 +119,13 @@ You may need to use 3rd party tools to find the channel ID of a particular uploa
 
 Note: when a YouTube live broadcast has just ended, hathor will skip the download until YouTube finishes producing the on-demand VOD (usually minutes to a couple hours, depending on length). The episode is automatically retried on the next sync.
 
+Note: syncing reads the channel's uploads playlist, which costs 1 unit of the
+YouTube Data API's daily quota per 50 videos. Videos come back newest first, and
+a sync stops paging as soon as it reaches episodes it already has, so a routine
+sync of a channel with nothing new costs a single call. A sync will read at most
+1000 videos of a channel's back catalogue, so the first sync of a very large
+channel may need to run more than once to reach the oldest uploads.
+
 For **Twitch**, the broadcast ID is the channel login name, the last part of the channel URL. For example, given
 `https://www.twitch.tv/somechannel`, the broadcast ID is `somechannel`:
 

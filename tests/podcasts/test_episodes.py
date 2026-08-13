@@ -143,6 +143,43 @@ def test_episode_sync_max_allowed_set(mocker):
         _, kwargs = mocked_rss.call_args
         assert kwargs.get('max_results') == 3
 
+def test_episode_sync_passes_known_urls(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+        new_pod1 = client.podcast_create('rss', '1234', 'foo')
+        mocked_rss = mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+        client.episode_sync(include_podcasts=[new_pod1['id']])
+        _, kwargs = mocked_rss.call_args
+        # nothing stored yet on the first pass
+        assert kwargs.get('known_urls') == set()
+
+        client.episode_sync(include_podcasts=[new_pod1['id']])
+        _, kwargs = mocked_rss.call_args
+        assert kwargs.get('known_urls') == {e['download_link'] for e in mock_episode_data}
+
+def test_episode_sync_known_urls_scoped(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+        new_pod1 = client.podcast_create('rss', '1234', 'foo')
+        new_pod2 = client.podcast_create('youtube', '1234', 'bar')
+        mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+        mocked_youtube = mocker.patch.object(YoutubeManager, 'broadcast_update',
+                                             return_value=mock_episode_data_two)
+        client.episode_sync(include_podcasts=[new_pod1['id'], new_pod2['id']])
+        client.episode_sync(include_podcasts=[new_pod1['id'], new_pod2['id']])
+        _, kwargs = mocked_youtube.call_args
+        # one podcast's episodes must never stop another podcast's paging
+        assert kwargs.get('known_urls') == {e['download_link'] for e in mock_episode_data_two}
+
+def test_archive_manager_is_reused():
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+        # rebuilt per episode this would throw away the google api client and,
+        # for twitch, the access token
+        assert client._archive_manager('rss') is client._archive_manager('rss') #pylint:disable=protected-access
+
 def test_episode_sync_duplicate_podcast(mocker):
     with TemporaryDirectory() as tmp_dir:
         client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
