@@ -4,6 +4,7 @@ from inspect import getmembers, isfunction
 import os
 from logging import RootLogger
 import re
+from shutil import move
 from typing import Literal
 
 
@@ -297,12 +298,12 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
             self._fail(f'Podcast not found for ID: {podcast_id}')
         old_podcast_dir = Path(pod.file_location)
         new_podcast_dir = Path(file_location)
-        pod.file_location = str(new_podcast_dir.resolve())
-        self.db_session.commit()
-        self.logger.info(f'Updated podcast id: {podcast_id} file location to {str(new_podcast_dir.resolve())}')
 
+        # The file location is committed only after the files have been moved. If a move
+        # raises, the podcast still points at the directory the remaining files are in,
+        # so the command can be run again once the cause is fixed.
         if move_files:
-            self.logger.info(f'Moving files from old dir: {str(old_podcast_dir)} to new dir: {pod.file_location}')
+            self.logger.info(f'Moving files from old dir: {str(old_podcast_dir)} to new dir: {str(new_podcast_dir.resolve())}')
             new_podcast_dir.mkdir(exist_ok=True, parents=True)
 
             episodes = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.podcast_id == podcast_id)
@@ -310,11 +311,22 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
             for episode in episodes:
                 episode_path = Path(episode.file_path)
                 new_path = new_podcast_dir / episode_path.name
-                episode_path.rename(new_path)
+                # Not Path.rename, which is os.rename and fails with EXDEV when the two
+                # directories are on different filesystems, or merely on different mount
+                # points of the same filesystem -- which is what two bind mounts of one
+                # drive are inside a container. move falls back to a copy and unlink.
+                move(episode_path, new_path)
                 episode.file_path = str(new_path.resolve())
                 self.logger.info(f'Updating episode {episode.id} to path {str(new_path.resolve())} in db')
                 self.db_session.commit()
-            utils.rm_tree(old_podcast_dir)
+            # rm_tree is recursive, so removing the old dir when it resolves to the new one
+            # would delete the files that were just moved into it
+            if old_podcast_dir.resolve() != new_podcast_dir.resolve():
+                utils.rm_tree(old_podcast_dir)
+
+        pod.file_location = str(new_podcast_dir.resolve())
+        self.db_session.commit()
+        self.logger.info(f'Updated podcast id: {podcast_id} file location to {str(new_podcast_dir.resolve())}')
         return pod.as_dict(self.datetime_output_format)
 
     @run_plugins

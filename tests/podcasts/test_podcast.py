@@ -1,4 +1,5 @@
 from datetime import datetime
+from errno import EXDEV
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -135,6 +136,67 @@ def test_podcast_update_file_location(mocker):
                 client.podcast_update_file_location(new_pod1['id'], Path(new_dir))
                 episode_list = client.episode_list()
                 assert new_dir in str(episode_list[0]['file_path'])
+
+def test_podcast_update_file_location_cross_device(mocker):
+    # os.rename raises EXDEV across filesystems, and across separate mount points of the
+    # same filesystem, so the move has to fall back to a copy and unlink
+    with TemporaryDirectory() as tmp_dir:
+        with temp_audio_file() as temp_audio:
+            client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+            new_pod1 = client.podcast_create('rss', '1234', 'foo')
+            mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+            mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
+            client.episode_sync(include_podcasts=[new_pod1['id']])
+            episode_list = client.episode_list(only_files=False)
+            client.episode_download([episode_list[0]['id']])
+            with TemporaryDirectory() as new_dir:
+                mocker.patch('shutil.os.rename', side_effect=OSError(EXDEV, 'Invalid cross-device link'))
+                client.podcast_update_file_location(new_pod1['id'], Path(new_dir))
+                episode_list = client.episode_list()
+                assert new_dir in str(episode_list[0]['file_path'])
+                assert Path(episode_list[0]['file_path']).exists()
+
+def test_podcast_update_file_location_same_dir(mocker):
+    # The old dir is deleted after the move, and deleting it when it is also the new dir
+    # would take the files that were just moved into it
+    with TemporaryDirectory() as tmp_dir:
+        with temp_audio_file() as temp_audio:
+            client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+            new_pod1 = client.podcast_create('rss', '1234', 'foo')
+            mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+            mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
+            client.episode_sync(include_podcasts=[new_pod1['id']])
+            episode_list = client.episode_list(only_files=False)
+            client.episode_download([episode_list[0]['id']])
+            podcast_dir = client.podcast_list()[0]['file_location']
+
+            client.podcast_update_file_location(new_pod1['id'], Path(podcast_dir))
+            episode_list = client.episode_list()
+            assert str(podcast_dir) in str(episode_list[0]['file_path'])
+            assert Path(episode_list[0]['file_path']).exists()
+
+def test_podcast_update_file_location_move_failure(mocker):
+    # A failed move leaves the podcast pointing at the dir the files are still in, so the
+    # command can be run again
+    with TemporaryDirectory() as tmp_dir:
+        with temp_audio_file() as temp_audio:
+            client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+            new_pod1 = client.podcast_create('rss', '1234', 'foo')
+            mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+            mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
+            client.episode_sync(include_podcasts=[new_pod1['id']])
+            episode_list = client.episode_list(only_files=False)
+            client.episode_download([episode_list[0]['id']])
+            original_dir = client.podcast_list()[0]['file_location']
+
+            with TemporaryDirectory() as new_dir:
+                mocker.patch('hathor.client.move', side_effect=OSError('disk on fire'))
+                with pytest.raises(OSError):
+                    client.podcast_update_file_location(new_pod1['id'], Path(new_dir))
+                assert client.podcast_list()[0]['file_location'] == original_dir
 
 def test_podcast_update_file_no_move(mocker):
     with TemporaryDirectory() as tmp_dir:
