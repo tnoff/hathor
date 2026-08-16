@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-08-16
+
+### Changed
+
+- A youtube or twitch broadcast that is not downloadable yet, because it is live, upcoming, or still being processed into a VOD, is now skipped quietly during a sync instead of being logged as "Unable to download episode". The liveness checks already held these back, but they returned the same empty result as a genuine download failure, so every sync reported an error for an episode that was only waiting on the broadcast. The episode still keeps no file and is picked up again by a later sync once the broadcast is ready.
+
 ## [2.3.1] - 2026-08-14
 
 ### Changed
