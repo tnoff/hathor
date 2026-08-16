@@ -10,7 +10,7 @@ import pytest
 from yt_dlp.utils import DownloadError
 
 from hathor.client import HathorClient
-from hathor.exc import HathorException, FunctionUndefined
+from hathor.exc import EpisodeNotReady, HathorException, FunctionUndefined
 from hathor.podcast.archive import ArchiveInterface, RSSManager, TwitchManager
 from hathor.podcast.archive import extract_twitch_video_id
 from hathor.podcast.archive import twitch_timestamp, verify_title_filters
@@ -478,9 +478,9 @@ def test_twitch_download_skips_live_broadcast(mocker):
         'streams': {'data': [{'id': 'stream999'}]},
     })
     yt_mock = mocker.patch('hathor.podcast.archive.YoutubeDL')
-    file_path, size = manager.episode_download(_twitch_url(), 'bar')
-    assert file_path is None
-    assert size is None
+    with pytest.raises(EpisodeNotReady) as error:
+        manager.episode_download(_twitch_url(), 'bar')
+    assert 'Episode not ready for download' in str(error.value)
     yt_mock.assert_not_called()
 
 
@@ -503,9 +503,9 @@ def test_twitch_download_skips_vod_still_processing(mocker):
             thumbnail='https://vod-secure.twitch.tv/_404/404_processing_320x180.png')]},
     })
     yt_mock = mocker.patch('hathor.podcast.archive.YoutubeDL')
-    file_path, size = manager.episode_download(_twitch_url(), 'bar')
-    assert file_path is None
-    assert size is None
+    with pytest.raises(EpisodeNotReady) as error:
+        manager.episode_download(_twitch_url(), 'bar')
+    assert 'Episode not ready for download' in str(error.value)
     yt_mock.assert_not_called()
 
 

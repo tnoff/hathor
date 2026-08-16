@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 import pytest
 
 from hathor.client import HathorClient
-from hathor.exc import AudioFileException, HathorException
+from hathor.exc import AudioFileException, EpisodeNotReady, HathorException
 from hathor.podcast.archive import RSSManager, YoutubeManager
 
 from tests.utils import temp_audio_file
@@ -390,6 +390,28 @@ def test_episode_download_no_return(mocker):
         client.episode_download([episode_list[0]['id']])
         episode_list = client.episode_list()
         assert len(episode_list) == 0
+
+def test_episode_download_not_ready(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        with temp_audio_file() as temp_audio:
+            client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+            new_pod1 = client.podcast_create('rss', '1234', 'foo')
+            mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+            client.episode_sync(include_podcasts=[new_pod1['id']])
+            episode_list = client.episode_list(only_files=False)
+
+            # First episode isnt downloadable yet, the second one is
+            def download(download_url, _output_prefix, **_):
+                if download_url == episode_list[0]['download_url']:
+                    raise EpisodeNotReady(f'Episode not ready for download: {download_url}')
+                return Path(temp_audio), 123
+            mocker.patch.object(RSSManager, 'episode_download', side_effect=download)
+
+            downloaded = client.episode_download([ep['id'] for ep in episode_list])
+            assert [ep['id'] for ep in downloaded] == [episode_list[1]['id']]
+            # Not ready episodes keep no file, so a later sync picks them up again
+            assert client.episode_show(episode_list[0]['id'])[0]['file_path'] is None
 
 class MockYoutubeDLOptions():
     def __init__(self, audio_file):

@@ -17,7 +17,7 @@ from sqlalchemy.sql import text
 from hathor.audio.metadata import tags_update
 from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
-from hathor.exc import AudioFileException, HathorException
+from hathor.exc import AudioFileException, EpisodeNotReady, HathorException
 from hathor.podcast.archive import ARCHIVE_TYPES, VALID_ARCHIVE_KEYS
 from hathor import utils
 
@@ -667,8 +667,12 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
 
             episode_path_prefix = build_episode_path(episode, podcast)
 
-            output_path, download_size = manager.episode_download(episode.download_url,
-                                                                  episode_path_prefix)
+            try:
+                output_path, download_size = manager.episode_download(episode.download_url,
+                                                                      episode_path_prefix)
+            except EpisodeNotReady as error:
+                self.logger.debug(f'Skipping episode: {episode.id}, not ready for download: {str(error)}')
+                continue
             if output_path is None or (download_size is None or download_size == 0):
                 self.logger.error(f'Unable to download episode: {episode.id}')
                 continue

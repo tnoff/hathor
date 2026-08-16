@@ -14,7 +14,7 @@ from requests import get, post
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
-from hathor.exc import FunctionUndefined, HathorException
+from hathor.exc import EpisodeNotReady, FunctionUndefined, HathorException
 from hathor import utils
 
 _YOUTUBE_VIDEO_ID_RE = re.compile(
@@ -419,9 +419,11 @@ class YoutubeManager(ArchiveInterface):
         Download episode from url
         download_url    : URL to download from
         output_prefix   : Name of file, should not include suffix
+
+        Raises EpisodeNotReady if the broadcast cannot be downloaded yet
         '''
         if not self._youtube_vod_ready(download_url):
-            return None, None
+            raise EpisodeNotReady(f'Episode not ready for download: {download_url}')
         options = {
             'noplaylist' : True,
             'format': (
@@ -589,9 +591,11 @@ class TwitchManager(ArchiveInterface):
         Download episode from url
         download_url    : URL to download from
         output_prefix   : Name of file, should not include suffix
+
+        Raises EpisodeNotReady if the broadcast cannot be downloaded yet
         '''
         if not self._twitch_vod_ready(download_url):
-            return None, None
+            raise EpisodeNotReady(f'Episode not ready for download: {download_url}')
         options = {
             'noplaylist' : True,
             # Twitch serves muxed HLS variants, the split streams are a fallback

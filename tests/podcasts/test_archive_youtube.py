@@ -10,7 +10,7 @@ from googleapiclient.errors import HttpError
 import pytest
 from yt_dlp.utils import DownloadError
 
-from hathor.exc import HathorException
+from hathor.exc import EpisodeNotReady, HathorException
 from hathor.podcast.archive import YoutubeManager, extract_youtube_video_id
 from hathor.podcast.archive import youtube_quota_exhausted
 from hathor.podcast.archive import YOUTUBE_MAX_PAGES, YOUTUBE_NUM_RETRIES
@@ -453,9 +453,9 @@ def test_youtube_download_skips_live_broadcast(mocker):
         }]
     }))
     yt_mock = mocker.patch('hathor.podcast.archive.YoutubeDL')
-    file_path, size = manager.episode_download(_live_url(), 'bar')
-    assert file_path is None
-    assert size is None
+    with pytest.raises(EpisodeNotReady) as error:
+        manager.episode_download(_live_url(), 'bar')
+    assert 'Episode not ready for download' in str(error.value)
     yt_mock.assert_not_called()
 
 
@@ -468,9 +468,9 @@ def test_youtube_download_skips_upcoming_broadcast(mocker):
         }]
     }))
     yt_mock = mocker.patch('hathor.podcast.archive.YoutubeDL')
-    file_path, size = manager.episode_download(_live_url(), 'bar')
-    assert file_path is None
-    assert size is None
+    with pytest.raises(EpisodeNotReady) as error:
+        manager.episode_download(_live_url(), 'bar')
+    assert 'Episode not ready for download' in str(error.value)
     yt_mock.assert_not_called()
 
 
@@ -483,9 +483,9 @@ def test_youtube_download_skips_live_still_processing(mocker):
         }]
     }))
     yt_mock = mocker.patch('hathor.podcast.archive.YoutubeDL')
-    file_path, size = manager.episode_download(_live_url(), 'bar')
-    assert file_path is None
-    assert size is None
+    with pytest.raises(EpisodeNotReady) as error:
+        manager.episode_download(_live_url(), 'bar')
+    assert 'Episode not ready for download' in str(error.value)
     yt_mock.assert_not_called()
 
 
