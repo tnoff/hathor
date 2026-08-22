@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-08-22
+
+### Changed
+
+- Youtube podcasts can now leave shorts out of a sync, with the new `youtube_skip_shorts` setting (off by default, so nothing changes for existing configs). Shorts live in a channel's uploads playlist alongside everything else and the data api has no field that marks one, so hathor asks the shorts player, which answers 200 for a real short and redirects anything else to /watch. The check costs no api quota and runs only after the title filters, so it is spent only on videos that would otherwise be stored, and a video is kept whenever the check cannot be made.
+
 ## [2.3.3] - 2026-08-21
 
 ### Changed
