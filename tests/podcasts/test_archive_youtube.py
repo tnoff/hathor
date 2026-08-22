@@ -215,6 +215,51 @@ def test_youtube_broadcast_update_known_streak_resets(mocker):
     assert [e['title'] for e in episode_list] == ['still new']
 
 
+def test_youtube_broadcast_update_backfill_walks_past_known(mocker):
+    known = [random_video_id() for _ in range(3)]
+    client = MockYoutubeClient(pages=[
+        playlist_page(*(playlist_item(video_id=vid) for vid in known)),
+        playlist_page(playlist_item(title='older one')),
+    ])
+    manager = youtube_manager(mocker, client)
+    episode_list = manager.broadcast_update(
+        YOUTUBE_CHANNEL, known_urls=[watch_url(vid) for vid in known], backfill=True)
+    # the gap being filled sits UNDER the known videos, so the streak must not stop the walk
+    assert [e['title'] for e in episode_list] == ['older one']
+    assert client.playlist_items_mock.pages_served == 2
+
+
+def test_youtube_broadcast_update_backfill_stops_at_max_results(mocker):
+    known = [random_video_id() for _ in range(3)]
+    client = MockYoutubeClient(pages=[
+        playlist_page(*(playlist_item(video_id=vid) for vid in known),
+                      playlist_item(title='older one'), playlist_item(title='older two')),
+        playlist_page(playlist_item(title='should never be read')),
+    ])
+    manager = youtube_manager(mocker, client)
+    episode_list = manager.broadcast_update(
+        YOUTUBE_CHANNEL, max_results=2,
+        known_urls=[watch_url(vid) for vid in known], backfill=True)
+    # max_results is the gap, and is what ends a backfill instead of the streak
+    assert [e['title'] for e in episode_list] == ['older one', 'older two']
+    assert client.playlist_items_mock.pages_served == 1
+
+
+def test_youtube_broadcast_update_backfill_still_capped_by_page_ceiling(mocker):
+    known = [random_video_id()]
+    pages = [playlist_page(playlist_item(video_id=known[0]))]
+    pages += [playlist_page(playlist_item(video_id=known[0]))
+              for _ in range(YOUTUBE_MAX_PAGES + 5)]
+    client = MockYoutubeClient(pages=pages)
+    manager = youtube_manager(mocker, client)
+    # a backfill that never finds its gap must still not walk a channel forever
+    episode_list = manager.broadcast_update(
+        YOUTUBE_CHANNEL, max_results=5,
+        known_urls=[watch_url(known[0])], backfill=True)
+    assert not episode_list
+    assert client.playlist_items_mock.pages_served == YOUTUBE_MAX_PAGES
+
+
 def test_youtube_broadcast_update_known_beats_filters(mocker):
     known = [random_video_id() for _ in range(3)]
     client = MockYoutubeClient(pages=[

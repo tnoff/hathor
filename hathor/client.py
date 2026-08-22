@@ -476,14 +476,6 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
             self.logger.debug(f'Running episode sync on podcast: {podcast.id}')
             manager = self._archive_manager(podcast.archive_type)
 
-            # if sync all episodes, give no max results so all episodes returned
-            if max_episode_sync is None:
-                max_results = podcast.max_allowed
-            elif max_episode_sync == 0:
-                max_results = None
-            else:
-                max_results = max_episode_sync
-
             # check for filters for podcast
             compiled_filters = [re.compile(f.regex_string) for f in \
                 self.db_session.query(PodcastTitleFilter).\
@@ -495,10 +487,31 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
             known_urls = {row[0] for row in self.db_session.query(PodcastEpisode.download_url).\
                 filter(PodcastEpisode.podcast_id == podcast.id)}
 
+            # A podcast under its max allowed is missing episodes OLDER than the ones it
+            # still has, and a newest-first listing that stops on known episodes can never
+            # reach them -- deleting episodes, or a new filter dropping some, strands the
+            # gap forever. Ask for a backfill instead, sized to the gap so it stops as
+            # soon as the podcast is whole again
+            episodes_stored = len(known_urls)
+            backfill = podcast.max_allowed is not None and episodes_stored < podcast.max_allowed
+            if backfill:
+                self.logger.debug(f'Podcast {podcast.id} holds {episodes_stored} of '
+                                  f'{podcast.max_allowed} episodes, backfilling the difference')
+
+            # if sync all episodes, give no max results so all episodes returned
+            if max_episode_sync is None:
+                # An explicit max_episode_sync is the caller's call and overrides the gap
+                max_results = podcast.max_allowed - episodes_stored if backfill else podcast.max_allowed
+            elif max_episode_sync == 0:
+                max_results = None
+            else:
+                max_results = max_episode_sync
+
             current_episodes = manager.broadcast_update(podcast.broadcast_id,
                                                         max_results=max_results,
                                                         filters=compiled_filters,
-                                                        known_urls=known_urls)
+                                                        known_urls=known_urls,
+                                                        backfill=backfill)
             for episode in current_episodes:
                 episode_processed_url = episode['download_link']
                 # Patreon keeps the same basic url but changes up the query params

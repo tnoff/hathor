@@ -329,7 +329,8 @@ class YoutubeManager(ArchiveInterface):
             return False
         return response.status_code == 200
 
-    def broadcast_update(self, broadcast_id, max_results=None, filters=None, known_urls=None, **_):
+    def broadcast_update(self, broadcast_id, max_results=None, filters=None, known_urls=None,
+                         backfill=False, **_):
         '''
         Get latest episodes from broadcast
         broadcast_id    : Youtube channel id
@@ -337,6 +338,8 @@ class YoutubeManager(ArchiveInterface):
         filters         : List of regex filters
         known_urls      : Download urls already stored for this podcast. Paging stops
                           once YOUTUBE_KNOWN_STREAK_STOP of them turn up in a row
+        backfill        : Walk past the known videos instead of stopping on them, for a
+                          podcast sitting under its max allowed. Bounded by max_results
         '''
         self.logger.debug(f'Getting episodes for youtube broadcast: {broadcast_id}')
         archive_data = []
@@ -367,7 +370,10 @@ class YoutubeManager(ArchiveInterface):
                 # rarely cannot keep the walk going to the end of the channel
                 if video_id in known_ids:
                     known_streak += 1
-                    if known_streak >= YOUTUBE_KNOWN_STREAK_STOP:
+                    # A backfill wants the episodes sitting UNDER the known ones, so
+                    # the streak cannot be allowed to end the walk. max_results is the
+                    # gap being filled, and stops it instead
+                    if not backfill and known_streak >= YOUTUBE_KNOWN_STREAK_STOP:
                         self.logger.debug(f'Saw {known_streak} known videos in a row, caught up on {broadcast_id}')
                         return archive_data
                     continue

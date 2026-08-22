@@ -143,6 +143,61 @@ def test_episode_sync_max_allowed_set(mocker):
         _, kwargs = mocked_rss.call_args
         assert kwargs.get('max_results') == 3
 
+def test_episode_sync_backfills_under_max_allowed(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+        new_pod1 = client.podcast_create('rss', '1234', 'foo', max_allowed=5)
+        mocked_rss = mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+        client.episode_sync(include_podcasts=[new_pod1['id']])
+        _, kwargs = mocked_rss.call_args
+        # nothing stored yet, so the whole max allowed is the gap
+        assert kwargs.get('backfill') is True
+        assert kwargs.get('max_results') == 5
+
+        client.episode_sync(include_podcasts=[new_pod1['id']])
+        _, kwargs = mocked_rss.call_args
+        # two of five stored, so only the remaining three are asked for
+        assert kwargs.get('backfill') is True
+        assert kwargs.get('max_results') == 3
+
+def test_episode_sync_no_backfill_when_full(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+        new_pod1 = client.podcast_create('rss', '1234', 'foo', max_allowed=2)
+        mocked_rss = mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+        client.episode_sync(include_podcasts=[new_pod1['id']])
+        client.episode_sync(include_podcasts=[new_pod1['id']])
+        _, kwargs = mocked_rss.call_args
+        # at its max allowed, so a sync stays the cheap caught up walk
+        assert kwargs.get('backfill') is False
+        assert kwargs.get('max_results') == 2
+
+def test_episode_sync_no_backfill_without_max_allowed(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+        new_pod1 = client.podcast_create('rss', '1234', 'foo')
+        mocked_rss = mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+        client.episode_sync(include_podcasts=[new_pod1['id']])
+        _, kwargs = mocked_rss.call_args
+        # no max allowed means no gap to measure, so nothing to backfill toward
+        assert kwargs.get('backfill') is False
+        assert kwargs.get('max_results') is None
+
+def test_episode_sync_max_episode_sync_overrides_backfill(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+
+        new_pod1 = client.podcast_create('rss', '1234', 'foo', max_allowed=5)
+        mocked_rss = mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+        client.episode_sync(include_podcasts=[new_pod1['id']], max_episode_sync=1)
+        _, kwargs = mocked_rss.call_args
+        # an explicit count is the caller's call, but the walk still gets to go deep
+        assert kwargs.get('backfill') is True
+        assert kwargs.get('max_results') == 1
+
 def test_episode_sync_passes_known_urls(mocker):
     with TemporaryDirectory() as tmp_dir:
         client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
