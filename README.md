@@ -49,6 +49,7 @@ hathor:
   twitch_client_id: abc1234
   twitch_client_secret: xyz9876
   datetime_output_format: "%Y-%m-%d"
+  youtube_skip_shorts: true
   ytdlp_options:
     sleep_requests: 1
     sleep_interval: 2
@@ -77,6 +78,23 @@ you're not a bot`, and from then on nothing downloads until the client backs off
 `sleep_interval` and `max_sleep_interval` put a randomised gap in front of each
 download. Raise them if you are still being throttled; lower them at your own
 risk.
+
+#### YouTube Shorts
+
+Shorts sit in a channel's uploads playlist next to everything else, so by default a
+youtube podcast picks them up like any other video. Set `youtube_skip_shorts: true`
+to leave them out of syncs.
+
+The data API has no field that marks a video as a short, and duration is not a
+reliable stand in — shorts run up to three minutes and plenty of regular uploads
+are shorter than that. Hathor asks the shorts player instead: it answers `200` for
+a real short and redirects anything else to `/watch`. That costs no API quota, but
+it is one extra request per video that reaches the check, so the check runs only
+after the title filters have had their say. A video is kept whenever the check
+cannot be made, so an unreachable youtube drops nothing.
+
+Skipped shorts are never stored as episodes, which means each sync re-checks the
+ones still inside the window it walks.
 
 ### Podcast Archives
 

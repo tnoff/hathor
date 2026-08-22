@@ -10,7 +10,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from validators import url
 
-from requests import get, post
+from requests import get, head, post
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
@@ -76,6 +76,14 @@ YOUTUBE_MAX_PAGES = 20
 YOUTUBE_NUM_RETRIES = 4
 # 403 reasons that mean the daily quota is spent
 YOUTUBE_QUOTA_REASONS = ('quotaExceeded', 'dailyLimitExceeded')
+
+# Shorts sit in the uploads playlist next to everything else and the data api
+# has no field that marks one. The shorts player does the marking instead: it
+# serves a short at 200 and bounces anything else to /watch with a 303. A HEAD
+# costs no api quota and no body, and unlike duration it does not mistake a
+# two minute regular upload for a short.
+YOUTUBE_SHORTS_URL = 'https://www.youtube.com/shorts'
+YOUTUBE_SHORTS_REQUEST_TIMEOUT = 30
 
 def twitch_timestamp(timestamp: str) -> datetime:
     '''
@@ -268,6 +276,7 @@ class YoutubeManager(ArchiveInterface):
         if not self.google_api_key:
             raise HathorException('Google API Key not passed')
         self.ytdlp_options = kwargs.get('ytdlp_options', None) or {}
+        self.skip_shorts = kwargs.get('youtube_skip_shorts', False)
         # Built once and reused. Every call off it goes through _execute
         self.youtube_api = build('youtube', 'v3', developerKey=self.google_api_key)
 
@@ -303,6 +312,22 @@ class YoutubeManager(ArchiveInterface):
         if not items:
             raise HathorException(f'No youtube channel found for: {broadcast_id}')
         return items[0]['contentDetails']['relatedPlaylists']['uploads']
+
+    def _is_short(self, video_id: str) -> bool:
+        '''
+        Check whether a video id points at a short
+        video_id : 11 char youtube video id
+
+        Returns False when the check cannot be made, so a video is only ever
+        skipped on a definite answer
+        '''
+        try:
+            response = head(f'{YOUTUBE_SHORTS_URL}/{video_id}', allow_redirects=False,
+                            timeout=YOUTUBE_SHORTS_REQUEST_TIMEOUT)
+        except Exception as e: #pylint:disable=broad-except
+            self.logger.warning(f'Shorts check failed for video {video_id}: {str(e)}')
+            return False
+        return response.status_code == 200
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None, known_urls=None, **_):
         '''
@@ -346,12 +371,23 @@ class YoutubeManager(ArchiveInterface):
                         self.logger.debug(f'Saw {known_streak} known videos in a row, caught up on {broadcast_id}')
                         return archive_data
                     continue
-                known_streak = 0
 
                 title = utils.clean_string(item['snippet']['title'])
                 if not verify_title_filters(filters, title):
                     self.logger.debug(f'Title: {title} , does not pass filters, skipping')
+                    known_streak = 0
                     continue
+
+                # Checked after the filters, which are free, so the request is
+                # only spent on videos that would otherwise be stored. A skipped
+                # short leaves the streak alone: it never enters known_urls, so
+                # resetting here would mean a channel that posts shorts between
+                # uploads could never reach the streak and would page on to the
+                # ceiling on every sync
+                if self.skip_shorts and self._is_short(video_id):
+                    self.logger.debug(f'Video {video_id} is a short, skipping')
+                    continue
+                known_streak = 0
 
                 download_url = f'https://www.youtube.com/watch?v={video_id}'
                 # snippet.publishedAt is when the video joined the playlist, the

@@ -83,7 +83,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
                  google_api_key: str | None = None,
                  twitch_client_id: str | None = None,
                  twitch_client_secret: str | None = None,
-                 ytdlp_options: dict | None = None):
+                 ytdlp_options: dict | None = None,
+                 youtube_skip_shorts: bool = False):
         '''
         Initialize the hathor client
         podcast_directory               :   Directory where new podcasts will be placed by default
@@ -94,6 +95,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         twitch_client_secret            :   Client secret for accessing the twitch api
         logger                          :   Logger for client to use
         ytdlp_options                   :   Extra options passed to yt-dlp, merged over hathor's own
+        youtube_skip_shorts             :   Leave youtube shorts out of episode syncs
         '''
         self.podcast_directory = None
         if podcast_directory:
@@ -118,6 +120,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         self.twitch_client_id = twitch_client_id
         self.twitch_client_secret = twitch_client_secret
         self.ytdlp_options = ytdlp_options or {}
+        self.youtube_skip_shorts = youtube_skip_shorts
         self._archive_managers = {}
 
         self.plugins = load_plugins()
@@ -148,7 +151,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
                                               **{'google_api_key' : self.google_api_key,
                                                  'twitch_client_id' : self.twitch_client_id,
                                                  'twitch_client_secret' : self.twitch_client_secret,
-                                                 'ytdlp_options' : self.ytdlp_options})
+                                                 'ytdlp_options' : self.ytdlp_options,
+                                                 'youtube_skip_shorts' : self.youtube_skip_shorts})
         self._archive_managers[archive_type] = manager
         return manager
 

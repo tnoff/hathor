@@ -31,3 +31,15 @@ def test_twitch_credentials_stored():
     client = HathorClient(twitch_client_id='id123', twitch_client_secret='secret123')
     assert client.twitch_client_id == 'id123'
     assert client.twitch_client_secret == 'secret123'
+
+
+def test_youtube_skip_shorts_default_off():
+    client = HathorClient()
+    assert client.youtube_skip_shorts is False
+
+
+def test_youtube_skip_shorts_reaches_the_manager(mocker):
+    mocker.patch('hathor.podcast.archive.build')
+    client = HathorClient(google_api_key='derp', youtube_skip_shorts=True)
+    manager = client._archive_manager('youtube') #pylint:disable=protected-access
+    assert manager.skip_shorts is True

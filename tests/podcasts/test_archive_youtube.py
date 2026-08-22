@@ -13,7 +13,7 @@ from yt_dlp.utils import DownloadError
 from hathor.exc import EpisodeNotReady, HathorException
 from hathor.podcast.archive import YoutubeManager, extract_youtube_video_id
 from hathor.podcast.archive import youtube_quota_exhausted
-from hathor.podcast.archive import YOUTUBE_MAX_PAGES, YOUTUBE_NUM_RETRIES
+from hathor.podcast.archive import YOUTUBE_KNOWN_STREAK_STOP, YOUTUBE_MAX_PAGES, YOUTUBE_NUM_RETRIES
 
 from tests import utils as test_utils
 
@@ -312,6 +312,103 @@ def test_youtube_quota_exhausted_shapes(details, expected):
     error = http_error(403, 'quotaExceeded')
     error.error_details = details
     assert youtube_quota_exhausted(error) is expected
+
+class MockHeadResponse():
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
+def mock_shorts_head(mocker, short_ids=(), error=None):
+    '''
+    Patch the shorts probe. Ids in short_ids answer 200, the way the shorts
+    player answers for a real short; everything else answers the 303 it bounces
+    regular videos to /watch with. Returns the list of calls made
+    '''
+    calls = []
+
+    def _head(url, **kwargs):
+        calls.append((url, kwargs))
+        if error:
+            raise error
+        return MockHeadResponse(200 if url.rsplit('/', 1)[-1] in short_ids else 303)
+
+    mocker.patch('hathor.podcast.archive.head', side_effect=_head)
+    return calls
+
+
+def test_youtube_manager_skip_shorts_default_off(mocker):
+    assert youtube_manager(mocker).skip_shorts is False
+
+
+def test_youtube_broadcast_update_skips_shorts(mocker):
+    short_id = random_video_id()
+    client = MockYoutubeClient(pages=[playlist_page(
+        playlist_item(video_id=short_id, title='Short 0'),
+        playlist_item(title='Episode 1'))])
+    manager = youtube_manager(mocker, client, youtube_skip_shorts=True)
+    mock_shorts_head(mocker, short_ids=[short_id])
+    episode_list = manager.broadcast_update(YOUTUBE_CHANNEL)
+    assert [e['title'] for e in episode_list] == ['Episode 1']
+
+
+def test_youtube_broadcast_update_keeps_shorts_by_default(mocker):
+    short_id = random_video_id()
+    client = MockYoutubeClient(pages=[playlist_page(playlist_item(video_id=short_id))])
+    manager = youtube_manager(mocker, client)
+    calls = mock_shorts_head(mocker, short_ids=[short_id])
+    assert len(manager.broadcast_update(YOUTUBE_CHANNEL)) == 1
+    # the option is off, so no request is spent on the check at all
+    assert not calls
+
+
+def test_youtube_broadcast_update_shorts_probe_shape(mocker):
+    video_id = random_video_id()
+    client = MockYoutubeClient(pages=[playlist_page(playlist_item(video_id=video_id))])
+    manager = youtube_manager(mocker, client, youtube_skip_shorts=True)
+    calls = mock_shorts_head(mocker)
+    manager.broadcast_update(YOUTUBE_CHANNEL)
+    url, kwargs = calls[0]
+    assert url == f'https://www.youtube.com/shorts/{video_id}'
+    # the redirect is the answer, following it would only fetch the watch page
+    assert kwargs['allow_redirects'] is False
+
+
+def test_youtube_broadcast_update_shorts_checked_after_filters(mocker):
+    client = MockYoutubeClient(pages=[playlist_page(playlist_item(title='filtered out'),
+                                                    playlist_item(title='Episode 1'))])
+    manager = youtube_manager(mocker, client, youtube_skip_shorts=True)
+    calls = mock_shorts_head(mocker)
+    manager.broadcast_update(YOUTUBE_CHANNEL, filters=[r'^Episode'])
+    # a video the filters already rejected is not worth a request
+    assert len(calls) == 1
+
+
+def test_youtube_broadcast_update_short_keeps_known_streak(mocker):
+    known = [random_video_id() for _ in range(YOUTUBE_KNOWN_STREAK_STOP)]
+    short_id = random_video_id()
+    client = MockYoutubeClient(pages=[
+        playlist_page(playlist_item(video_id=known[0]),
+                      playlist_item(video_id=known[1]),
+                      playlist_item(video_id=short_id, title='Short 0'),
+                      playlist_item(video_id=known[2])),
+        playlist_page(playlist_item(title='should never be read'))])
+    manager = youtube_manager(mocker, client, youtube_skip_shorts=True)
+    mock_shorts_head(mocker, short_ids=[short_id])
+    episode_list = manager.broadcast_update(
+        YOUTUBE_CHANNEL, known_urls=[watch_url(vid) for vid in known])
+    # a skipped short is never stored, so counting it as new would restart the
+    # streak and keep a shorts heavy channel paging to the ceiling every sync
+    assert not episode_list
+    assert client.playlist_items_mock.pages_served == 1
+
+
+def test_youtube_broadcast_update_keeps_video_when_shorts_check_fails(mocker):
+    client = MockYoutubeClient(pages=[playlist_page(playlist_item(title='Episode 0'))])
+    manager = youtube_manager(mocker, client, youtube_skip_shorts=True)
+    mock_shorts_head(mocker, error=RuntimeError('youtube unreachable'))
+    # an unanswered check must not silently drop a regular episode
+    assert len(manager.broadcast_update(YOUTUBE_CHANNEL)) == 1
+
 
 class MockYoutubeDL():
     def __init__(self, temp_audio_file):

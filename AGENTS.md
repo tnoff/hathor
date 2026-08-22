@@ -21,6 +21,8 @@ Archive backends behind `ArchiveInterface`. Two implementations:
 - `RSSManager` — parses RSS feeds via `feedparser`, downloads files via HTTP (`curl_download`)
 - `YoutubeManager` — uses Google API to list videos, downloads via `yt-dlp`. Before download, calls `videos.list` to check `liveBroadcastContent` / `liveStreamingDetails.actualEndTime` / `contentDetails.duration` and defers (returns `(None, None)`) when the video is live, upcoming, or a finished live still being processed into a VOD — those return to the queue for the next sync
 
+  With `youtube_skip_shorts` set, listing also drops shorts. There is no api field for it, so `_is_short` HEADs `youtube.com/shorts/<id>`, which answers 200 for a short and 303 for anything else. It runs after the title filters, and a skipped short deliberately leaves `known_streak` alone, since it never enters `known_urls`
+
   Listing reads the channel's uploads playlist via `playlistItems.list` (1 quota unit a call, against `search.list`'s 100) at `YOUTUBE_PAGE_SIZE` a page. Paging stops early on `YOUTUBE_KNOWN_STREAK_STOP` consecutive videos from the `known_urls` the client passes down, and is capped at `YOUTUBE_MAX_PAGES` either way. All calls go through `_execute`, which asks the google client for `YOUTUBE_NUM_RETRIES` retries (it backs off on 429/5xx/rate-limit 403s) and turns a spent quota into a `HathorException`
 
 `ARCHIVE_TYPES` dict maps string keys (`'rss'`, `'youtube'`) to classes. `HathorClient._archive_manager()` instantiates the right one.
