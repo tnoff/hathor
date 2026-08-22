@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-08-22
+
+### Changed
+
+- A podcast under its `max_allowed` now backfills instead of staying short. Youtube listing walks newest first and stops once it has seen a few episodes it already has, which is right for a podcast that is only ever gaining episodes but leaves one that has LOST them stuck: the episodes needed to fill the gap are older than the ones still stored, so the walk turns back before it ever reaches them. Deleting episodes, or turning on a setting that filters some out, could strand a podcast under its limit for good. A sync now measures the gap and asks the listing to walk past what it knows, stopping as soon as the gap is filled.
+
 ## [2.4.0] - 2026-08-22
 
 ### Changed
