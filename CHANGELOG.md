@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-08-26
+
+### Changed
+
+- An unanswered shorts check no longer stores the video as a regular episode. The check only runs while walking a channel's listing, so anything that gets past it is never looked at again -- a stretch where the shorts player was unreachable therefore archived every short it could not classify, permanently. Such a video is now left out of the sync entirely rather than guessed at, so the next sync gets to ask again, and a run of failed checks in a row ends the walk instead of spending a full timeout on every remaining video in the channel.
+
 ## [2.4.1] - 2026-08-22
 
 ### Changed
