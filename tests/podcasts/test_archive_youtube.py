@@ -14,6 +14,7 @@ from hathor.exc import EpisodeNotReady, HathorException
 from hathor.podcast.archive import YoutubeManager, extract_youtube_video_id
 from hathor.podcast.archive import youtube_quota_exhausted
 from hathor.podcast.archive import YOUTUBE_KNOWN_STREAK_STOP, YOUTUBE_MAX_PAGES, YOUTUBE_NUM_RETRIES
+from hathor.podcast.archive import YOUTUBE_SHORTS_UNKNOWN_STOP
 
 from tests import utils as test_utils
 
@@ -363,19 +364,21 @@ class MockHeadResponse():
         self.status_code = status_code
 
 
-def mock_shorts_head(mocker, short_ids=(), error=None):
+def mock_shorts_head(mocker, short_ids=(), error=None, error_ids=None):
     '''
     Patch the shorts probe. Ids in short_ids answer 200, the way the shorts
     player answers for a real short; everything else answers the 303 it bounces
-    regular videos to /watch with. Returns the list of calls made
+    regular videos to /watch with. error raises instead of answering, for every
+    id or only the ones in error_ids. Returns the list of calls made
     '''
     calls = []
 
     def _head(url, **kwargs):
         calls.append((url, kwargs))
-        if error:
+        video_id = url.rsplit('/', 1)[-1]
+        if error and (error_ids is None or video_id in error_ids):
             raise error
-        return MockHeadResponse(200 if url.rsplit('/', 1)[-1] in short_ids else 303)
+        return MockHeadResponse(200 if video_id in short_ids else 303)
 
     mocker.patch('hathor.podcast.archive.head', side_effect=_head)
     return calls
@@ -447,12 +450,38 @@ def test_youtube_broadcast_update_short_keeps_known_streak(mocker):
     assert client.playlist_items_mock.pages_served == 1
 
 
-def test_youtube_broadcast_update_keeps_video_when_shorts_check_fails(mocker):
+def test_youtube_broadcast_update_defers_video_when_shorts_check_fails(mocker):
     client = MockYoutubeClient(pages=[playlist_page(playlist_item(title='Episode 0'))])
     manager = youtube_manager(mocker, client, youtube_skip_shorts=True)
     mock_shorts_head(mocker, error=RuntimeError('youtube unreachable'))
-    # an unanswered check must not silently drop a regular episode
-    assert len(manager.broadcast_update(YOUTUBE_CHANNEL)) == 1
+    # storing it would be permanent, the check only runs on the listing walk.
+    # left out, it stays unknown and the next sync gets to ask again
+    assert not manager.broadcast_update(YOUTUBE_CHANNEL)
+
+
+def test_youtube_broadcast_update_stops_on_shorts_check_failure_streak(mocker):
+    client = MockYoutubeClient(pages=[
+        playlist_page(*[playlist_item() for _ in range(YOUTUBE_SHORTS_UNKNOWN_STOP + 5)]),
+        playlist_page(playlist_item(title='should never be read'))])
+    manager = youtube_manager(mocker, client, youtube_skip_shorts=True)
+    calls = mock_shorts_head(mocker, error=RuntimeError('youtube unreachable'))
+    assert not manager.broadcast_update(YOUTUBE_CHANNEL)
+    # a dead shorts player cannot classify anything, and every check costs a
+    # full timeout, so the walk gives up instead of paging to the ceiling
+    assert len(calls) == YOUTUBE_SHORTS_UNKNOWN_STOP
+    assert client.playlist_items_mock.pages_served == 1
+
+
+def test_youtube_broadcast_update_shorts_failure_streak_resets(mocker):
+    flaky = [random_video_id() for _ in range(YOUTUBE_SHORTS_UNKNOWN_STOP - 1)]
+    client = MockYoutubeClient(pages=[playlist_page(
+        *[playlist_item(video_id=vid) for vid in flaky],
+        playlist_item(title='Episode 0'))])
+    manager = youtube_manager(mocker, client, youtube_skip_shorts=True)
+    mock_shorts_head(mocker, error=RuntimeError('youtube unreachable'), error_ids=flaky)
+    # a check that answers means the player is up, so a run of blips short of
+    # the stop must not leave the walk primed to quit on the next one
+    assert [e['title'] for e in manager.broadcast_update(YOUTUBE_CHANNEL)] == ['Episode 0']
 
 
 class MockYoutubeDL():

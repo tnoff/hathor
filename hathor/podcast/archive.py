@@ -84,6 +84,10 @@ YOUTUBE_QUOTA_REASONS = ('quotaExceeded', 'dailyLimitExceeded')
 # two minute regular upload for a short.
 YOUTUBE_SHORTS_URL = 'https://www.youtube.com/shorts'
 YOUTUBE_SHORTS_REQUEST_TIMEOUT = 30
+# Consecutive undecidable shorts checks that mean the network is gone rather
+# than one video being odd. The walk stops there: every check is costing a full
+# timeout, and nothing past this point can be classified anyway.
+YOUTUBE_SHORTS_UNKNOWN_STOP = 3
 
 def twitch_timestamp(timestamp: str) -> datetime:
     '''
@@ -313,20 +317,22 @@ class YoutubeManager(ArchiveInterface):
             raise HathorException(f'No youtube channel found for: {broadcast_id}')
         return items[0]['contentDetails']['relatedPlaylists']['uploads']
 
-    def _is_short(self, video_id: str) -> bool:
+    def _is_short(self, video_id: str) -> bool | None:
         '''
         Check whether a video id points at a short
         video_id : 11 char youtube video id
 
-        Returns False when the check cannot be made, so a video is only ever
-        skipped on a definite answer
+        Returns None when the check cannot be made. An unreachable shorts player
+        says nothing about the video, and answering False there would store a
+        short permanently -- the check only ever runs on the listing walk, so a
+        video that gets past it is never looked at again
         '''
         try:
             response = head(f'{YOUTUBE_SHORTS_URL}/{video_id}', allow_redirects=False,
                             timeout=YOUTUBE_SHORTS_REQUEST_TIMEOUT)
         except Exception as e: #pylint:disable=broad-except
             self.logger.warning(f'Shorts check failed for video {video_id}: {str(e)}')
-            return False
+            return None
         return response.status_code == 200
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None, known_urls=None,
@@ -361,6 +367,7 @@ class YoutubeManager(ArchiveInterface):
         req = playlist_items.list(**data_inputs)
         pages = 0
         known_streak = 0
+        unknown_streak = 0
         while req is not None:
             response = self._execute(req)
             pages += 1
@@ -390,7 +397,20 @@ class YoutubeManager(ArchiveInterface):
                 # resetting here would mean a channel that posts shorts between
                 # uploads could never reach the streak and would page on to the
                 # ceiling on every sync
-                if self.skip_shorts and self._is_short(video_id):
+                short = self._is_short(video_id) if self.skip_shorts else False
+                if short is None:
+                    # Undecidable, so decide nothing. Storing it would keep a short
+                    # forever and dropping it would lose a real upload; leaving it
+                    # out of archive_data keeps it unknown to the database, and the
+                    # next sync gets to ask again
+                    unknown_streak += 1
+                    if unknown_streak >= YOUTUBE_SHORTS_UNKNOWN_STOP:
+                        self.logger.warning(f'Shorts check failed {unknown_streak} times in a row on '
+                                            f'broadcast {broadcast_id}, stopping')
+                        return archive_data
+                    continue
+                unknown_streak = 0
+                if short:
                     self.logger.debug(f'Video {video_id} is a short, skipping')
                     continue
                 known_streak = 0
