@@ -1,0 +1,56 @@
+name: Release
+
+# Default-branch pipeline, replacing the GitLab `push` stage.
+#
+# The three jobs are a two-pass design carried over from GitLab.
+# assemble-changelog folds any pending changelog.d fragments into CHANGELOG.md
+# and pushes; tag runs with gate_on_fragments and DEFERS while fragments are
+# still present, so this pass cuts no tag. That fold push then triggers a fresh
+# run of this workflow where the fragment directory is empty, the gate passes,
+# and tag + release run against the assembled changelog.
+#
+# The push token must therefore be a PAT, not GITHUB_TOKEN: a GITHUB_TOKEN push
+# triggers no follow-up run, so the second pass never happens and no release is
+# ever cut -- with every job green.
+#
+# There is no image job here. The GitLab config included buildkit-build-check
+# but NOT buildkit-docker-push, so this repo validates that its Dockerfile
+# builds and never publishes the result.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  assemble-changelog:
+    name: Assemble changelog
+    permissions:
+      contents: write
+    uses: tnoff/github-workflows/.github/workflows/assemble-changelog.yml@c97852c991d7a4562844df68ab16717dfda54dd7
+    secrets:
+      push_token: ${{ secrets.GIT_PUSH_TOKEN }}
+
+  tag:
+    name: Tag
+    needs: assemble-changelog
+    permissions:
+      contents: write
+    uses: tnoff/github-workflows/.github/workflows/tag.yml@c97852c991d7a4562844df68ab16717dfda54dd7
+    with:
+      gate_on_fragments: true
+    secrets:
+      push_token: ${{ secrets.GIT_PUSH_TOKEN }}
+
+  release:
+    name: Release
+    needs: tag
+    permissions:
+      contents: write
+    uses: tnoff/github-workflows/.github/workflows/release.yml@c97852c991d7a4562844df68ab16717dfda54dd7
+    with:
+      version: ${{ needs.tag.outputs.version }}
+      tag_created: ${{ needs.tag.outputs.tag_created }}
