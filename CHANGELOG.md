@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3] - 2026-08-28
+
+### Changed
+
+- Bumped google-api-python-client to v2.199.0
+- Bumped click to v8.5.0
+
 ## [2.4.2] - 2026-08-26
 
 ### Changed
