@@ -21,7 +21,7 @@ permissions:
 jobs:
   secrets:
     name: Scan for secrets
-    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@badea054ae56c6ca72252cd22dab3a9f9b65268f
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@8579e03b50ee081f47dd1989b79c6a057ee35867
 
   # extra_apt is deliberately empty. The GitLab job ran on ci-base-images,
   # advertised as "build-essential + git + ffmpeg + postgresql", but that was
@@ -30,7 +30,7 @@ jobs:
   # wheels, and nothing under hathor/ or tests/ shells out to a binary.
   tox:
     name: Tox
-    uses: tnoff/github-workflows/.github/workflows/tox.yml@badea054ae56c6ca72252cd22dab3a9f9b65268f
+    uses: tnoff/github-workflows/.github/workflows/tox.yml@8579e03b50ee081f47dd1989b79c6a057ee35867
 
   # Reimplements .image-build-rules' `changes:` block. This repo's Dockerfile
   # uses `COPY . .`, so strictly every file lands in the image layer; the list
@@ -84,7 +84,7 @@ jobs:
     name: Build and scan image
     needs: changes
     if: needs.changes.outputs.image == 'true'
-    uses: tnoff/github-workflows/.github/workflows/docker-build-check.yml@badea054ae56c6ca72252cd22dab3a9f9b65268f
+    uses: tnoff/github-workflows/.github/workflows/docker-build-check.yml@8579e03b50ee081f47dd1989b79c6a057ee35867
 
   bump-version:
     name: Bump version
@@ -94,7 +94,7 @@ jobs:
     if: startsWith(github.head_ref, 'renovate/dev-')
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@badea054ae56c6ca72252cd22dab3a9f9b65268f
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@8579e03b50ee081f47dd1989b79c6a057ee35867
     with:
       bump_changelog: true
     secrets:
