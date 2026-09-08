@@ -17,6 +17,6 @@ metadata:
     Downloads and maintains podcast media from RSS feeds, keeping a local library in
     order. Pip-installable Python package, run on demand.
 spec:
-  type: tool
+  type: library
   owner: group:default/admin
   lifecycle: production
