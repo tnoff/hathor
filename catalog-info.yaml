@@ -1,0 +1,22 @@
+# Backstage catalog descriptor. Discovered automatically -- the portal's GitHub
+# provider reads catalog-info.yaml from the default branch of every repo the
+# tnoff-backstage App can see, so adding this file is the whole of onboarding.
+# Nothing needs registering by hand, and it appears on the next 3h sweep.
+#
+# No annotations, deliberately. github.com/project-slug is DERIVED: the portal
+# registers AnnotateScmSlugEntityProcessor, which reads the slug off the location
+# this file was fetched from, so writing one here would duplicate something that
+# cannot go stale. The rest -- backstage.io/techdocs-ref, the kubernetes
+# selectors, the grafana selectors -- each assert that a target EXISTS, and none
+# of those targets do yet. They arrive with the plugins that read them.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: hathor
+  description: >-
+    Downloads and maintains podcast media from RSS feeds, keeping a local library in
+    order. Pip-installable Python package, run on demand.
+spec:
+  type: tool
+  owner: group:default/admin
+  lifecycle: production
