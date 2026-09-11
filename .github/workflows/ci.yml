@@ -21,7 +21,7 @@ permissions:
 jobs:
   secrets:
     name: Scan for secrets
-    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@8579e03b50ee081f47dd1989b79c6a057ee35867
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
 
   # extra_apt is deliberately empty. The GitLab job ran on ci-base-images,
   # advertised as "build-essential + git + ffmpeg + postgresql", but that was
@@ -30,7 +30,7 @@ jobs:
   # wheels, and nothing under hathor/ or tests/ shells out to a binary.
   tox:
     name: Tox
-    uses: tnoff/github-workflows/.github/workflows/tox.yml@8579e03b50ee081f47dd1989b79c6a057ee35867
+    uses: tnoff/github-workflows/.github/workflows/tox.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
 
   # Reimplements .image-build-rules' `changes:` block. This repo's Dockerfile
   # uses `COPY . .`, so strictly every file lands in the image layer; the list
@@ -84,7 +84,7 @@ jobs:
     name: Build and scan image
     needs: changes
     if: needs.changes.outputs.image == 'true'
-    uses: tnoff/github-workflows/.github/workflows/docker-build-check.yml@8579e03b50ee081f47dd1989b79c6a057ee35867
+    uses: tnoff/github-workflows/.github/workflows/docker-build-check.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
 
   bump-version:
     name: Bump version
@@ -94,7 +94,7 @@ jobs:
     if: startsWith(github.head_ref, 'renovate/dev-')
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@8579e03b50ee081f47dd1989b79c6a057ee35867
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
     with:
       bump_changelog: true
     secrets:
@@ -108,7 +108,7 @@ jobs:
   # left `Release` dead in nine repos for five days in September 2026.
   contracts:
     name: Workflow contracts
-    uses: tnoff/github-workflows/.github/workflows/check-workflow-contracts.yml@2740215791774b60db5cb6da23da260de2e6dfd8
+    uses: tnoff/github-workflows/.github/workflows/check-workflow-contracts.yml@0d92c3c09cf7dd78ce36cb5f40618e7fc296e6a2
 
   result:
     name: CI result
