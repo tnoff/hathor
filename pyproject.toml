@@ -17,7 +17,7 @@ dependencies = [
     "mutagen==1.48.1",
     "pyaml-env==1.2.2",
     "requests==2.34.2",
-    "SQLAlchemy==2.0.52",
+    "SQLAlchemy==2.0.54",
     "validators==0.35.0",
     "yt-dlp==2026.8.19",
 ]
@@ -27,7 +27,7 @@ test = [
     "pytest==9.1.1",
     "pytest-mock==3.15.1",
     "pytest-cov==7.1.0",
-    "tox==4.61.4",
+    "tox==4.61.5",
     "pylint==4.0.8",
     "requests-mock==1.12.1",
     "bandit==1.9.4",
