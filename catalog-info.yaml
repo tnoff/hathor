@@ -20,3 +20,5 @@ spec:
   type: library
   owner: group:default/admin
   lifecycle: production
+  dependsOn:
+    - component:default/github-workflows
