@@ -58,7 +58,7 @@ def test_dump_config():
         with open(config.name, 'w+', encoding='utf-8') as writer:
             dump(basic_config_data, writer)
         runner = CliRunner()
-        result = runner.invoke(cli, ['-c', f'{config.name}', 'dump-config'])
+        result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'dump-config'])
         assert result.exit_code == 0
         assert result.output == '{\n    "hathor": {},\n    "logging": {}\n}\n'
 
@@ -115,7 +115,7 @@ def test_podcast_create():
             with open(config.name, 'w+', encoding='utf-8') as writer:
                 dump(basic_config_data, writer)
             runner = CliRunner()
-            result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+            result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'podcast', 'create',
                                         'rss', 'https://foo.com/example', 'temp-pod',
                                         '--max-allowed', '2', '--file-location', tmp_dir,
                                         '--artist-name', 'foo', '--no-automatic-download'])
@@ -136,7 +136,7 @@ def test_podcast_create_no_automatic_flag():
             with open(config.name, 'w+', encoding='utf-8') as writer:
                 dump(basic_config_data, writer)
             runner = CliRunner()
-            result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+            result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'podcast', 'create',
                                         'rss', 'https://foo.com/example', 'temp-pod',
                                         '--max-allowed', '2', '--file-location', tmp_dir,
                                         '--artist-name', 'foo'])
@@ -167,7 +167,7 @@ def test_podcast_show():
                 runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
                                     'rss', 'https://foo.com/example', 'temp-pod',
                                     '--file-location', tmp_dir])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'show', '1'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'podcast', 'show', '1'])
                 assert loads(result.output) == [
                     {
                         'archive_type': 'rss',
@@ -197,7 +197,7 @@ def test_podcast_update():
                 runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
                                     'rss', 'https://foo.com/example', 'temp-pod',
                                     '--file-location', tmp_dir])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'update', '1', '--artist-name', 'bar'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'podcast', 'update', '1', '--artist-name', 'bar'])
                 assert loads(result.output) == {
                     'archive_type': 'rss',
                     'artist_name': 'bar',
@@ -226,7 +226,7 @@ def test_podcast_update_file_location():
                     runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
                                         'rss', 'https://foo.com/example', 'temp-pod',
                                         '--file-location', tmp_dir])
-                    result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast',
+                    result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'podcast',
                                                  'update-file-location', '1', tmp_dir2])
                     assert loads(result.output) == {
                         'archive_type': 'rss',
@@ -255,7 +255,7 @@ def test_podcast_delete():
                 runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
                                     'rss', 'https://foo.com/example', 'temp-pod',
                                     '--file-location', tmp_dir])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast',
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'podcast',
                                              'delete', '1'])
                 assert loads(result.output) == [1]
 
@@ -275,7 +275,7 @@ def test_filter_create():
                 runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
                                     'rss', 'https://foo.com/example', 'temp-pod',
                                     '--file-location', tmp_dir])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter',
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'filter',
                                              'create', '1', "r'foo.*'"])
                 assert loads(result.output) == {
                     'id': 1,
@@ -301,7 +301,7 @@ def test_filter_list():
                                     '--file-location', tmp_dir])
                 runner.invoke(cli, ['-c', f'{config.name}', 'filter',
                                     'create', '1', "r'foo.*'"])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'list'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'filter', 'list'])
                 assert loads(result.output) == [
                     {
                         'id': 1,
@@ -372,7 +372,7 @@ def test_filter_list_include():
                                     '--file-location', tmp_dir])
                 runner.invoke(cli, ['-c', f'{config.name}', 'filter',
                                     'create', '1', "r'foo.*'"])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'list',
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'filter', 'list',
                                              '--include-podcasts', '1'])            
                 assert loads(result.output) == [
                     {
@@ -400,7 +400,7 @@ def test_filter_list_exclude():
                                     '--file-location', tmp_dir])
                 runner.invoke(cli, ['-c', f'{config.name}', 'filter',
                                     'create', '1', "r'foo.*'"])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'list',
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'filter', 'list',
                                              '--exclude-podcasts', '1'])            
                 assert loads(result.output) == []
 
@@ -422,7 +422,7 @@ def test_filter_delete():
                                     '--file-location', tmp_dir])
                 runner.invoke(cli, ['-c', f'{config.name}', 'filter',
                                     'create', '1', "r'foo.*'"])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'filter', 'delete', '1'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'filter', 'delete', '1'])
                 assert loads(result.output) == [1]
 
 def test_episode_sync(mocker):
@@ -442,7 +442,7 @@ def test_episode_sync(mocker):
                                     'rss', 'https://foo.com/example', 'temp-pod',
                                     '--file-location', tmp_dir])
                 mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'sync'])
                 assert loads(result.output) == [
                     {
                         'date': '2024-12-07',
@@ -476,7 +476,7 @@ def test_episode_list(mocker):
                                     '--file-location', tmp_dir])
                 mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
                 runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'list'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'list'])
                 assert loads(result.output) == [
                     {
                         'date': '2024-12-07',
@@ -510,7 +510,7 @@ def test_episode_list_only_files(mocker):
                                     '--file-location', tmp_dir])
                 mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
                 runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'list', '--only-files'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'list', '--only-files'])
                 assert loads(result.output) == []
 
 def test_episode_show(mocker):
@@ -531,7 +531,7 @@ def test_episode_show(mocker):
                                     '--file-location', tmp_dir])
                 mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
                 runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'show', '1'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'show', '1'])
                 assert loads(result.output) == [
                     {
                         'date': '2024-12-07',
@@ -567,7 +567,7 @@ def test_episode_download(mocker):
                     mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
                     mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
-                    result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'download', '1'])
+                    result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'download', '1'])
                     assert loads(result.output) == [
                         {
                             'date': '2024-12-07',
@@ -604,7 +604,7 @@ def test_episode_delete(mocker):
                     mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'download', '1'])
-                    result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'delete', '1'])
+                    result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'delete', '1'])
                     assert loads(result.output) == [1]
                     temp_audio_path = Path(temp_audio)
                     assert not temp_audio_path.exists()
@@ -630,7 +630,7 @@ def test_episode_delete_keep_files(mocker):
                     mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'download', '1'])
-                    result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'delete', '1', '--no-delete-files'])
+                    result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'delete', '1', '--no-delete-files'])
                     assert loads(result.output) == [1]
                     temp_audio_path = Path(temp_audio)
                     assert temp_audio_path.exists()
@@ -657,7 +657,7 @@ def test_episode_update_file_location(mocker):
                         mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
                         runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
                         runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'download', '1'])
-                        result = runner.invoke(cli, ['-c', f'{config.name}', 'episode',
+                        result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode',
                                                      'update-file-path', '1', temp_audio_new.name])
                         assert loads(result.output) == {
                             'date': '2024-12-07',
@@ -693,7 +693,7 @@ def test_episode_delete_file(mocker):
                     mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'download', '1'])
-                    result = runner.invoke(cli, ['-c', f'{config.name}', 'episode',
+                    result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode',
                                                     'delete-file', '1'])
                     assert loads(result.output) == [1]
                     temp_audio_path = Path(temp_audio)
@@ -720,7 +720,7 @@ def test_episode_update(mocker):
                     mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
                     runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'download', '1'])
-                    result = runner.invoke(cli, ['-c', f'{config.name}', 'episode',
+                    result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode',
                                                     'update', '1', 'True'])
                     assert loads(result.output) == {
                         'date': '2024-12-07',
@@ -754,7 +754,7 @@ def test_episode_cleanup(mocker):
                 mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
                 runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'sync'])
                 runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'cleanup'])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'episode', 'list'])
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'list'])
                 assert loads(result.output) == []
 
 def test_podcast_sync():
@@ -773,6 +773,48 @@ def test_podcast_sync():
                 runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
                                     'rss', 'https://foo.com/example', 'temp-pod',
                                     '--file-location', tmp_dir])
-                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'sync',
+                result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'podcast', 'sync',
                                              '--no-sync-web-episodes', '--no-download-episodes'])
                 assert loads(result.output) is True
+
+def test_podcast_list_default_table_output():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'list'])
+                assert result.exit_code == 0
+                assert 'name' in result.output
+                assert 'temp-pod' in result.output
+                assert '{' not in result.output
+
+def test_podcast_delete_default_table_output():
+    with NamedTemporaryFile(suffix='.sql') as db_file:
+        with TemporaryDirectory() as tmp_dir:
+            with NamedTemporaryFile(suffix='.yml') as config:
+                config_data = {
+                    'hathor': {
+                        'database_connection_string': f'sqlite:///{db_file.name}',
+                        'podcast_directory': tmp_dir,
+                    }
+                }
+                with open(config.name, 'w+', encoding='utf-8') as writer:
+                    dump(config_data, writer)
+                runner = CliRunner()
+                runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'create',
+                                    'rss', 'https://foo.com/example', 'temp-pod',
+                                    '--file-location', tmp_dir])
+                result = runner.invoke(cli, ['-c', f'{config.name}', 'podcast', 'delete', '1'])
+                assert result.exit_code == 0
+                assert result.output == '1\n'

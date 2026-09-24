@@ -21,4 +21,5 @@ spec:
   owner: group:default/admin
   lifecycle: production
   dependsOn:
+    - component:default/dappertable
     - component:default/github-workflows

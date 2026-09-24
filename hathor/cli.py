@@ -1,5 +1,4 @@
 from copy import deepcopy
-from json import dumps
 from pathlib import Path
 
 import click
@@ -7,6 +6,7 @@ from pyaml_env import parse_config
 
 from hathor.client import HathorClient
 from hathor.exc import CliException
+from hathor.output import render_output
 from hathor.podcast.archive import VALID_ARCHIVE_KEYS
 from hathor.utils import setup_logger
 
@@ -35,8 +35,10 @@ def _generate_cluders(include_podcasts, exclude_podcasts):
               default=str(SETTINGS_DEFAULT),
               show_default=True,
               help='Config options')
+@click.option('--json', 'as_json', is_flag=True, default=False,
+              help='Print raw json instead of a formatted table')
 @click.pass_context
-def cli(ctx, config):
+def cli(ctx, config, as_json):
     '''
     Cli Base options
 
@@ -52,7 +54,8 @@ def cli(ctx, config):
         'config': {
             'hathor': options.get('hathor', {}),
             'logging': options.get('logging', {}),
-        }
+        },
+        'json': as_json,
     }
     config_copy = deepcopy(ctx.obj['config']['hathor'])
     if ctx.obj['config']['logging']:
@@ -66,7 +69,7 @@ def dump_config(ctx):
     '''
     Dump config data to screen
     '''
-    click.echo(dumps(ctx.obj['config'], indent=4))
+    render_output(ctx.obj['config'], ctx.obj['json'])
 
 @cli.group()
 @click.pass_context
@@ -95,7 +98,7 @@ def podcast_create(ctx, archive_type, broadcast_id, podcast_name,
         file_location=file_location,
         artist_name=artist_name,
         automatic_download=not no_automatic_download)
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @podcast.command(name='list')
 @click.pass_context
@@ -103,7 +106,7 @@ def podcast_list(ctx):
     '''
     List all podcasts
     '''
-    click.echo(dumps(ctx.obj['client'].podcast_list(), indent=4))
+    render_output(ctx.obj['client'].podcast_list(), ctx.obj['json'])
 
 @podcast.command(name='show')
 @click.argument('podcast_id', type=int, nargs=-1)
@@ -112,7 +115,7 @@ def podcast_show(ctx, podcast_id):
     '''
     Show podcast info
     '''
-    click.echo(dumps(ctx.obj['client'].podcast_show(list(podcast_id)), indent=4))
+    render_output(ctx.obj['client'].podcast_show(list(podcast_id)), ctx.obj['json'])
 
 @podcast.command(name='update')
 @click.argument('podcast_id', type=int)
@@ -137,7 +140,7 @@ def podcast_update(ctx, podcast_id, podcast_name, broadcast_id,
         artist_name=artist_name,
         automatic_download=automatic_download,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @podcast.command(name='update-file-location')
 @click.argument('podcast_id', type=int)
@@ -153,7 +156,7 @@ def podcast_update_file_location(ctx, podcast_id, file_location, no_move_files):
         file_location,
         move_files=not no_move_files,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @podcast.command(name='delete')
 @click.argument('podcast_id', type=int, nargs=-1)
@@ -167,7 +170,7 @@ def podcast_delete(ctx, podcast_id, no_delete_files):
         list(podcast_id),
         delete_files=not no_delete_files,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @cli.group(name='filter')
 @click.pass_context
@@ -187,7 +190,7 @@ def filter_create(ctx, podcast_id, regex_string):
     result = ctx.obj['client'].filter_create(
         podcast_id, regex_string
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @filter_group.command(name='list')
 @click.option('--include-podcasts', help='Comma separated list of podcasts')
@@ -199,7 +202,7 @@ def filter_list(ctx, include_podcasts, exclude_podcasts):
     '''
     include_podcasts, exclude_podcasts = _generate_cluders(include_podcasts, exclude_podcasts)
     result = ctx.obj['client'].filter_list(include_podcasts=include_podcasts, exclude_podcasts=exclude_podcasts)
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @filter_group.command(name='delete')
 @click.argument('filter_id', type=int, nargs=-1)
@@ -209,7 +212,7 @@ def filter_delete(ctx, filter_id):
     Filter delete
     '''
     result = ctx.obj['client'].filter_delete(list(filter_id))
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @cli.group(name='episode')
 @click.pass_context
@@ -233,7 +236,7 @@ def episode_sync(ctx, include_podcasts, exclude_podcasts, max_episode_sync):
         exclude_podcasts=exclude_podcasts,
         max_episode_sync=max_episode_sync,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @episode.command(name='list')
 @click.option('--only-files', is_flag=True, default=False, help='Only show episodes with files')
@@ -250,7 +253,7 @@ def episode_list(ctx, only_files, include_podcasts, exclude_podcasts):
         include_podcasts=include_podcasts,
         exclude_podcasts=exclude_podcasts,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @episode.command(name='show')
 @click.argument('episode_id', type=int, nargs=-1)
@@ -263,7 +266,7 @@ def episode_show(ctx, episode_id):
     result = ctx.obj['client'].episode_show(
         episode_ids,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @episode.command(name='update')
 @click.argument('episode_id', type=int)
@@ -276,7 +279,7 @@ def episode_update(ctx, episode_id, prevent_delete):
     result = ctx.obj['client'].episode_update(
         episode_id, prevent_delete
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @episode.command(name='download')
 @click.argument('episode_id', type=int, nargs=-1)
@@ -287,7 +290,7 @@ def episode_download(ctx, episode_id):
     '''
     episode_ids = list(episode_id)
     result = ctx.obj['client'].episode_download(episode_ids)
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @episode.command(name='delete')
 @click.argument('episode_id', type=int, nargs=-1)
@@ -302,7 +305,7 @@ def episode_delete(ctx, episode_id, no_delete_files):
         episode_ids,
         delete_files=not no_delete_files,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @episode.command(name='update-file-path')
 @click.argument('episode_id', type=int)
@@ -315,7 +318,7 @@ def episode_update_file_location(ctx, episode_id, file_path):
     result = ctx.obj['client'].episode_update_file_path(
         episode_id, file_path
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @episode.command(name='delete-file')
 @click.argument('episode_id', type=int, nargs=-1)
@@ -328,7 +331,7 @@ def episode_delete_file(ctx, episode_id):
     result = ctx.obj['client'].episode_delete_file(
         episode_ids,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @episode.command(name='cleanup')
 @click.pass_context
@@ -337,7 +340,7 @@ def episode_cleanup(ctx):
     Episode cleanup
     '''
     result = ctx.obj['client'].episode_cleanup()
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 @podcast.command(name='sync')
 @click.option('--include-podcasts', help='Comma separated list of podcasts')
@@ -356,7 +359,7 @@ def podcast_sync(ctx, include_podcasts, exclude_podcasts, no_sync_web_episodes, 
         sync_web_episodes=not no_sync_web_episodes,
         download_episodes=not no_download_episodes,
     )
-    click.echo(dumps(result, indent=4))
+    render_output(result, ctx.obj['json'])
 
 def main():
     '''
