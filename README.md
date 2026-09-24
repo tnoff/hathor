@@ -32,6 +32,11 @@ You can use hathor with the command line:
 
     hathor podcast --help
 
+By default, both `hathor` and `audio-tool` print a formatted table. Pass `--json`
+before the subcommand for raw JSON, which is easier to pipe into other tools:
+
+    hathor --json podcast list | jq '.[].name'
+
 ### Initialization and Settings
 
 These variables can be loaded from a settings file. The default location of this settings file
