@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-09-24
+
+### Changed
+
+- Both `hathor` and `audio-tool` now print a formatted table by default instead of raw JSON, using a new shared `dappertable`-backed renderer: a list of records becomes a table keyed on the record's fields, a single record becomes a key/value table, and a list of ids or similar prints one per line. Pass `--json` before the subcommand (e.g. `hathor --json podcast list`) to get the old raw JSON output back for scripting.
+
 ## [2.4.4] - 2026-09-18
 
 ### Changed
