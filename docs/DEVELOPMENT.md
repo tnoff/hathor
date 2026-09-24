@@ -2,13 +2,15 @@
 
 ## Setup
 
-Clone the repo and install in editable mode with dev dependencies:
+Clone the repo and install in editable mode with the `test` extra (there is
+no `requirements.txt`; dev dependencies are declared in `pyproject.toml`'s
+`[project.optional-dependencies] test`, the same source `tox.ini` installs
+from):
 
 ```bash
 git clone https://github.com/tnoff/hathor.git
 cd hathor
-pip install -e .
-pip install -r requirements.txt -r tests/requirements.txt
+pip install -e ".[test]"
 ```
 
 ## Running Tests
@@ -39,9 +41,13 @@ pytest tests/podcasts/test_archive.py::TestClassName::test_method_name
 
 ## Linting
 
+Matches what `tox` runs under its `py314` factor (`tox.ini`) -- pylint,
+tests-pylint, and a bandit security scan, all excluding `hathor/plugins/`:
+
 ```bash
-pylint hathor/
+pylint --ignore=plugins hathor/
 pylint --rcfile .pylintrc.test tests/
+bandit -r hathor/ --exclude hathor/plugins
 ```
 
 ## Plugins
