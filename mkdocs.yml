@@ -1,0 +1,11 @@
+site_name: 'hathor'
+site_description: 'Downloads and maintains podcast media from RSS and YouTube feeds, keeping a local library in order'
+
+nav:
+  - Home: README.md
+  - Development: DEVELOPMENT.md
+  - Agents/Conventions: AGENTS.md
+  - Contributing: CONTRIBUTING.md
+
+plugins:
+  - techdocs-core
