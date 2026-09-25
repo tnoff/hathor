@@ -69,7 +69,7 @@ jobs:
     name: Scan for secrets
     needs: metadata
     if: needs.metadata.outputs.only != 'true'
-    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@8f112893cd17d68fe039d3ba2643d2881bfafdcb
+    uses: tnoff/github-workflows/.github/workflows/trufflehog.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
 
   # extra_apt is deliberately empty. The GitLab job ran on ci-base-images,
   # advertised as "build-essential + git + ffmpeg + postgresql", but that was
@@ -80,7 +80,7 @@ jobs:
     name: Tox
     needs: metadata
     if: needs.metadata.outputs.only != 'true'
-    uses: tnoff/github-workflows/.github/workflows/tox.yml@8f112893cd17d68fe039d3ba2643d2881bfafdcb
+    uses: tnoff/github-workflows/.github/workflows/tox.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
 
   # Reimplements .image-build-rules' `changes:` block. This repo's Dockerfile
   # uses `COPY . .`, so strictly every file lands in the image layer; the list
@@ -136,7 +136,7 @@ jobs:
     name: Build and scan image
     needs: changes
     if: needs.changes.outputs.image == 'true'
-    uses: tnoff/github-workflows/.github/workflows/docker-build-check.yml@8f112893cd17d68fe039d3ba2643d2881bfafdcb
+    uses: tnoff/github-workflows/.github/workflows/docker-build-check.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
 
   bump-version:
     name: Bump version
@@ -146,7 +146,7 @@ jobs:
     if: startsWith(github.head_ref, 'renovate/dev-')
     permissions:
       contents: write
-    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@8f112893cd17d68fe039d3ba2643d2881bfafdcb
+    uses: tnoff/github-workflows/.github/workflows/bump-version.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
     with:
       bump_changelog: true
     secrets:
@@ -162,7 +162,7 @@ jobs:
     name: Workflow contracts
     needs: metadata
     if: needs.metadata.outputs.only != 'true'
-    uses: tnoff/github-workflows/.github/workflows/check-workflow-contracts.yml@8f112893cd17d68fe039d3ba2643d2881bfafdcb
+    uses: tnoff/github-workflows/.github/workflows/check-workflow-contracts.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
 
   result:
     name: CI result

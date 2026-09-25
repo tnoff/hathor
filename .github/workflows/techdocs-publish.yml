@@ -26,7 +26,7 @@ concurrency:
 jobs:
   publish:
     name: Generate and publish
-    uses: tnoff/github-workflows/.github/workflows/techdocs-publish.yml@111e2ebb71a422526b5e04e7294bd2b886289b8f
+    uses: tnoff/github-workflows/.github/workflows/techdocs-publish.yml@f6569d2b6f242fb91759fe0ebfa990a99c09585b
     with:
       entity_ref: default/Component/hathor
     secrets:
