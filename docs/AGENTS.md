@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents working in this repository. It documents code-internal structure that isn't covered by the user-facing docs.
 
-For setup, test, and lint commands see [DEVELOPMENT.md](DEVELOPMENT.md). For user-facing usage (CLI, config schema, Docker, archive types) see [README.md](../README.md).
+For setup, test, and lint commands see [DEVELOPMENT.md](DEVELOPMENT.md). For user-facing usage (CLI, config schema, Docker, archive types) see [README.md](README.md).
 
 ## Architecture
 

@@ -85,3 +85,19 @@ def episode_download(self, results, *args, **kwargs):
 
 This will change the title of new episodes for certain podcasts. Note that for the change
 to be permanent, you'll have to change the episodes in the database.
+
+## Docker build
+
+```bash
+docker build -t hathor .
+```
+
+Built and scanned (not published) in CI via the shared
+`tnoff/github-workflows` `docker-build-check.yml`.
+
+## Releasing
+
+`VERSION` at the repo root is the source of truth. Merging a bump to
+`main` runs `.github/workflows/release.yml`, which assembles the
+changelog, tags, and creates the GitHub release (shared workflows from
+`tnoff/github-workflows`). No image or package is published.
