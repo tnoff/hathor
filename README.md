@@ -370,4 +370,4 @@ A few things worth knowing:
 
 ## Development
 
-See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for instructions on setting up a local dev environment, running tests, and writing plugins.
+See [DEVELOPMENT.md](https://github.com/tnoff/hathor/blob/main/docs/DEVELOPMENT.md) for instructions on setting up a local dev environment, running tests, and writing plugins.
