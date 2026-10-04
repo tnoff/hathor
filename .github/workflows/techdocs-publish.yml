@@ -33,7 +33,7 @@ permissions:
 jobs:
   publish:
     name: Generate and publish
-    uses: tnoff/github-workflows/.github/workflows/techdocs-publish.yml@b1932282111367882be5ad0730eecbe379be3fe0
+    uses: tnoff/github-workflows/.github/workflows/techdocs-publish.yml@adea087c43d56fd13d5b1abf2d5f2ba3e695784d  # techdocs-publish-v1.0.0
     with:
       entity_ref: default/Component/hathor
     secrets:
