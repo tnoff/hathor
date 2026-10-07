@@ -1,21 +1,30 @@
 name: Release
 
-# Default-branch pipeline, replacing the GitLab `push` stage.
+# Default-branch pipeline, replacing the GitLab `push` stage: fold the changelog,
+# tag, release, then build and push the image and ask docker-apps to bump its pin.
 #
-# The three jobs are a two-pass design carried over from GitLab.
-# assemble-changelog folds any pending changelog.d fragments into CHANGELOG.md
-# and pushes; tag runs with gate_on_fragments and DEFERS while fragments are
-# still present, so this pass cuts no tag. That fold push then triggers a fresh
-# run of this workflow where the fragment directory is empty, the gate passes,
-# and tag + release run against the assembled changelog.
+# ---------------------------------------------------------------------------
+# The fold guard
+# ---------------------------------------------------------------------------
+# assemble-changelog pushes a "docs: assemble changelog for X" commit to main,
+# which triggers this workflow a SECOND time. That second pass is what cuts the
+# tag and the release, because tag runs with gate_on_fragments and DEFERS while
+# fragments are still present, so the first pass cuts no tag.
 #
-# The push token must therefore be a PAT, not GITHUB_TOKEN: a GITHUB_TOKEN push
-# triggers no follow-up run, so the second pass never happens and no release is
-# ever cut -- with every job green.
+# The push token must therefore be a PAT/App token, not GITHUB_TOKEN: a
+# GITHUB_TOKEN push triggers no follow-up run, so the second pass never happens
+# and no release is ever cut -- with every job green.
 #
-# There is no image job here. The GitLab config included buildkit-build-check
-# but NOT buildkit-docker-push, so this repo validates that its Dockerfile
-# builds and never publishes the result.
+# But the image must NOT be built and pushed twice, and docker-apps must not be
+# asked to bump twice. push-image skips the fold commit by its message, the same
+# guard the other producers use. Without it the fold commit is byte-identical in
+# the image context, so the push skips the tag write on a shared digest and
+# trigger-bump pins docker-apps at a tag that was never written.
+#
+# The image is what runs in the cluster. The local box builds its own from a
+# clone (~/docker/hathor) and never pulls it. docker-apps pins the immutable
+# short-SHA tag (secondary_tag); `latest` is the moving tag the shared workflow
+# also writes.
 
 on:
   push:
@@ -26,6 +35,61 @@ permissions:
   contents: read
 
 jobs:
+  # Skip the image build when the commit did not touch anything the image is
+  # built from. Without this a docs-only merge folds a changelog, cuts a tag,
+  # rebuilds the image and bumps a production pin in docker-apps for content no
+  # image contains.
+  #
+  # The keep-list is copied from ci.yml's `changes` job and must stay identical
+  # to it. If the two drift, a PR can build an image that its own merge then
+  # refuses to rebuild.
+  #
+  # Two differences from ci.yml's copy, both forced by the event: the base is
+  # github.event.before compared two-dot rather than a PR base ref, and this one
+  # FAILS OPEN. An absent, all-zeros or unreachable base builds anyway. A build
+  # that did not need to happen costs minutes; a build that silently did not
+  # happen leaves docker-apps pinned to a stale image and reads exactly like a
+  # successful run.
+  changes:
+    name: Detect image-input changes
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    outputs:
+      image: ${{ steps.filter.outputs.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Filter
+        id: filter
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ZERO=0000000000000000000000000000000000000000
+          if [ -z "${BEFORE}" ] || [ "${BEFORE}" = "${ZERO}" ] \
+             || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "no usable base ref (${BEFORE:-empty}) -- building"
+            echo "image=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          FILES="$(git diff --name-only "${BEFORE}" "${AFTER}")"
+          MATCH=false
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in
+              Dockerfile|pyproject.toml|VERSION|hathor/*) MATCH=true; break ;;
+            esac
+          done <<< "${FILES}"
+          echo "changed files:"
+          printf '%s\n' "${FILES}" | sed -n 's/^/  /p'
+          echo "image inputs changed: ${MATCH}"
+          echo "image=${MATCH}" >> "$GITHUB_OUTPUT"
+
   assemble-changelog:
     name: Assemble changelog
     permissions:
@@ -56,3 +120,39 @@ jobs:
     with:
       version: ${{ needs.tag.outputs.version }}
       tag_created: ${{ needs.tag.outputs.tag_created }}
+
+  push-image:
+    name: Push image
+    needs: changes
+    if: >-
+      ${{ needs.changes.outputs.image == 'true'
+          && !startsWith(github.event.head_commit.message, 'docs: assemble changelog') }}
+    uses: tnoff/github-workflows/.github/workflows/docker-push.yml@a5e07a72bb76a983408e840c3cfcffa27cdbf738  # docker-push-v1.1.0
+    # registry / namespace / repo_name are INPUTS, not secrets. GitHub refuses
+    # to set a job output containing secret material, so while they were
+    # secrets the `image` output below came back empty and trigger-bump sent a
+    # blank IMAGE_NAME to docker-apps. See github-workflows!98.
+    #
+    # `platform` is left at the shared default, linux/arm64: the cluster is OKE
+    # Ampere A1, and the default runner is the native arm64 one, so there is no
+    # QEMU emulation of the build. The local box builds its own amd64 image from
+    # a clone (~/docker/hathor) and never pulls this one.
+    with:
+      registry: ${{ vars.OCI_REGISTRY }}
+      namespace: ${{ vars.OCI_NAMESPACE }}
+      repo_name: ${{ vars.OCI_REPO_NAME }}
+    secrets:
+      oci_username: ${{ secrets.OCI_USERNAME }}
+      oci_token: ${{ secrets.OCI_TOKEN }}
+
+  trigger-bump:
+    name: Trigger docker-apps bump
+    needs: push-image
+    uses: tnoff/github-workflows/.github/workflows/trigger-bump-dispatch.yml@adea087c43d56fd13d5b1abf2d5f2ba3e695784d  # trigger-bump-dispatch-v1.0.0
+    with:
+      bump_source: hathor
+      image: ${{ needs.push-image.outputs.image }}
+      image_tag: ${{ needs.push-image.outputs.secondary_tag }}
+    secrets:
+      app_client_id: ${{ secrets.CI_APP_CLIENT_ID }}
+      app_private_key: ${{ secrets.CI_APP_PRIVATE_KEY }}

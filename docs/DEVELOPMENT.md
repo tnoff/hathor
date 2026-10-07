@@ -92,12 +92,24 @@ to be permanent, you'll have to change the episodes in the database.
 docker build -t hathor .
 ```
 
-Built and scanned (not published) in CI via the shared
-`tnoff/github-workflows` `docker-build-check.yml`.
+Built and scanned on every PR that touches an image input (`Dockerfile`,
+`pyproject.toml`, `VERSION`, `hathor/`) via the shared `tnoff/github-workflows`
+`docker-build-check.yml`. It is not pushed from CI on PRs; see Releasing.
 
 ## Releasing
 
 `VERSION` at the repo root is the source of truth. Merging a bump to
 `main` runs `.github/workflows/release.yml`, which assembles the
 changelog, tags, and creates the GitHub release (shared workflows from
-`tnoff/github-workflows`). No image or package is published.
+`tnoff/github-workflows`). No package is published to PyPI.
+
+On the same push, if an image input changed, it also builds the image for
+`linux/arm64` (the cluster is OKE Ampere) and pushes it to OCIR as
+`iad.ocir.io/tnoff/hathor:<short sha>` (plus `latest`) with the shared
+`docker-push.yml`, then dispatches `bump-image-pin` with source `hathor` so
+docker-apps opens a PR that rewrites its pin. The changelog fold commit
+(`docs: assemble changelog ...`) is skipped so an image is never pushed twice.
+
+The push needs repository variables `OCI_REGISTRY`, `OCI_NAMESPACE` and
+`OCI_REPO_NAME`, and secrets `OCI_USERNAME` and `OCI_TOKEN`, alongside the
+`CI_APP_CLIENT_ID` / `CI_APP_PRIVATE_KEY` pair the release already uses.
