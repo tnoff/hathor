@@ -16,7 +16,7 @@ dependencies = [
     # the same way discord-bot pins it.
     "dappertable @ https://github.com/tnoff/dappertable/archive/refs/tags/v1.1.8.tar.gz",
     "feedparser==6.0.14",
-    "google-api-python-client==2.199.0",
+    "google-api-python-client==2.200.0",
     "mutagen==1.48.1",
     "pyaml-env==1.2.2",
     "requests==2.34.2",
