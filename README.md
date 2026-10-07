@@ -232,6 +232,54 @@ episode titles using regexes.
 $ hathor filter create <podcast-id> <regex-filter>
 ```
 
+### Episode Index
+
+`hathor index` writes a json index of every episode file under `podcast_directory`, for something
+else to serve or render, such as a web page of download links or a podcast feed. Set where it is
+written with `index_file`:
+
+```yaml
+hathor:
+  podcast_directory: /data/podcasts
+  index_file: /data/index.json
+```
+
+```
+$ hathor index --dry-run     # print the index instead of writing it
+$ hathor index
+```
+
+Podcasts are sorted by name and their episodes newest first. Each episode has its `path` relative to
+`podcast_directory`, `size` in bytes, `content_type`, and a readable `filename` (`<podcast> - <date> -
+<title>.<ext>`) to save it as:
+
+```json
+{
+  "generated_at": "2026-10-07T12:00:00+00:00",
+  "podcasts": [
+    {
+      "id": 1,
+      "name": "My Podcast",
+      "episodes": [
+        {
+          "id": 42,
+          "title": "Episode 42",
+          "date": "2026-10-05",
+          "size": 31457280,
+          "content_type": "audio/mpeg",
+          "filename": "My Podcast - 2026-10-05 - Episode 42.mp3",
+          "path": "my_podcast/2026-10-05.Episode_42.mp3"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Episodes with no file on disk, or a file outside `podcast_directory`, are left out with a warning. The
+file is replaced atomically, so a reader never sees a half written index. Run it after
+`podcast sync`.
+
 ## The Audio Tool
 
 `audio-tool` provides standalone commands for reading and modifying audio file metadata.

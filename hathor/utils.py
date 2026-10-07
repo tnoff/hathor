@@ -1,6 +1,10 @@
 from logging import getLogger, Formatter, StreamHandler, RootLogger
 from logging.handlers import RotatingFileHandler
+import mimetypes
+import os
+import re
 from string import ascii_lowercase, ascii_uppercase, digits
+from tempfile import NamedTemporaryFile
 
 from pathlib import Path
 from urllib.parse  import urlparse
@@ -105,3 +109,54 @@ def rm_tree(pth: Path) -> bool:
             rm_tree(child)
     pth.rmdir()
     return True
+
+FILENAME_MAX_LENGTH = 120
+
+def sanitize_filename(name: str) -> str:
+    '''
+    Make a title safe to use as a download file name
+
+    Drops path separators, control characters and anything else that is
+    awkward in a file name, but keeps unicode letters
+
+    name: original title
+    '''
+    cleaned = re.sub(r'[^\w\s.,()\'&+-]', '', name)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip(' .')
+    return cleaned[:FILENAME_MAX_LENGTH].strip(' .') or 'episode'
+
+def display_filename(podcast_name: str, date: str | None, title: str | None, suffix: str) -> str:
+    '''
+    Readable name for an episode file, the one people see when it is downloaded
+
+    podcast_name    :   Name of the podcast
+    date            :   Formatted episode date, if known
+    title           :   Episode title, if known
+    suffix          :   File extension including the dot
+    '''
+    parts = [podcast_name]
+    if date:
+        parts.append(date)
+    if title:
+        parts.append(title)
+    return f'{sanitize_filename(" - ".join(parts))}{suffix.lower()}'
+
+def guess_content_type(name: str) -> str:
+    '''
+    Content type for a file name, from its extension
+    '''
+    return mimetypes.guess_type(name)[0] or 'application/octet-stream'
+
+def write_file_atomic(path: Path, text: str):
+    '''
+    Write a text file so that a reader sees either the old content or the new,
+    never a half written file
+
+    path: File to write
+    text: Content
+    '''
+    path = Path(path)
+    with NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, prefix=f'.{path.name}.',
+                            delete=False) as temp:
+        temp.write(text)
+    os.replace(temp.name, path)
