@@ -361,6 +361,16 @@ def podcast_sync(ctx, include_podcasts, exclude_podcasts, no_sync_web_episodes, 
     )
     render_output(result, ctx.obj['json'])
 
+@cli.command(name='index')
+@click.option('--dry-run', is_flag=True, default=False, help='Print the index instead of writing it to the index file')
+@click.pass_context
+def index(ctx, dry_run):
+    '''
+    Write a json index of episode files
+    '''
+    result = ctx.obj['client'].episode_index(dry_run=dry_run)
+    render_output(result, ctx.obj['json'])
+
 def main():
     '''
     Hathor CLI runner

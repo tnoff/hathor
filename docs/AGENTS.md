@@ -28,6 +28,9 @@ Archive backends behind `ArchiveInterface`. Three implementations:
 
 `ARCHIVE_TYPES` dict maps string keys (`'rss'`, `'youtube'`, `'twitch'`) to classes. `HathorClient._archive_manager()` instantiates the right one.
 
+**`HathorClient.episode_index`**
+Writes `index_file` (json: podcasts by name, episodes newest first, each with `path` relative to `podcast_directory`, `size` from `stat`, `content_type`, readable `filename`) for something else to serve. Only episodes whose file exists under `podcast_directory` are included. Written with `utils.write_file_atomic` (temp file in the same directory, then `os.replace`) because the reader runs concurrently, e.g. a web server in another pod sharing the volume.
+
 **`hathor/audio/metadata.py`**
 Audio tag manipulation via `mutagen`. Used by `HathorClient.__episode_download_input` to set tags after download.
 

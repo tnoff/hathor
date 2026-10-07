@@ -33,3 +33,26 @@ def test_rm_tree():
         sub_dir.mkdir(exist_ok=True)
         utils.rm_tree(new_dir)
         assert new_dir.exists() is False
+
+def test_sanitize_filename():
+    assert utils.sanitize_filename('a/b\\c: d?*') == 'abc d'
+    assert utils.sanitize_filename('  ...Why? Because   it is... ') == 'Why Because it is'
+    assert utils.sanitize_filename('Café ünïcode') == 'Café ünïcode'
+    assert utils.sanitize_filename('///') == 'episode'
+    assert len(utils.sanitize_filename('a' * 500)) == utils.FILENAME_MAX_LENGTH
+
+def test_display_filename():
+    assert utils.display_filename('Pod', '2024-12-07', 'Big/Title', '.MP4') == 'Pod - 2024-12-07 - BigTitle.mp4'
+    assert utils.display_filename('Pod', None, None, '.mp3') == 'Pod.mp3'
+
+def test_guess_content_type():
+    assert utils.guess_content_type('a.mp3') == 'audio/mpeg'
+    assert utils.guess_content_type('a.mp4') == 'video/mp4'
+    assert utils.guess_content_type('a.zzz') == 'application/octet-stream'
+
+def test_write_file_atomic(tmp_path):
+    target = tmp_path / 'index.json'
+    utils.write_file_atomic(target, 'one')
+    utils.write_file_atomic(target, 'two')
+    assert target.read_text(encoding='utf-8') == 'two'
+    assert [p.name for p in tmp_path.iterdir()] == ['index.json']

@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-10-07
+
+### Added
+
+- `hathor index` writes a json index of every episode file under `podcast_directory` to the new `index_file` setting, grouped by podcast with the newest episodes first, each with its relative path, size, content type and a readable file name. The file is replaced atomically. Supports `--dry-run`.
+
 ## [2.5.2] - 2026-10-07
 
 ### Changed

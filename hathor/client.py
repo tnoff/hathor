@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+import json
 from importlib import import_module
 from inspect import getmembers, isfunction
 import os
@@ -71,7 +72,7 @@ def run_plugins(func):
 
 ArchiveType = Literal[VALID_ARCHIVE_KEYS]
 
-class HathorClient():  # pylint: disable=too-many-instance-attributes
+class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-public-methods
     '''
     Hathor Client
     Sync podcasts from different sources
@@ -84,7 +85,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
                  twitch_client_id: str | None = None,
                  twitch_client_secret: str | None = None,
                  ytdlp_options: dict | None = None,
-                 youtube_skip_shorts: bool = False):
+                 youtube_skip_shorts: bool = False,
+                 index_file: Path | None = None):
         '''
         Initialize the hathor client
         podcast_directory               :   Directory where new podcasts will be placed by default
@@ -96,6 +98,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         logger                          :   Logger for client to use
         ytdlp_options                   :   Extra options passed to yt-dlp, merged over hathor's own
         youtube_skip_shorts             :   Leave youtube shorts out of episode syncs
+        index_file                      :   Where `episode_index` writes the index of episode files
         '''
         self.podcast_directory = None
         if podcast_directory:
@@ -121,6 +124,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         self.twitch_client_secret = twitch_client_secret
         self.ytdlp_options = ytdlp_options or {}
         self.youtube_skip_shorts = youtube_skip_shorts
+        self.index_file = Path(index_file) if index_file else None
         self._archive_managers = {}
 
         self.plugins = load_plugins()
@@ -835,3 +839,62 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         if delete_episodes:
             self.logger.debug(f'Episodes {[i.id for i in delete_episodes]} set for deletion for max allowed from file sync')
             self.__episode_delete_file_input(delete_episodes)
+
+    @run_plugins
+    def episode_index(self, dry_run: bool = False) -> dict:
+        '''
+        Write a json index of every episode file under the podcast directory, grouped by
+        podcast with the newest episodes first, for something else to serve or render. Each
+        episode has its path relative to the podcast directory, size, content type, and a
+        readable file name. Written atomically, so a reader never sees a half written index.
+        Episodes with no file on disk, or a file outside the podcast directory, are left out
+
+        dry_run              :   Return the index instead of writing it
+
+        Returns: the index if dry_run, otherwise a dict summarizing what was written
+        '''
+        if self.podcast_directory is None:
+            self._fail('No podcast_directory set in config, cannot index episodes')
+        if self.index_file is None and not dry_run:
+            self._fail('No index_file set in config, cannot write the episode index')
+        root = self.podcast_directory.resolve()
+        query = self.db_session.query(PodcastEpisode, Podcast).\
+            join(Podcast, PodcastEpisode.podcast_id == Podcast.id).\
+            filter(PodcastEpisode.file_path != None).\
+            order_by(Podcast.name, desc(PodcastEpisode.date))
+        podcasts = {}
+        episode_count = 0
+        for episode, podcast in query:
+            path = Path(episode.file_path)
+            if not path.is_file():
+                self.logger.warning(f'Episode {episode.id} file missing on disk, not indexing: {episode.file_path}')
+                continue
+            try:
+                relative_path = path.resolve().relative_to(root)
+            except ValueError:
+                self.logger.warning(f'Episode {episode.id} file is outside the podcast directory, not indexing: {episode.file_path}')
+                continue
+            date = episode.date.strftime('%Y-%m-%d') if episode.date else None
+            podcasts.setdefault(podcast.id, {'id': podcast.id, 'name': podcast.name, 'episodes': []})['episodes'].append({
+                'id': episode.id,
+                'title': episode.title,
+                'date': date,
+                'size': path.stat().st_size,
+                'content_type': utils.guess_content_type(path.name),
+                'filename': utils.display_filename(podcast.name, date, episode.title, path.suffix),
+                'path': relative_path.as_posix(),
+            })
+            episode_count += 1
+        index = {
+            'generated_at': datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            'podcasts': list(podcasts.values()),
+        }
+        if dry_run:
+            return index
+        utils.write_file_atomic(self.index_file, json.dumps(index, indent=2))
+        self.logger.info(f'Wrote index of {episode_count} episodes to {self.index_file}')
+        return {
+            'index_file': str(self.index_file),
+            'podcasts': len(podcasts),
+            'episodes': episode_count,
+        }
