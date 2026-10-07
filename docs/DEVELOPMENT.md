@@ -110,6 +110,13 @@ On the same push, if an image input changed, it also builds the image for
 docker-apps opens a PR that rewrites its pin. The changelog fold commit
 (`docs: assemble changelog ...`) is skipped so an image is never pushed twice.
 
+The Release workflow can also be run by hand (Actions > Release > Run workflow,
+on `main`) to build and push the image without any change to an image input,
+for example the very first image or a rebuild. A manual run builds the image and
+dispatches the bump and nothing else: it skips the changelog fold, the tag and
+the GitHub release. It is ignored on any branch other than `main`. The
+`workflow_dispatch` trigger must be on `main` before it can be started.
+
 The push needs repository variables `OCI_REGISTRY`, `OCI_NAMESPACE` and
 `OCI_REPO_NAME`, and secrets `OCI_USERNAME` and `OCI_TOKEN`, alongside the
 `CI_APP_CLIENT_ID` / `CI_APP_PRIVATE_KEY` pair the release already uses.

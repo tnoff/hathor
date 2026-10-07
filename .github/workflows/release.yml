@@ -21,6 +21,25 @@ name: Release
 # the image context, so the push skips the tag write on a shared digest and
 # trigger-bump pins docker-apps at a tag that was never written.
 #
+# ---------------------------------------------------------------------------
+# Manual runs (workflow_dispatch)
+# ---------------------------------------------------------------------------
+# A manual run of this workflow on main builds and pushes the image and
+# dispatches the docker-apps bump regardless of the `changes` filter, and does
+# nothing else. It exists for the case where an image is needed without a
+# change to an image input: the very first image, or a rebuild after a registry
+# or base image problem.
+#
+# assemble-changelog, tag and release are skipped on a manual run. The shared
+# workflows would otherwise fold pending fragments and push a commit, and tag
+# and push the current VERSION if it is not tagged yet -- neither belongs in a
+# run whose only job is the image. push-image depends only on `changes`, never
+# on that chain, so skipping it does not block the image. The manual run is
+# only honoured on main: a branch image must never reach a production pin.
+#
+# The workflow_dispatch trigger has to exist on the default branch before a run
+# can be started, so it takes effect once this change is merged.
+#
 # The image is what runs in the cluster. The local box builds its own from a
 # clone (~/docker/hathor) and never pulls it. docker-apps pins the immutable
 # short-SHA tag (secondary_tag); `latest` is the moving tag the shared workflow
@@ -30,6 +49,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -66,10 +86,18 @@ jobs:
       - name: Filter
         id: filter
         env:
+          EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # A manual run always builds. There is no before/after to diff, and
+          # the point of running it by hand is that nothing changed.
+          if [ "${EVENT}" = "workflow_dispatch" ]; then
+            echo "manual run -- building"
+            echo "image=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           ZERO=0000000000000000000000000000000000000000
           if [ -z "${BEFORE}" ] || [ "${BEFORE}" = "${ZERO}" ] \
              || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
@@ -92,6 +120,7 @@ jobs:
 
   assemble-changelog:
     name: Assemble changelog
+    if: github.event_name != 'workflow_dispatch'
     permissions:
       contents: write
     uses: tnoff/github-workflows/.github/workflows/assemble-changelog.yml@93f9034849dfd1d98ed72629241a503d29842205  # assemble-changelog-v1.1.0
@@ -102,6 +131,7 @@ jobs:
   tag:
     name: Tag
     needs: assemble-changelog
+    if: github.event_name != 'workflow_dispatch'
     permissions:
       contents: write
     uses: tnoff/github-workflows/.github/workflows/tag.yml@adea087c43d56fd13d5b1abf2d5f2ba3e695784d  # tag-v1.0.0
@@ -114,6 +144,7 @@ jobs:
   release:
     name: Release
     needs: tag
+    if: github.event_name != 'workflow_dispatch'
     permissions:
       contents: write
     uses: tnoff/github-workflows/.github/workflows/release.yml@adea087c43d56fd13d5b1abf2d5f2ba3e695784d  # release-v1.0.0
@@ -124,8 +155,12 @@ jobs:
   push-image:
     name: Push image
     needs: changes
+    # github.ref is always main for a push, so the ref check only bites on a
+    # manual run started from some other branch. head_commit is null on a manual
+    # run, so the fold-commit guard passes there, as it should.
     if: >-
       ${{ needs.changes.outputs.image == 'true'
+          && github.ref == 'refs/heads/main'
           && !startsWith(github.event.head_commit.message, 'docs: assemble changelog') }}
     uses: tnoff/github-workflows/.github/workflows/docker-push.yml@a5e07a72bb76a983408e840c3cfcffa27cdbf738  # docker-push-v1.1.0
     # registry / namespace / repo_name are INPUTS, not secrets. GitHub refuses
