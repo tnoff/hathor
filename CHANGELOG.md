@@ -5,6 +5,14 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-10-07
+
+### Added
+
+- Episode files can be stored in an S3 compatible bucket (AWS S3, OCI Object Storage, etc.) instead of on local disk, with a new `storage_options` config section. A podcast's `file_location` is then a key prefix and an episode's `file_path` an object key. Downloads are written to a scratch directory, tagged, then uploaded. Local disk remains the default and behaves as before.
+- `hathor index` writes an `index.json` of presigned download links for every stored episode, grouped by podcast. Supports `--dry-run`.
+- Adds the `boto3` dependency.
+
 ## [2.5.2] - 2026-10-07
 
 ### Changed

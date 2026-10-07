@@ -232,6 +232,49 @@ episode titles using regexes.
 $ hathor filter create <podcast-id> <regex-filter>
 ```
 
+### Object Storage
+
+By default episode files live on local disk. With `storage_options` they live in an S3 compatible
+bucket instead, such as AWS S3 or OCI Object Storage (through its S3 compatibility endpoint).
+Nothing else changes: the database still holds the podcasts and episodes, and sync, `max allowed`
+trimming, and deletes all work against the bucket.
+
+```yaml
+hathor:
+  podcast_directory: podcasts          # key prefix new podcasts are created under
+  storage_options:
+    type: s3                           # local (default) or s3
+    bucket_name: my-private-bucket     # required, keep it private
+    region_name: us-ashburn-1
+    endpoint_url: https://<namespace>.compat.objectstorage.us-ashburn-1.oraclecloud.com  # omit for AWS
+    scratch_directory: /scratch        # optional, where downloads are written before upload
+    index_object: index.json           # optional, where `hathor index` writes
+    url_expiry_hours: 24               # optional, 1 to 168
+```
+
+Credentials come from boto3's normal chain, for example the `AWS_ACCESS_KEY_ID` and
+`AWS_SECRET_ACCESS_KEY` environment variables (for OCI, a customer secret key). `access_key_id`
+and `secret_access_key` can be set in `storage_options` instead, but prefer the environment.
+
+With s3 storage a podcast's `file_location` is a key prefix (`podcasts/my_podcast`) and an episode's
+`file_path` is an object key. Episodes are downloaded to the scratch directory, tagged, uploaded
+with a `Content-Type` and a `Content-Disposition: attachment` header, and removed from scratch, so
+a failed upload leaves the episode without a file and the next sync tries it again. Moving a
+podcast's `file_location` copies its objects to the new prefix. Moving a single episode's file
+(`episode update-file-path`) is not supported.
+
+#### Download Links
+
+`hathor index` writes an index of every stored episode to the bucket as `index.json`, grouped by
+podcast with the newest episodes first. Each episode has a presigned `url` that works without any
+credentials until `url_expires_at`, so the bucket itself can stay private. Run it after
+`podcast sync`, and often enough that links never expire before the next run.
+
+```
+$ hathor index --dry-run     # print the index instead of writing it
+$ hathor index
+```
+
 ## The Audio Tool
 
 `audio-tool` provides standalone commands for reading and modifying audio file metadata.

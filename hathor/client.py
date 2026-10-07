@@ -1,14 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from inspect import getmembers, isfunction
 import os
 from logging import RootLogger
 import re
-from shutil import move
 from typing import Literal
 
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from sqlalchemy import create_engine
 from sqlalchemy import and_, desc, or_
 from sqlalchemy.orm import sessionmaker
@@ -19,6 +18,7 @@ from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
 from hathor.exc import AudioFileException, EpisodeNotReady, HathorException
 from hathor.podcast.archive import ARCHIVE_TYPES, VALID_ARCHIVE_KEYS
+from hathor.storage import display_filename, guess_content_type, storage_from_options
 from hathor import utils
 
 DEFAULT_DATETIME_FORMAT = '%Y-%m-%d'
@@ -71,7 +71,7 @@ def run_plugins(func):
 
 ArchiveType = Literal[VALID_ARCHIVE_KEYS]
 
-class HathorClient():  # pylint: disable=too-many-instance-attributes
+class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-public-methods
     '''
     Hathor Client
     Sync podcasts from different sources
@@ -84,10 +84,11 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
                  twitch_client_id: str | None = None,
                  twitch_client_secret: str | None = None,
                  ytdlp_options: dict | None = None,
-                 youtube_skip_shorts: bool = False):
+                 youtube_skip_shorts: bool = False,
+                 storage_options: dict | None = None):
         '''
         Initialize the hathor client
-        podcast_directory               :   Directory where new podcasts will be placed by default
+        podcast_directory               :   Directory (or key prefix, for s3 storage) where new podcasts will be placed by default
         datetime_output_format          :   Python datetime output format
         database_connection_string      :   Sqlalchemy connection string, if None db will be stored in memory
         google_api_key                  :   Key for accessing google API for youtube
@@ -96,6 +97,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         logger                          :   Logger for client to use
         ytdlp_options                   :   Extra options passed to yt-dlp, merged over hathor's own
         youtube_skip_shorts             :   Leave youtube shorts out of episode syncs
+        storage_options                 :   Where episode files are stored, local disk by default or an s3 bucket, see README
         '''
         self.podcast_directory = None
         if podcast_directory:
@@ -121,6 +123,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         self.twitch_client_secret = twitch_client_secret
         self.ytdlp_options = ytdlp_options or {}
         self.youtube_skip_shorts = youtube_skip_shorts
+        self.storage = storage_from_options(storage_options)
         self._archive_managers = {}
 
         self.plugins = load_plugins()
@@ -193,17 +196,15 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         if file_location is None:
             if self.podcast_directory is None:
                 self._fail("No default podcast directory specified, will need specific file location to create podcast")
-            file_location = Path(self.podcast_directory) / utils.normalize_name(podcast_name)
-        else:
-            file_location = Path(file_location)
-
+            file_location = self.storage.join(self.podcast_directory, utils.normalize_name(podcast_name))
+        file_location = self.storage.normalize_location(file_location)
 
         pod_args = {
             'name' : utils.clean_string(podcast_name),
             'archive_type' : archive_type,
             'broadcast_id' : utils.clean_string(broadcast_id),
             'max_allowed' : max_allowed,
-            'file_location' : str(file_location.resolve()),
+            'file_location' : file_location,
             'artist_name' : utils.clean_string(artist_name),
             'automatic_episode_download' : automatic_download,
         }
@@ -212,8 +213,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         self.db_session.commit()
         self.logger.info(f'Podcast created, id: {new_pod.id}, name: {new_pod.name}')
 
-        self.logger.debug(f'Ensuring podcast {new_pod.id} path exists {str(file_location)}')
-        file_location.mkdir(exist_ok=True, parents=True)
+        self.logger.debug(f'Ensuring podcast {new_pod.id} path exists {file_location}')
+        self.storage.prepare_location(file_location)
         return new_pod.as_dict(self.datetime_output_format)
 
     @run_plugins
@@ -310,37 +311,30 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         pod = self.db_session.get(Podcast, podcast_id)
         if not pod:
             self._fail(f'Podcast not found for ID: {podcast_id}')
-        old_podcast_dir = Path(pod.file_location)
-        new_podcast_dir = Path(file_location)
+        old_location = pod.file_location
+        new_location = self.storage.normalize_location(file_location)
 
         # The file location is committed only after the files have been moved. If a move
         # raises, the podcast still points at the directory the remaining files are in,
         # so the command can be run again once the cause is fixed.
         if move_files:
-            self.logger.info(f'Moving files from old dir: {str(old_podcast_dir)} to new dir: {str(new_podcast_dir.resolve())}')
-            new_podcast_dir.mkdir(exist_ok=True, parents=True)
+            self.logger.info(f'Moving files from old location: {old_location} to new location: {new_location}')
+            self.storage.prepare_location(new_location)
 
             episodes = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.podcast_id == podcast_id)
             episodes = episodes.filter(PodcastEpisode.file_path != None)
             for episode in episodes:
-                episode_path = Path(episode.file_path)
-                new_path = new_podcast_dir / episode_path.name
-                # Not Path.rename, which is os.rename and fails with EXDEV when the two
-                # directories are on different filesystems, or merely on different mount
-                # points of the same filesystem -- which is what two bind mounts of one
-                # drive are inside a container. move falls back to a copy and unlink.
-                move(episode_path, new_path)
-                episode.file_path = str(new_path.resolve())
-                self.logger.info(f'Updating episode {episode.id} to path {str(new_path.resolve())} in db')
+                episode.file_path = self.storage.move(episode.file_path, new_location)
+                self.logger.info(f'Updating episode {episode.id} to path {episode.file_path} in db')
                 self.db_session.commit()
-            # rm_tree is recursive, so removing the old dir when it resolves to the new one
+            # Deleting a location is recursive, so removing the old one when it is the new one
             # would delete the files that were just moved into it
-            if old_podcast_dir.resolve() != new_podcast_dir.resolve():
-                utils.rm_tree(old_podcast_dir)
+            if not self.storage.same_location(old_location, new_location):
+                self.storage.delete_location(old_location)
 
-        pod.file_location = str(new_podcast_dir.resolve())
+        pod.file_location = new_location
         self.db_session.commit()
-        self.logger.info(f'Updated podcast id: {podcast_id} file location to {str(new_podcast_dir.resolve())}')
+        self.logger.info(f'Updated podcast id: {podcast_id} file location to {new_location}')
         return pod.as_dict(self.datetime_output_format)
 
     @run_plugins
@@ -371,7 +365,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
             self.logger.info(f'Deleted podcast record: {podcast.id}')
             # delete files if needed
             if delete_files:
-                utils.rm_tree(Path(podcast.file_location))
+                self.storage.delete_location(podcast.file_location)
             podcasts_deleted.append(podcast.id)
         return podcasts_deleted
 
@@ -611,6 +605,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
 
         Returns: dict representing updated episode
         '''
+        if not self.storage.is_local:
+            self._fail('Moving a single episode file is not supported with s3 storage')
         episode = self.db_session.get(PodcastEpisode, episode_id)
         if not episode:
             self._fail(f'Podcast Episode not found for ID: {episode_id}')
@@ -669,8 +665,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
 
     @run_plugins
     def __episode_download_input(self, episode_input) -> list[dict]:
-        def build_episode_path(episode, podcast):
-            return Path(podcast.file_location) / f'{datetime.strftime(episode.date, self.datetime_output_format)}.{utils.normalize_name(episode.title)}'
+        def build_episode_name(episode):
+            return f'{datetime.strftime(episode.date, self.datetime_output_format)}.{utils.normalize_name(episode.title)}'
 
         episodes_downloaded = []
 
@@ -682,38 +678,47 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
 
             self.logger.debug(f'Downloading episode: {episode.id} data from url: {episode.download_url}')
 
-            episode_path_prefix = build_episode_path(episode, podcast)
+            with self.storage.working_directory(podcast.file_location) as work_dir:
+                try:
+                    output_path, download_size = manager.episode_download(episode.download_url,
+                                                                          work_dir / build_episode_name(episode))
+                except EpisodeNotReady as error:
+                    self.logger.debug(f'Skipping episode: {episode.id}, not ready for download: {str(error)}')
+                    continue
+                if output_path is None or (download_size is None or download_size == 0):
+                    self.logger.error(f'Unable to download episode: {episode.id}')
+                    continue
+                self.logger.info(f'Downloaded episode {episode.id} data to file {str(output_path)}')
 
-            try:
-                output_path, download_size = manager.episode_download(episode.download_url,
-                                                                      episode_path_prefix)
-            except EpisodeNotReady as error:
-                self.logger.debug(f'Skipping episode: {episode.id}, not ready for download: {str(error)}')
-                continue
-            if output_path is None or (download_size is None or download_size == 0):
-                self.logger.error(f'Unable to download episode: {episode.id}')
-                continue
-            self.logger.info(f'Downloaded episode {episode.id} data to file {str(output_path)}')
+                # Update metadata tags
+                # use artist name if possible
+                artist_name = podcast.artist_name or podcast.name
+                audio_tags = {
+                    'artist' : artist_name,
+                    'albumartist' : artist_name,
+                    'album' : podcast.name,
+                    'title' : episode.title,
+                    'date' : episode.date.strftime(self.datetime_output_format),
+                }
+                try:
+                    tags_update(output_path, audio_tags)
+                    self.logger.debug(f'Updated database audio tags for episode {episode.id}')
+                except AudioFileException as error:
+                    self.logger.warning(f'Unable to update tags on file {str(output_path)} : {str(error)}')
 
-            episode.file_path = str(output_path.resolve())
-            episode.file_size = download_size
-            self.db_session.commit()
-
-            # Update metadata tags
-            # use artist name if possible
-            artist_name = podcast.artist_name or podcast.name
-            audio_tags = {
-                'artist' : artist_name,
-                'albumartist' : artist_name,
-                'album' : podcast.name,
-                'title' : episode.title,
-                'date' : episode.date.strftime(self.datetime_output_format),
-            }
-            try:
-                tags_update(output_path, audio_tags)
-                self.logger.debug(f'Updated database audio tags for episode {episode.id}')
-            except AudioFileException as error:
-                self.logger.warning(f'Unable to update tags on file {str(output_path)} : {str(error)}')
+                # Only after tagging, since remote storage has the file as it is when uploaded.
+                # A failed upload leaves the episode without a file, so the next sync tries again
+                display_name = display_filename(podcast.name, episode.date.strftime('%Y-%m-%d'),
+                                                episode.title, output_path.suffix)
+                try:
+                    episode.file_path = self.storage.store(output_path, podcast.file_location, display_name)
+                except HathorException as error:
+                    self.logger.error(f'Unable to store episode {episode.id}: {str(error)}')
+                    continue
+                # The size of what was stored. Remote storage gets the file after tagging, and the
+                # size is what links to it report, so it cannot be the size before tags were written
+                episode.file_size = download_size if self.storage.is_local else output_path.stat().st_size
+                self.db_session.commit()
             episodes_downloaded.append(episode.as_dict(self.datetime_output_format))
         return episodes_downloaded
 
@@ -731,10 +736,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         episodes_deleted = []
         for episode in query_input:
             if episode.file_path is not None:
-                file_path = Path(episode.file_path)
-                try:
-                    file_path.unlink()
-                except FileNotFoundError:
+                if not self.storage.delete(episode.file_path):
                     continue
                 episode.file_path = None
                 episode.file_size = None
@@ -835,3 +837,53 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes
         if delete_episodes:
             self.logger.debug(f'Episodes {[i.id for i in delete_episodes]} set for deletion for max allowed from file sync')
             self.__episode_delete_file_input(delete_episodes)
+
+    @run_plugins
+    def episode_index(self, dry_run: bool = False) -> dict:
+        '''
+        Write an index of time limited download links for every stored episode
+        to the bucket, as json grouped by podcast with the newest episodes first.
+        Links are presigned, so the bucket itself can stay private. Meant to be run
+        after podcast sync, and often enough that links never expire before the next run
+
+        dry_run              :   Return the index instead of writing it
+
+        Returns: the index if dry_run, otherwise a dict summarizing what was written
+        '''
+        if self.storage.is_local:
+            self._fail('Indexing episode links requires s3 storage_options')
+        query = self.db_session.query(PodcastEpisode, Podcast).\
+            join(Podcast, PodcastEpisode.podcast_id == Podcast.id).\
+            filter(PodcastEpisode.file_path != None).\
+            order_by(Podcast.name, desc(PodcastEpisode.date))
+        podcasts = {}
+        episode_count = 0
+        for episode, podcast in query:
+            date = episode.date.strftime('%Y-%m-%d') if episode.date else None
+            podcasts.setdefault(podcast.id, {'id': podcast.id, 'name': podcast.name, 'episodes': []})['episodes'].append({
+                'id': episode.id,
+                'title': episode.title,
+                'date': date,
+                'size': episode.file_size,
+                'content_type': guess_content_type(episode.file_path),
+                'filename': display_filename(podcast.name, date, episode.title, PurePosixPath(episode.file_path).suffix),
+                'key': episode.file_path,
+                'url': self.storage.presign(episode.file_path),
+            })
+            episode_count += 1
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        expires = now + timedelta(hours=self.storage.url_expiry_hours)
+        index = {
+            'generated_at': now.isoformat(),
+            'url_expires_at': expires.isoformat(),
+            'podcasts': list(podcasts.values()),
+        }
+        if dry_run:
+            return index
+        self.storage.write_index(index)
+        return {
+            'index_object': self.storage.index_object,
+            'podcasts': len(podcasts),
+            'episodes': episode_count,
+            'url_expires_at': expires.isoformat(),
+        }

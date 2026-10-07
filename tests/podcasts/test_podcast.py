@@ -193,7 +193,7 @@ def test_podcast_update_file_location_move_failure(mocker):
             original_dir = client.podcast_list()[0]['file_location']
 
             with TemporaryDirectory() as new_dir:
-                mocker.patch('hathor.client.move', side_effect=OSError('disk on fire'))
+                mocker.patch('hathor.storage.move', side_effect=OSError('disk on fire'))
                 with pytest.raises(OSError):
                     client.podcast_update_file_location(new_pod1['id'], Path(new_dir))
                 assert client.podcast_list()[0]['file_location'] == original_dir

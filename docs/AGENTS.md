@@ -28,6 +28,9 @@ Archive backends behind `ArchiveInterface`. Three implementations:
 
 `ARCHIVE_TYPES` dict maps string keys (`'rss'`, `'youtube'`, `'twitch'`) to classes. `HathorClient._archive_manager()` instantiates the right one.
 
+**`hathor/storage.py`**
+Where episode files live, behind two interchangeable backends chosen by `storage_options`: `LocalStorage` (the default, behaves as hathor always has) and `S3Storage` (any S3 compatible bucket via boto3). `HathorClient` never touches the filesystem for episode files directly; it goes through `self.storage` (`join`, `normalize_location`, `prepare_location`, `working_directory`, `store`, `move`, `delete`, `delete_location`). For s3, `file_location` is a key prefix and `file_path` an object key, downloads are written to a scratch directory (`working_directory`), tagged, then uploaded by `store`, and a failed `store` leaves the episode without a file so the next sync retries. `HathorClient.episode_index` writes `index.json` of presigned urls (`S3Storage.presign`). The client uses SigV4 and `when_required` checksums so S3 compatible services other than AWS accept it. Tests run `S3Storage` against `moto`.
+
 **`hathor/audio/metadata.py`**
 Audio tag manipulation via `mutagen`. Used by `HathorClient.__episode_download_input` to set tags after download.
 

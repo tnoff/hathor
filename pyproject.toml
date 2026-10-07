@@ -11,6 +11,7 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    "boto3==1.43.108",
     "click==8.5.0",
     # dappertable is GitHub-canonical, not on PyPI. Pinned to a tagged tarball
     # the same way discord-bot pins it.
@@ -34,6 +35,7 @@ test = [
     "pylint==4.1.2",
     "requests-mock==1.12.1",
     "bandit==1.9.4",
+    "moto[s3]==5.2.3",
 ]
 
 [project.scripts]

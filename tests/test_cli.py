@@ -757,6 +757,17 @@ def test_episode_cleanup(mocker):
                 result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'episode', 'list'])
                 assert loads(result.output) == []
 
+def test_index(mocker):
+    index = mocker.patch('hathor.client.HathorClient.episode_index', return_value={'podcasts': [], 'url_expires_at': 'x'})
+    with NamedTemporaryFile(suffix='.yml') as config:
+        with open(config.name, 'w+', encoding='utf-8') as writer:
+            dump(basic_config_data, writer)
+        runner = CliRunner()
+        result = runner.invoke(cli, ['-c', f'{config.name}', '--json', 'index', '--dry-run'])
+        assert result.exit_code == 0
+        assert loads(result.output) == {'podcasts': [], 'url_expires_at': 'x'}
+        index.assert_called_once_with(dry_run=True)
+
 def test_podcast_sync():
     with NamedTemporaryFile(suffix='.sql') as db_file:
         with TemporaryDirectory() as tmp_dir:
