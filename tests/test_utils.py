@@ -1,3 +1,4 @@
+import stat
 from tempfile import TemporaryDirectory
 
 from pathlib import Path
@@ -56,3 +57,15 @@ def test_write_file_atomic(tmp_path):
     utils.write_file_atomic(target, 'two')
     assert target.read_text(encoding='utf-8') == 'two'
     assert [p.name for p in tmp_path.iterdir()] == ['index.json']
+
+def test_write_file_atomic_is_world_readable(tmp_path):
+    # A temp file is created 0600 and os.replace keeps it, which locks out another
+    # user reading the file, such as a web server sharing the volume.
+    target = tmp_path / 'index.json'
+    utils.write_file_atomic(target, 'one')
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    # Replacing an existing file gets the same mode, whatever the old file had
+    target.chmod(0o600)
+    utils.write_file_atomic(target, 'two')
+    assert stat.S_IMODE(target.stat().st_mode) == 0o644
+    assert target.read_text(encoding='utf-8') == 'two'
