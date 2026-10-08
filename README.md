@@ -54,6 +54,7 @@ hathor:
   twitch_client_id: abc1234
   twitch_client_secret: xyz9876
   datetime_output_format: "%Y-%m-%d"
+  plugins_directory: /plugins   # optional, load plugins from here instead of hathor/plugins/
   youtube_skip_shorts: true
   ytdlp_options:
     sleep_requests: 1

@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-10-08
+
+### Added
+
+- `plugins_directory` setting: load plugins from any directory instead of the package's own `hathor/plugins/`, so a container can mount them (for example from a Kubernetes ConfigMap) without baking them into the image or mounting into a Python-version-specific `site-packages` path. Plugins load by file path, in sorted order; `__init__.py` and hidden files and directories are skipped (a mounted ConfigMap holds each file three times); an explicit directory replaces the package one; what is loaded is logged, a missing or empty directory warns, and a plugin that fails to import raises `HathorException` naming the file. Default behaviour is unchanged.
+
 ## [2.6.1] - 2026-10-08
 
 ### Fixed
