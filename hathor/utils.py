@@ -152,6 +152,11 @@ def write_file_atomic(path: Path, text: str):
     Write a text file so that a reader sees either the old content or the new,
     never a half written file
 
+    The file is made world readable (0644). A temp file is created 0600 and
+    os.replace keeps that mode, which would lock out the very reader this exists
+    for: something else, usually running as a different user, such as a web
+    server sharing the volume
+
     path: File to write
     text: Content
     '''
@@ -159,4 +164,5 @@ def write_file_atomic(path: Path, text: str):
     with NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, prefix=f'.{path.name}.',
                             delete=False) as temp:
         temp.write(text)
+    os.chmod(temp.name, 0o644)
     os.replace(temp.name, path)

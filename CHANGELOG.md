@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-10-08
+
+### Fixed
+
+- `hathor index` wrote `index.json` with mode `0600`: the atomic write goes through a temp file, which is created `0600`, and the rename kept it. Anything reading the index as another user, such as a web server sharing the volume, got a 403. The index (and `utils.write_file_atomic` generally) is now written `0644`.
+
 ## [2.6.0] - 2026-10-07
 
 ### Added
