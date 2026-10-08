@@ -103,19 +103,20 @@ Built and scanned on every PR that touches an image input (`Dockerfile`,
 changelog, tags, and creates the GitHub release (shared workflows from
 `tnoff/github-workflows`). No package is published to PyPI.
 
-On the same push, if an image input changed, it also builds the image for
+On the same push, **every merge to `main`** also builds the image for
 `linux/arm64` (the cluster is OKE Ampere) and pushes it to OCIR as
 `iad.ocir.io/tnoff/hathor:<short sha>` (plus `latest`) with the shared
 `docker-push.yml`, then dispatches `bump-image-pin` with source `hathor` so
-docker-apps opens a PR that rewrites its pin. The changelog fold commit
-(`docs: assemble changelog ...`) is skipped so an image is never pushed twice.
+docker-apps opens a PR that rewrites its pin. There is no path filter and no
+manual trigger, so a docs-only merge also produces an image and a bump PR;
+docker-apps closes the older open bump PRs for the same producer, so they do
+not pile up. The one skip is the changelog fold commit (`docs: assemble
+changelog ...`), which is a bot commit and not a merge, so an image is never
+pushed twice for the same code.
 
-The Release workflow can also be run by hand (Actions > Release > Run workflow,
-on `main`) to build and push the image without any change to an image input,
-for example the very first image or a rebuild. A manual run builds the image and
-dispatches the bump and nothing else: it skips the changelog fold, the tag and
-the GitHub release. It is ignored on any branch other than `main`. The
-`workflow_dispatch` trigger must be on `main` before it can be started.
+If a push failed (a registry or base image problem) there is no manual run to
+retry it: re-run the failed jobs of that workflow run in the Actions tab, or
+push a new commit to `main`.
 
 The push needs repository variables `OCI_REGISTRY`, `OCI_NAMESPACE` and
 `OCI_REPO_NAME`, and secrets `OCI_USERNAME` and `OCI_TOKEN`, alongside the
