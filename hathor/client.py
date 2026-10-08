@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import json
 from importlib import import_module
+from importlib.util import module_from_spec, spec_from_file_location
 from inspect import getmembers, isfunction
 import os
 from logging import RootLogger
@@ -26,10 +27,55 @@ DEFAULT_DATETIME_FORMAT = '%Y-%m-%d'
 
 FILE_PATH = os.path.abspath(__file__)
 
-def load_plugins():
+def _load_external_plugins(plugins_dir: Path, logger) -> list:
+    '''
+    Load plugin functions from a directory that is not part of the package
+
+    The files are loaded by path, so the directory can live anywhere, such as a
+    volume mounted into a container. Hidden files and directories are skipped:
+    a mounted Kubernetes ConfigMap holds every file three times (the file itself,
+    a ..data symlink and a timestamped ..2026_... directory), and loading all of
+    them would run each plugin's hook three times
+
+    plugins_dir  :   Directory to load .py files from, recursively
+    logger       :   Logger to report what was loaded
+    '''
+    if not plugins_dir.is_dir():
+        logger.warning(f'plugins_directory {plugins_dir} is not a directory, no plugins loaded')
+        return []
+    functions = []
+    for path in sorted(plugins_dir.glob('**/*.py')):
+        relative = path.relative_to(plugins_dir)
+        if path.name == '__init__.py' or not path.is_file():
+            continue
+        if any(part.startswith('.') for part in relative.parts):
+            continue
+        module_name = '.'.join(['hathor_external_plugins', *relative.with_suffix('').parts])
+        spec = spec_from_file_location(module_name, path)
+        module = module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except Exception as error: #pylint:disable=broad-exception-caught
+            # A plugin that cannot load is a broken deployment, not something to skip over
+            raise HathorException(f'Unable to load plugin {path}: {error}') from error
+        found = getmembers(module, isfunction)
+        logger.info(f'Loaded plugin {relative}: {", ".join(name for name, _ in found) or "no functions"}')
+        functions.extend(found)
+    if not functions:
+        logger.warning(f'plugins_directory {plugins_dir} has no plugin functions')
+    return functions
+
+def load_plugins(plugins_directory: Path | None = None, logger=None):
     '''
     Loads plugins for dir, gets list of functions to run later
+
+    plugins_directory   :   Load plugins from this directory instead of the package's own
+                            hathor/plugins/. An explicit directory replaces the default
+                            rather than adding to it, so a plugin is never loaded twice
+    logger              :   Logger used when loading from plugins_directory
     '''
+    if plugins_directory:
+        return _load_external_plugins(Path(plugins_directory), logger or utils.setup_logger('Hathor'))
     parent_dir = Path(FILE_PATH).parent
     plugins_dir = parent_dir / 'plugins'
 
@@ -86,7 +132,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                  twitch_client_secret: str | None = None,
                  ytdlp_options: dict | None = None,
                  youtube_skip_shorts: bool = False,
-                 index_file: Path | None = None):
+                 index_file: Path | None = None,
+                 plugins_directory: Path | None = None):
         '''
         Initialize the hathor client
         podcast_directory               :   Directory where new podcasts will be placed by default
@@ -99,6 +146,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         ytdlp_options                   :   Extra options passed to yt-dlp, merged over hathor's own
         youtube_skip_shorts             :   Leave youtube shorts out of episode syncs
         index_file                      :   Where `episode_index` writes the index of episode files
+        plugins_directory               :   Load plugins from this directory instead of the package's hathor/plugins/
         '''
         self.podcast_directory = None
         if podcast_directory:
@@ -127,7 +175,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         self.index_file = Path(index_file) if index_file else None
         self._archive_managers = {}
 
-        self.plugins = load_plugins()
+        self.plugins = load_plugins(plugins_directory, self.logger)
 
     def close(self):
         '''Close database session and engine connections'''

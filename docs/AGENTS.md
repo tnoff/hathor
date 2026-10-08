@@ -45,7 +45,7 @@ Shared `render_output(data, as_json)` used by both CLIs. Every command result fl
 
 ### Plugin System
 
-Place Python files in `hathor/plugins/`. They are auto-discovered at client init via `load_plugins()`. See [DEVELOPMENT.md](DEVELOPMENT.md#plugins) for the function signature, naming convention, and an example.
+Place Python files in `hathor/plugins/`, or set `plugins_directory` to load them from anywhere (`_load_external_plugins`: by file path with `importlib.util`, sorted, skipping `__init__.py` and anything hidden so a mounted ConfigMap's `..data` symlinks do not load each plugin three times; an explicit directory replaces the package one; a plugin that fails to import raises `HathorException`). They are auto-discovered at client init via `load_plugins()`. See [DEVELOPMENT.md](DEVELOPMENT.md#plugins) for the function signature, naming convention, and an example.
 
 ### Test Layout
 

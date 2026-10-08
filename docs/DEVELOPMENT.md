@@ -55,7 +55,8 @@ bandit -r hathor/ --exclude hathor/plugins
 Plugins can be added for most functions in the hathor client.
 
 Any plugins will have to be written in python and be placed in the
-``hathor/plugins/`` directory.
+``hathor/plugins/`` directory, or in the directory named by the
+``plugins_directory`` setting (see [Plugins outside the package](#plugins-outside-the-package)).
 
 Plugins should be named after the function you want them to run after,
 for example if the plugin function is named "episode_download", it will be
@@ -85,6 +86,35 @@ def episode_download(self, results, *args, **kwargs):
 
 This will change the title of new episodes for certain podcasts. Note that for the change
 to be permanent, you'll have to change the episodes in the database.
+
+### Plugins outside the package
+
+``hathor/plugins/`` is inside the installed package, which is awkward when hathor runs from a
+container image: the files would have to be baked into the image or mounted into a
+version-specific ``site-packages`` path, and a mount at the wrong path silently loads
+nothing. Set ``plugins_directory`` in the ``hathor`` section of the config to load plugins from
+any directory instead, such as a volume or a mounted Kubernetes ConfigMap:
+
+```yaml
+hathor:
+  plugins_directory: /plugins
+```
+
+- Every ``.py`` file under the directory is loaded, recursively and in sorted order, and every
+  function in it is registered under its name, exactly as for ``hathor/plugins/``. ``__init__.py``
+  and hidden files and directories are skipped. The hidden-path rule matters for a mounted
+  ConfigMap, which holds each file three times (the file, a ``..data`` symlink and a timestamped
+  ``..2026_...`` directory); without it every plugin's hook would run three times.
+- An explicit ``plugins_directory`` **replaces** ``hathor/plugins/`` rather than adding to it, so
+  a plugin is never loaded twice.
+- What is loaded is logged at INFO (``Loaded plugin x.py: episode_list``). A directory that does
+  not exist, or has no plugin functions, logs a WARNING and loads nothing.
+- A plugin that fails to import (a syntax error, a missing module) raises ``HathorException`` naming
+  the file, instead of being skipped, so a broken deployment is loud rather than quietly running
+  without its plugin.
+- The hook name is the **client method name**, private ones included (a method named
+  ``__episode_sync_cluders`` is hooked by a function of that name). A rename inside hathor
+  silently stops the plugin, so keep an eye on plugins when upgrading.
 
 ## Docker build
 

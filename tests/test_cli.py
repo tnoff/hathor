@@ -768,6 +768,15 @@ def test_index(mocker):
         assert loads(result.output) == {'podcasts': [], 'generated_at': 'x'}
         index.assert_called_once_with(dry_run=True)
 
+def test_plugins_directory_reaches_the_client(mocker):
+    client_cls = mocker.patch('hathor.cli.HathorClient')
+    config_data = {'hathor': {'plugins_directory': '/plugins'}}
+    with NamedTemporaryFile(suffix='.yml') as config:
+        with open(config.name, 'w+', encoding='utf-8') as writer:
+            dump(config_data, writer)
+        CliRunner().invoke(cli, ['-c', f'{config.name}', 'dump-config'])
+    assert client_cls.call_args.kwargs['plugins_directory'] == '/plugins'
+
 def test_podcast_sync():
     with NamedTemporaryFile(suffix='.sql') as db_file:
         with TemporaryDirectory() as tmp_dir:
