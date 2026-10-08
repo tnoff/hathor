@@ -127,8 +127,8 @@ jobs:
   # docker-build-check does both in one job, so the bucket, the upload and the
   # download are gone.
   #
-  # This repo never PUSHES an image -- the build-check is the whole point, and
-  # there is no registry write and no docker-apps bump anywhere in this port.
+  # CI only builds and scans; it never pushes. The image is pushed, and the
+  # docker-apps bump dispatched, from release.yml on the default branch.
   #
   # NOTE: conditional, so it must never be added to required_status_checks --
   # a required check that skips blocks the merge.
