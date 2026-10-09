@@ -21,6 +21,7 @@ from sqlalchemy.sql import text
 from hathor.audio.metadata import tags_update
 from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
+from hathor import feeds
 from hathor.exc import AudioFileException, EpisodeNotReady, HathorException, SyncFailure
 from hathor.podcast.archive import ARCHIVE_TYPES, VALID_ARCHIVE_KEYS
 from hathor import utils
@@ -135,7 +136,9 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                  ytdlp_options: dict | None = None,
                  youtube_skip_shorts: bool = False,
                  index_file: Path | None = None,
-                 plugins_directory: Path | None = None):
+                 plugins_directory: Path | None = None,
+                 feeds_directory: Path | None = None,
+                 feed_base_url: str | None = None):
         '''
         Initialize the hathor client
         podcast_directory               :   Directory where new podcasts will be placed by default
@@ -149,6 +152,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         youtube_skip_shorts             :   Leave youtube shorts out of episode syncs
         index_file                      :   Where `episode_index` writes the index of episode files
         plugins_directory               :   Load plugins from this directory instead of the package's hathor/plugins/
+        feeds_directory                 :   Where `episode_index` also writes an rss feed per podcast and an opml file. Owned by hathor
+        feed_base_url                   :   Where the library is served, such as https://example.com/hathor/<token>. Required with feeds_directory
         '''
         self.podcast_directory = None
         if podcast_directory:
@@ -178,6 +183,12 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         self._archive_managers = {}
 
         self.plugins = load_plugins(plugins_directory, self.logger)
+
+        # Last, so a bad value fails with every attribute __del__ needs already in place
+        self.feeds_directory = Path(feeds_directory) if feeds_directory else None
+        self.feed_base_url = feed_base_url.rstrip('/') if feed_base_url else None
+        if self.feeds_directory and not self.feed_base_url:
+            self._fail('feeds_directory needs feed_base_url: an rss feed has to link to its episodes with absolute urls')
 
     def close(self):
         '''Close database session and engine connections'''
@@ -976,6 +987,10 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         readable file name. Written atomically, so a reader never sees a half written index.
         Episodes with no file on disk, or a file outside the podcast directory, are left out
 
+        With feeds_directory set, also writes an rss feed for each podcast that has episodes and
+        a podcasts.opml listing them, and removes feed files of podcasts that no longer have any.
+        The index then names each podcast's feed, and the opml, relative to feed_base_url
+
         dry_run              :   Return the index instead of writing it
 
         Returns: the index if dry_run, otherwise a dict summarizing what was written
@@ -990,6 +1005,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             filter(PodcastEpisode.file_path != None).\
             order_by(Podcast.name, desc(PodcastEpisode.date))
         podcasts = {}
+        feed_podcasts = {}
+        feed_episodes = {}
         episode_count = 0
         for episode, podcast in query:
             path = Path(episode.file_path)
@@ -1002,26 +1019,83 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                 self.logger.warning(f'Episode {episode.id} file is outside the podcast directory, not indexing: {episode.file_path}')
                 continue
             date = episode.date.strftime('%Y-%m-%d') if episode.date else None
+            size = path.stat().st_size
+            content_type = utils.guess_content_type(path.name)
             podcasts.setdefault(podcast.id, {'id': podcast.id, 'name': podcast.name, 'episodes': []})['episodes'].append({
                 'id': episode.id,
                 'title': episode.title,
                 'date': date,
-                'size': path.stat().st_size,
-                'content_type': utils.guess_content_type(path.name),
+                'size': size,
+                'content_type': content_type,
                 'filename': utils.display_filename(podcast.name, date, episode.title, path.suffix),
                 'path': relative_path.as_posix(),
             })
+            feed_podcasts[podcast.id] = {'id': podcast.id, 'name': podcast.name, 'artist_name': podcast.artist_name}
+            feed_episodes.setdefault(podcast.id, []).append({
+                'id': episode.id, 'title': episode.title, 'date': episode.date, 'description': episode.description,
+                'path': relative_path.as_posix(), 'size': size, 'content_type': content_type,
+            })
             episode_count += 1
+        now = datetime.now(timezone.utc).replace(microsecond=0)
         index = {
-            'generated_at': datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+            'generated_at': now.isoformat(),
             'podcasts': list(podcasts.values()),
         }
+        filenames = {}
+        if self.feeds_directory:
+            filenames = self._feed_filenames(feed_podcasts)
+            for podcast_id, entry in podcasts.items():
+                entry['feed'] = f'feeds/{filenames[podcast_id]}'
+            index['opml'] = f'feeds/{feeds.OPML_FILENAME}'
         if dry_run:
             return index
         utils.write_file_atomic(self.index_file, json.dumps(index, indent=2))
         self.logger.info(f'Wrote index of {episode_count} episodes to {self.index_file}')
-        return {
+        summary = {
             'index_file': str(self.index_file),
             'podcasts': len(podcasts),
             'episodes': episode_count,
         }
+        if self.feeds_directory:
+            summary['feeds'] = self._write_feeds(feed_podcasts, feed_episodes, filenames, now)
+        return summary
+
+    @staticmethod
+    def _feed_filenames(feed_podcasts: dict) -> dict[int, str]:
+        '''
+        Feed file name for each podcast id. Names come from the podcast name, and a second podcast
+        whose name reduces to the same file name gets its id added instead of replacing the first
+        '''
+        filenames, used = {}, set()
+        for podcast_id, podcast in feed_podcasts.items():
+            filename = feeds.feed_filename(podcast['name'], podcast_id)
+            if filename in used:
+                filename = f'{utils.normalize_name(podcast["name"])}-{podcast_id}.xml'
+            filenames[podcast_id] = filename
+            used.add(filename)
+        return filenames
+
+    def _write_feeds(self, feed_podcasts: dict, feed_episodes: dict, filenames: dict, now: datetime) -> int:
+        '''
+        Write an rss feed per podcast and the opml, each atomically, and remove the feed files that
+        are no longer wanted (a podcast that was deleted, or has no episodes left)
+
+        Returns: number of feeds written
+        '''
+        self.feeds_directory.mkdir(parents=True, exist_ok=True)
+        wanted, listing = set(), []
+        for podcast_id, episodes in feed_episodes.items():
+            filename = filenames[podcast_id]
+            feed = feeds.build_feed(feed_podcasts[podcast_id], episodes, self.feed_base_url, now, filename)
+            utils.write_file_atomic(self.feeds_directory / filename, feed.decode('utf-8'))
+            wanted.add(filename)
+            listing.append({'name': feed_podcasts[podcast_id]['name'], 'filename': filename})
+        opml = feeds.build_opml(listing, self.feed_base_url, now)
+        utils.write_file_atomic(self.feeds_directory / feeds.OPML_FILENAME, opml.decode('utf-8'))
+        wanted.add(feeds.OPML_FILENAME)
+        for existing in self.feeds_directory.iterdir():
+            if existing.is_file() and existing.suffix in ('.xml', '.opml') and existing.name not in wanted:
+                self.logger.info(f'Removing feed file no longer wanted: {existing.name}')
+                existing.unlink()
+        self.logger.info(f'Wrote {len(listing)} feeds to {self.feeds_directory}')
+        return len(listing)
