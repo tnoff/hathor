@@ -203,6 +203,25 @@ Download a specific episode by ID:
 $ hathor episode download <episode-id>
 ```
 
+#### Failures During a Sync
+
+`podcast sync`, `episode sync` and `episode download` do not stop at the first problem. A podcast whose
+feed is broken (or any episode that fails to download) is logged, skipped, and the rest carry on, so
+one bad feed never blocks the others. Once everything else is done, a single `SyncFailure` is raised
+that lists every failure, so the command still exits non-zero and a scheduled job still shows as failed:
+
+```
+SyncFailure: 1 failure(s) during sync:
+  episode sync of podcast 3 (The Zach Lowe Show): HathorException: Invalid data from rss feed https://feeds.example.com/zach
+```
+
+- Web sync failures are per podcast, download failures per episode.
+- Downloads still run for the podcasts that did sync, and plugin hooks still run for the ones that did.
+- Query strings and fragments are removed from URLs in the recorded errors and logs, since a private
+  feed URL carries its key there. (Tracebacks are only logged at DEBUG.)
+- In Python, the exception carries `failures` (a list of dicts) and `results` (what did succeed, such as
+  the new episodes of an `episode_sync`).
+
 #### Max Allowed
 
 The "max allowed" option controls how many episode files are kept at one time. For example, if

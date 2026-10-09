@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-10-09
+
+### Changed
+
+- A failure in one podcast no longer stops the whole sync. `podcast sync`, `episode sync` and `episode download` now log and skip a podcast whose feed fails (web sync) or an episode that fails to download, carry on with the rest (including downloads and plugin hooks for the podcasts that did sync), and raise a single `SyncFailure` at the end listing every failure, so the exit code and a scheduled job's status still show the problem. Previously the first unexpected error aborted the run: a malformed feed URL skipped every podcast after it. The exception carries `failures` and `results`. The session is rolled back after each failure so one bad commit cannot break the following podcasts.
+- URL query strings and fragments are removed from error text in logs and in `SyncFailure`, since a private feed URL carries its key there.
+
 ## [2.7.0] - 2026-10-08
 
 ### Added

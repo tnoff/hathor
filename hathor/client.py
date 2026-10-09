@@ -1,3 +1,5 @@
+# pylint: disable=too-many-lines
+# HathorClient is one class by design; the sync failure handling pushed it just past 1000 lines
 from datetime import datetime, timezone
 import json
 from importlib import import_module
@@ -19,7 +21,7 @@ from sqlalchemy.sql import text
 from hathor.audio.metadata import tags_update
 from hathor.database.tables import BASE, Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
-from hathor.exc import AudioFileException, EpisodeNotReady, HathorException
+from hathor.exc import AudioFileException, EpisodeNotReady, HathorException, SyncFailure
 from hathor.podcast.archive import ARCHIVE_TYPES, VALID_ARCHIVE_KEYS
 from hathor import utils
 
@@ -218,6 +220,34 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
     def _fail(self, message):
         self.logger.error(message)
         raise HathorException(message)
+
+    def _record_failure(self, failures: list | None, stage: str, podcast_id: int, podcast_name: str,
+                        error: Exception, episode_id: int | None = None):
+        '''
+        Log one failure and remember it so the rest of a sync can carry on. With no list to
+        remember it in, the error is raised again
+
+        The session is rolled back first: a failure partway through a commit leaves it
+        unusable until it is, and every later podcast would fail with it
+        '''
+        self.db_session.rollback()
+        message = utils.scrub_error(f'{type(error).__name__}: {error}')
+        where = f'podcast {podcast_id} ({podcast_name})' + (f' episode {episode_id}' if episode_id is not None else '')
+        self.logger.error(f'{stage} failed for {where}: {message}')
+        self.logger.debug('Traceback for the failure above', exc_info=error)
+        if failures is None:
+            # Nobody is collecting failures, so keep the old behaviour: fail where it happened
+            raise error
+        failures.append({'stage': stage, 'podcast_id': podcast_id, 'podcast_name': podcast_name,
+                         'episode_id': episode_id, 'error': message})
+
+    @staticmethod
+    def _raise_failures(failures: list, results: list | None = None):
+        '''
+        Raise a SyncFailure for everything recorded, if anything was
+        '''
+        if failures:
+            raise SyncFailure(failures, results)
 
     @run_plugins
     def podcast_create(self, archive_type: ArchiveType,
@@ -505,12 +535,20 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                                      For unlimited number of episodes, use 0
 
         Returns: list of dictionaries representing new episodes added
+
+        A podcast that fails to sync is logged and skipped, the rest still sync, and a SyncFailure
+        listing what failed (carrying the new episodes as `results`) is raised at the end
         '''
-        return self.__episode_sync_cluders(include_podcasts, exclude_podcasts, max_episode_sync=max_episode_sync)
+        failures = []
+        new_episodes = self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
+                                                   max_episode_sync=max_episode_sync, failures=failures)
+        self._raise_failures(failures, new_episodes)
+        return new_episodes
 
     @run_plugins
     def __episode_sync_cluders(self, include_podcasts: list[int] | None, exclude_podcasts: list[int] | None,
-                               max_episode_sync: int | None = None, automatic_sync: bool = True) -> list[dict]:
+                               max_episode_sync: int | None = None, automatic_sync: bool = True,
+                               failures: list | None = None) -> list[dict]:
         query = self.db_session.query(Podcast)
         if include_podcasts:
             opts = (Podcast.id == pod for pod in include_podcasts)
@@ -520,79 +558,91 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             query = query.filter(and_(opts))
 
         new_episodes = []
-        for podcast in query:
+        for podcast in list(query):
             if not automatic_sync and not podcast.automatic_episode_download:
                 self.logger.debug(f'Skipping episode sync on podcast: {podcast.id}')
                 continue
+            # Read these now: after a rollback the row has to be reloaded
+            podcast_id, podcast_name = podcast.id, podcast.name
+            try:
+                new_episodes.extend(self._episode_sync_podcast(podcast, max_episode_sync))
+            except Exception as error: #pylint:disable=broad-exception-caught
+                self._record_failure(failures, 'episode sync', podcast_id, podcast_name, error)
+        return new_episodes
 
-            self.logger.debug(f'Running episode sync on podcast: {podcast.id}')
-            manager = self._archive_manager(podcast.archive_type)
+    def _episode_sync_podcast(self, podcast: Podcast, max_episode_sync: int | None) -> list[dict]:
+        '''
+        Sync the episodes of one podcast, returning the new episodes as dictionaries
+        '''
+        new_episodes = []
+        self.logger.debug(f'Running episode sync on podcast: {podcast.id}')
+        manager = self._archive_manager(podcast.archive_type)
 
-            # check for filters for podcast
-            compiled_filters = [re.compile(f.regex_string) for f in \
-                self.db_session.query(PodcastTitleFilter).\
-                filter(PodcastTitleFilter.podcast_id == podcast.id)]
+        # check for filters for podcast
+        compiled_filters = [re.compile(f.regex_string) for f in \
+            self.db_session.query(PodcastTitleFilter).\
+            filter(PodcastTitleFilter.podcast_id == podcast.id)]
 
-            # Handed to the archive manager so it can stop paging once it reaches
-            # episodes already stored. The per-episode checks below still run,
-            # managers are free to ignore this
-            known_urls = {row[0] for row in self.db_session.query(PodcastEpisode.download_url).\
-                filter(PodcastEpisode.podcast_id == podcast.id)}
+        # Handed to the archive manager so it can stop paging once it reaches
+        # episodes already stored. The per-episode checks below still run,
+        # managers are free to ignore this
+        known_urls = {row[0] for row in self.db_session.query(PodcastEpisode.download_url).\
+            filter(PodcastEpisode.podcast_id == podcast.id)}
 
-            # A podcast under its max allowed is missing episodes OLDER than the ones it
-            # still has, and a newest-first listing that stops on known episodes can never
-            # reach them -- deleting episodes, or a new filter dropping some, strands the
-            # gap forever. Ask for a backfill instead, sized to the gap so it stops as
-            # soon as the podcast is whole again
-            episodes_stored = len(known_urls)
-            backfill = podcast.max_allowed is not None and episodes_stored < podcast.max_allowed
-            if backfill:
-                self.logger.debug(f'Podcast {podcast.id} holds {episodes_stored} of '
-                                  f'{podcast.max_allowed} episodes, backfilling the difference')
+        # A podcast under its max allowed is missing episodes OLDER than the ones it
+        # still has, and a newest-first listing that stops on known episodes can never
+        # reach them -- deleting episodes, or a new filter dropping some, strands the
+        # gap forever. Ask for a backfill instead, sized to the gap so it stops as
+        # soon as the podcast is whole again
+        episodes_stored = len(known_urls)
+        backfill = podcast.max_allowed is not None and episodes_stored < podcast.max_allowed
+        if backfill:
+            self.logger.debug(f'Podcast {podcast.id} holds {episodes_stored} of '
+                              f'{podcast.max_allowed} episodes, backfilling the difference')
 
-            # if sync all episodes, give no max results so all episodes returned
-            if max_episode_sync is None:
-                # An explicit max_episode_sync is the caller's call and overrides the gap
-                max_results = podcast.max_allowed - episodes_stored if backfill else podcast.max_allowed
-            elif max_episode_sync == 0:
-                max_results = None
-            else:
-                max_results = max_episode_sync
+        # if sync all episodes, give no max results so all episodes returned
+        if max_episode_sync is None:
+            # An explicit max_episode_sync is the caller's call and overrides the gap
+            max_results = podcast.max_allowed - episodes_stored if backfill else podcast.max_allowed
+        elif max_episode_sync == 0:
+            max_results = None
+        else:
+            max_results = max_episode_sync
 
-            current_episodes = manager.broadcast_update(podcast.broadcast_id,
-                                                        max_results=max_results,
-                                                        filters=compiled_filters,
-                                                        known_urls=known_urls,
-                                                        backfill=backfill)
-            for episode in current_episodes:
-                episode_processed_url = episode['download_link']
-                # Patreon keeps the same basic url but changes up the query params
-                # Have this check for the base url, default to full url for others
-                is_patreon = utils.check_patreon(episode['download_link'])
-                if is_patreon:
-                    episode_processed_url = utils.process_url(episode['download_link'])
-                    existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.processed_url == episode_processed_url).first()
-                    if existing_episode:
-                        self.logger.debug(f'Episode {existing_episode.id} has same url "{episode_processed_url}", skipping saving episode')
-                        continue
-                existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode['download_link']).first()
+        current_episodes = manager.broadcast_update(podcast.broadcast_id,
+                                                    max_results=max_results,
+                                                    filters=compiled_filters,
+                                                    known_urls=known_urls,
+                                                    backfill=backfill)
+        for episode in current_episodes:
+            episode_processed_url = episode['download_link']
+            # Patreon keeps the same basic url but changes up the query params
+            # Have this check for the base url, default to full url for others
+            is_patreon = utils.check_patreon(episode['download_link'])
+            if is_patreon:
+                episode_processed_url = utils.process_url(episode['download_link'])
+                existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.processed_url == episode_processed_url).first()
                 if existing_episode:
-                    self.logger.debug(f'Episode {existing_episode.id} has same url "{episode["download_link"]}", skipping saving episode')
+                    self.logger.debug(f'Episode {existing_episode.id} has same url "{episode_processed_url}", skipping saving episode')
                     continue
-                episode_args = {
-                    'title' : episode['title'],
-                    'date' : episode['date'],
-                    'description' : episode['description'],
-                    'download_url' : episode['download_link'],
-                    'processed_url': episode_processed_url,
-                    'podcast_id' : podcast.id,
-                    'prevent_deletion' : False,
-                }
-                new_episode = PodcastEpisode(**episode_args)
-                self.db_session.add(new_episode)
-                self.db_session.commit()
-                self.logger.debug(f'Created new podcast episode: {new_episode.id} from url: {new_episode.download_url}')
-                new_episodes.append(new_episode.as_dict(self.datetime_output_format))
+            existing_episode = self.db_session.query(PodcastEpisode).filter(PodcastEpisode.download_url == episode['download_link']).first()
+            if existing_episode:
+                self.logger.debug(f'Episode {existing_episode.id} has same url "{episode["download_link"]}", skipping saving episode')
+                continue
+            episode_args = {
+                'title' : episode['title'],
+                'date' : episode['date'],
+                'description' : episode['description'],
+                'download_url' : episode['download_link'],
+                'processed_url': episode_processed_url,
+                'podcast_id' : podcast.id,
+                'prevent_deletion' : False,
+            }
+            new_episode = PodcastEpisode(**episode_args)
+            self.db_session.add(new_episode)
+            self.db_session.commit()
+            self.logger.debug(f'Created new podcast episode: {new_episode.id} from url: {new_episode.download_url}')
+            new_episodes.append(new_episode.as_dict(self.datetime_output_format))
         return new_episodes
 
     @run_plugins
@@ -713,61 +763,82 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         episode_input    :  List of integer ids
 
         Returns: List of dictionaries of episodes downloaded
+
+        An episode that fails is logged and skipped, the rest still download, and a SyncFailure
+        listing what failed (carrying the episodes that did download as `results`) is raised at the end
         '''
         query = self.db_session.query(PodcastEpisode, Podcast).\
             filter(PodcastEpisode.podcast_id == Podcast.id).\
             filter(PodcastEpisode.id.in_(episode_input))
-        return self.__episode_download_input(query)
+        failures = []
+        downloaded = self.__episode_download_input(query, failures)
+        self._raise_failures(failures, downloaded)
+        return downloaded
 
     @run_plugins
-    def __episode_download_input(self, episode_input) -> list[dict]:
+    def __episode_download_input(self, episode_input, failures: list | None = None) -> list[dict]:
+        episodes_downloaded = []
+        # Materialized, since a failure rolls the session back and that must not
+        # happen under a query that is still being read
+        for query_data in list(episode_input):
+            episode = query_data[0]
+            podcast = query_data[1]
+            # Read these now: after a rollback the rows have to be reloaded
+            episode_id, podcast_id, podcast_name = episode.id, podcast.id, podcast.name
+            try:
+                downloaded = self._episode_download_one(episode, podcast)
+            except Exception as error: #pylint:disable=broad-exception-caught
+                self._record_failure(failures, 'download', podcast_id, podcast_name, error, episode_id=episode_id)
+                continue
+            if downloaded is not None:
+                episodes_downloaded.append(downloaded)
+        return episodes_downloaded
+
+    def _episode_download_one(self, episode: PodcastEpisode, podcast: Podcast) -> dict | None:
+        '''
+        Download one episode and tag it. Returns the episode as a dictionary, or None
+        if it was skipped because it is not ready or could not be downloaded
+        '''
         def build_episode_path(episode, podcast):
             return Path(podcast.file_location) / f'{datetime.strftime(episode.date, self.datetime_output_format)}.{utils.normalize_name(episode.title)}'
 
-        episodes_downloaded = []
+        manager = self._archive_manager(podcast.archive_type)
 
-        for query_data in episode_input:
-            episode = query_data[0]
-            podcast = query_data[1]
+        self.logger.debug(f'Downloading episode: {episode.id} data from url: {episode.download_url}')
 
-            manager = self._archive_manager(podcast.archive_type)
+        episode_path_prefix = build_episode_path(episode, podcast)
 
-            self.logger.debug(f'Downloading episode: {episode.id} data from url: {episode.download_url}')
+        try:
+            output_path, download_size = manager.episode_download(episode.download_url,
+                                                                  episode_path_prefix)
+        except EpisodeNotReady as error:
+            self.logger.debug(f'Skipping episode: {episode.id}, not ready for download: {str(error)}')
+            return None
+        if output_path is None or (download_size is None or download_size == 0):
+            self.logger.error(f'Unable to download episode: {episode.id}')
+            return None
+        self.logger.info(f'Downloaded episode {episode.id} data to file {str(output_path)}')
 
-            episode_path_prefix = build_episode_path(episode, podcast)
+        episode.file_path = str(output_path.resolve())
+        episode.file_size = download_size
+        self.db_session.commit()
 
-            try:
-                output_path, download_size = manager.episode_download(episode.download_url,
-                                                                      episode_path_prefix)
-            except EpisodeNotReady as error:
-                self.logger.debug(f'Skipping episode: {episode.id}, not ready for download: {str(error)}')
-                continue
-            if output_path is None or (download_size is None or download_size == 0):
-                self.logger.error(f'Unable to download episode: {episode.id}')
-                continue
-            self.logger.info(f'Downloaded episode {episode.id} data to file {str(output_path)}')
-
-            episode.file_path = str(output_path.resolve())
-            episode.file_size = download_size
-            self.db_session.commit()
-
-            # Update metadata tags
-            # use artist name if possible
-            artist_name = podcast.artist_name or podcast.name
-            audio_tags = {
-                'artist' : artist_name,
-                'albumartist' : artist_name,
-                'album' : podcast.name,
-                'title' : episode.title,
-                'date' : episode.date.strftime(self.datetime_output_format),
-            }
-            try:
-                tags_update(output_path, audio_tags)
-                self.logger.debug(f'Updated database audio tags for episode {episode.id}')
-            except AudioFileException as error:
-                self.logger.warning(f'Unable to update tags on file {str(output_path)} : {str(error)}')
-            episodes_downloaded.append(episode.as_dict(self.datetime_output_format))
-        return episodes_downloaded
+        # Update metadata tags
+        # use artist name if possible
+        artist_name = podcast.artist_name or podcast.name
+        audio_tags = {
+            'artist' : artist_name,
+            'albumartist' : artist_name,
+            'album' : podcast.name,
+            'title' : episode.title,
+            'date' : episode.date.strftime(self.datetime_output_format),
+        }
+        try:
+            tags_update(output_path, audio_tags)
+            self.logger.debug(f'Updated database audio tags for episode {episode.id}')
+        except AudioFileException as error:
+            self.logger.warning(f'Unable to update tags on file {str(output_path)} : {str(error)}')
+        return episode.as_dict(self.datetime_output_format)
 
     @run_plugins
     def episode_delete_file(self, episode_input: list[int]) -> list[int]:
@@ -820,17 +891,25 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         sync_web_episodes    :   Sync latest known podcast episodes with web
         download_episodes    :   Download new podcast episodes
 
-        Returns: null
+        A podcast or episode that fails is logged and skipped so the others still sync and download.
+        Once everything else is done a SyncFailure listing what failed is raised, so a caller
+        (and the CLI's exit code) still sees that something went wrong
+
+        Returns: True
         '''
+        failures = []
         if sync_web_episodes:
             self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
-                                        automatic_sync=False)
+                                        automatic_sync=False, failures=failures)
+        # Download even when some podcast failed to sync: the others still have episodes to get
         if download_episodes:
-            self._podcast_download_episodes(include_podcasts, exclude_podcasts)
+            self._podcast_download_episodes(include_podcasts, exclude_podcasts, failures=failures)
+        self._raise_failures(failures)
         return True
 
     @run_plugins
-    def _podcast_download_episodes(self, include_podcasts: list[int] | None, exclude_podcasts: list[int] | None):
+    def _podcast_download_episodes(self, include_podcasts: list[int] | None, exclude_podcasts: list[int] | None,
+                                   failures: list | None = None):
         delete_episodes = []
         download_episodes = []
 
@@ -865,7 +944,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         # Download episodes from query
         if download_episodes:
             self.logger.debug(f'Episodes {[i[0].id for i in download_episodes]} set for download from file sync')
-            self.__episode_download_input(download_episodes)
+            self.__episode_download_input(download_episodes, failures)
 
         # Find episodes to delete if there is max allowed on the podcast
         # Not all episodes may have been downloaded, so this should use

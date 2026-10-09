@@ -43,6 +43,10 @@ Separate CLI (`audio-tool`) for direct audio file tag operations.
 **`hathor/output.py`**
 Shared `render_output(data, as_json)` used by both CLIs. Every command result flows through it: `--json` (stored in `ctx.obj['json']`, set by each group's root command) prints raw JSON via `json.dumps`; otherwise it renders a `dappertable` table -- columns from dict keys for a list of dicts, a `key`/`value` table for a single dict, one line per item for a list of scalars, and a bare `str()` for anything else.
 
+### Sync failure handling
+
+`episode_sync`, `podcast_sync` and `episode_download` isolate failures. The web sync of each podcast runs in `_episode_sync_podcast` and each download in `_episode_download_one`; both are called inside a `try/except Exception` that calls `_record_failure` (logs, **rolls the session back**, appends to a `failures` list) and carries on. The public method raises `SyncFailure` once, at the end, via `_raise_failures`. Raising only after the decorated helper returns means its plugin hooks still run. The private helpers take `failures`; `None` makes `_record_failure` re-raise, i.e. the old fail-fast behaviour. Error text goes through `utils.scrub_error` (URL query strings may hold credentials). Query objects are materialized with `list()` before iterating, since a rollback must not happen under a live cursor. Deletes (`__episode_delete_file_input`) are not isolated.
+
 ### Plugin System
 
 Place Python files in `hathor/plugins/`, or set `plugins_directory` to load them from anywhere (`_load_external_plugins`: by file path with `importlib.util`, sorted, skipping `__init__.py` and anything hidden so a mounted ConfigMap's `..data` symlinks do not load each plugin three times; an explicit directory replaces the package one; a plugin that fails to import raises `HathorException`). They are auto-discovered at client init via `load_plugins()`. See [DEVELOPMENT.md](DEVELOPMENT.md#plugins) for the function signature, naming convention, and an example.
