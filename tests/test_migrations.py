@@ -1,12 +1,14 @@
 import logging
 
 import pytest
+from alembic.config import Config
+from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect, text
 
 from hathor.client import HathorClient
-from hathor.database.migrate import BASELINE_REVISION, migrate
+from hathor.database.migrate import BASELINE_REVISION, MIGRATIONS_DIRECTORY, migrate
 from hathor.database.tables import BASE
 from hathor.exc import HathorException
 
@@ -88,3 +90,13 @@ def test_client_migrates_a_file_database(make_engine, tmp_path):
         assert not client.podcast_list()
     finally:
         client.close()
+
+def test_baseline_downgrade_drops_every_table(make_engine):
+    engine = make_engine()
+    migrate(engine, LOGGER)
+    config = Config()
+    config.set_main_option('script_location', str(MIGRATIONS_DIRECTORY))
+    with engine.begin() as connection:
+        config.attributes['connection'] = connection
+        command.downgrade(config, 'base')
+    assert set(inspect(engine).get_table_names()) == {'alembic_version'}
