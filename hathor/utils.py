@@ -166,3 +166,14 @@ def write_file_atomic(path: Path, text: str):
         temp.write(text)
     os.chmod(temp.name, 0o644)
     os.replace(temp.name, path)
+
+def scrub_error(message: str) -> str:
+    '''
+    Drop the query string and fragment from every url in an error message
+
+    Feed urls can carry credentials in their query string (a private patreon feed
+    does), and an exception message includes the url it failed on
+
+    message: error text
+    '''
+    return re.sub(r'(https?://[^\s?#"\'<>]+)[?#][^\s"\'<>]*', r'\1', message)
