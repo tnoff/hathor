@@ -28,7 +28,7 @@ def test_migrations_match_models():
     migrate(engine, LOGGER)
     with engine.connect() as connection:
         diff = compare_metadata(MigrationContext.configure(connection), BASE.metadata)
-    assert diff == []
+    assert not diff
 
 def test_upgrade_twice_changes_nothing():
     engine = create_engine('sqlite:///')
@@ -74,6 +74,6 @@ def test_client_migrates_a_file_database(tmp_path):
     client = HathorClient(database_connection_string=connection_string)
     try:
         assert versions(client.engine) == [BASELINE_REVISION]
-        assert client.podcast_list() == []
+        assert not client.podcast_list()
     finally:
         client.close()
