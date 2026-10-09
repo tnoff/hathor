@@ -19,7 +19,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
 
 from hathor.audio.metadata import tags_update
-from hathor.database.tables import BASE, Podcast
+from hathor.database.migrate import migrate
+from hathor.database.tables import Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
 from hathor import feeds
 from hathor.exc import AudioFileException, EpisodeNotReady, HathorException, SyncFailure
@@ -167,7 +168,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         self.engine = create_engine(f'{self.database_connection_string}')
         self.logger.debug(f'Initializing hathor client with database connection {self.database_connection_string}')
 
-        BASE.metadata.create_all(self.engine)
+        migrate(self.engine, self.logger)
         self.db_session = sessionmaker(bind=self.engine)()
 
         if not google_api_key:

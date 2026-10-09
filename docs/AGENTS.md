@@ -16,6 +16,9 @@ All public methods are decorated with `@run_plugins`, which invokes matching plu
 **`hathor/database/tables.py`**
 Three SQLAlchemy models: `Podcast`, `PodcastEpisode`, `PodcastTitleFilter`. Each has an `as_dict(datetime_output_format)` method for serialization.
 
+**`hathor/database/migrate.py` and `hathor/database/migrations/`**
+Alembic, configured in code (no `alembic.ini`). `migrate(engine, logger)` runs in `HathorClient.__init__` on one connection, so an in memory sqlite database is migrated on the connection the client then uses (`env.py` reads it from `config.attributes['connection']`). An existing database without `alembic_version` is stamped `0001` only after `check_baseline` confirms the baseline tables and columns; otherwise it raises, because stamping a schema that is not the baseline would make later migrations fail halfway. Revisions are hand-reviewed and use `batch_alter_table`. `script.py.mako` carries the pylint pragma generated files need (alembic's `op` is a runtime proxy). See [DEVELOPMENT.md](DEVELOPMENT.md#database-migrations).
+
 **`hathor/podcast/archive.py`**
 Archive backends behind `ArchiveInterface`. Three implementations:
 - `RSSManager` — parses RSS feeds via `feedparser`, downloads files via HTTP (`curl_download`)

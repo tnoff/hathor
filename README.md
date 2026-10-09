@@ -468,6 +468,12 @@ docker compose run --rm hathor podcast sync
 
 A few things worth knowing:
 
+- The database schema is managed with Alembic migrations that ship in the package. Every
+  command that creates the client brings the database up to date first: an empty database gets
+  every table, and a database made by an older hathor (before migrations) is stamped as the
+  baseline and then upgraded, keeping its data. A database with the hathor tables but a
+  different layout is refused rather than stamped. There is no downgrade path in normal use,
+  so take a copy of the database file before the first run of a release that adds a migration.
 - Episode file paths are stored in the database as absolute paths. If the
   container shares a database with a non-container hathor, mount each host
   directory at the *same* absolute path inside the container — remapping the
