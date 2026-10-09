@@ -106,7 +106,7 @@ def test_urls():
 def test_xml_text():
     assert feeds.xml_text(None) == ''
     assert feeds.xml_text('tab\tnewline\ncr\r ok') == 'tab\tnewline\ncr\r ok'
-    assert feeds.xml_text('a\x00b\x0bc\x1fd￾e') == 'abcde'.replace('e', '') + 'e' or True
+    assert feeds.xml_text('a\ufffeb\uffffc') == 'abc'                  # noncharacters are not valid XML either
     assert feeds.xml_text('a\x00b\x0bc\x1fd') == 'abcd'
     assert feeds.xml_text('emoji 😀') == 'emoji 😀'
     assert feeds.xml_text(42) == '42'
