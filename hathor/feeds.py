@@ -69,7 +69,7 @@ def build_feed(podcast: dict, episodes: list[dict], base_url: str, now: datetime
     Each item's guid comes from the podcast and episode ids, never from its url, so an app
     keeps recognising an episode however the urls change.
 
-    podcast     :   dict with id, name and artist_name
+    podcast     :   dict with id, name and artist_name, and image_url when it has artwork
     episodes    :   newest first; dicts with id, title, date (datetime or None), description,
                     path (relative to the podcast directory), size and content_type
     base_url    :   Where the library is served
@@ -91,6 +91,13 @@ def build_feed(podcast: dict, episodes: list[dict], base_url: str, now: datetime
         'rel': 'self', 'type': 'application/rss+xml',
         'href': feed_url(base_url, filename or feed_filename(podcast['name'], podcast['id'])),
     })
+    if podcast.get('image_url'):
+        # itunes:image is what podcast apps read; the rss 2.0 image is for readers that predate it
+        ET.SubElement(channel, f'{{{ITUNES_NS}}}image', {'href': podcast['image_url']})
+        image = ET.SubElement(channel, 'image')
+        ET.SubElement(image, 'url').text = podcast['image_url']
+        ET.SubElement(image, 'title').text = xml_text(podcast['name'])
+        ET.SubElement(image, 'link').text = f'{base_url}/'
     for episode in episodes:
         item = ET.SubElement(channel, 'item')
         ET.SubElement(item, 'title').text = xml_text(episode['title'] or f'Episode {episode["id"]}')

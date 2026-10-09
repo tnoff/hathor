@@ -8,6 +8,7 @@ from inspect import getmembers, isfunction
 import os
 from logging import RootLogger
 import re
+from hashlib import sha256
 from shutil import move
 from typing import Literal
 
@@ -18,6 +19,7 @@ from sqlalchemy import and_, desc, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
 
+from hathor import artwork
 from hathor.audio.metadata import tags_update
 from hathor.database.migrate import migrate
 from hathor.database.tables import Podcast
@@ -26,6 +28,9 @@ from hathor import feeds
 from hathor.exc import AudioFileException, EpisodeNotReady, HathorException, SyncFailure
 from hathor.podcast.archive import ARCHIVE_TYPES, VALID_ARCHIVE_KEYS
 from hathor import utils
+
+# Where podcast artwork is kept, under the podcast directory
+IMAGE_DIRECTORY = '.artwork'
 
 DEFAULT_DATETIME_FORMAT = '%Y-%m-%d'
 
@@ -352,7 +357,9 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                        archive_type: ArchiveType | None = None,
                        max_allowed: int | None = None,
                        artist_name: str | None = None,
-                       automatic_download: bool | None = None) -> dict:
+                       automatic_download: bool | None = None,
+                       image: str | None = None,
+                       remove_image: bool = False) -> dict:
         '''
         Update a single podcast
         podcast_id           :   ID of podcast to edit
@@ -362,12 +369,19 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         max_allowed          :   When syncing the podcast, keep the last N episodes. Set to 0 for unlimited
         artist_name          :   Name of artist to use when updating media file metadata
         automatic_download   :   Automatically download episodes with podcast sync
+        image                :   Artwork for the podcast's feed, an http(s) url or a file. It is downloaded once and
+                                 stored under the podcast directory, so a source url that expires stops mattering.
+                                 It must be a jpeg, png, gif or webp under 5MB, or nothing changes
+        remove_image         :   Remove the podcast's artwork
 
         Returns: dict object representing updated podcast
         '''
         pod = self.db_session.get(Podcast, podcast_id)
         if not pod:
             self._fail(f'Podcast not found for ID: {podcast_id}')
+        # Before anything changes, so a bad image leaves the podcast and its old image alone
+        image_data = self._image_load(podcast_id, image, remove_image)
+        old_image = pod.image
 
         if podcast_name is not None:
             self.logger.debug(f'Updating podcast name to {podcast_name} for podcast {podcast_id}"')
@@ -392,10 +406,65 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         if automatic_download is not None:
             self.logger.debug(f'Updating automatic download to {automatic_download} for podcast {podcast_id}')
             pod.automatic_episode_download = automatic_download
+        if image_data is not None or remove_image:
+            pod.image = self._image_store(pod.id, *image_data) if image_data else None
 
         self.db_session.commit()
         self.logger.info(f'Podcast {pod.id} update commited')
+        if old_image and old_image != pod.image:
+            self._image_remove(old_image)
         return pod.as_dict(self.datetime_output_format)
+
+    def _image_load(self, podcast_id: int, image: str | None, remove_image: bool) -> tuple[bytes, str] | None:
+        '''
+        Check and read the image given to podcast_update
+
+        Returns: image bytes and extension, or None when no image was given
+        '''
+        if image is None:
+            return None
+        if remove_image:
+            self._fail('Cannot set and remove the image in the same update')
+        if self.podcast_directory is None:
+            self._fail('No podcast_directory set in config, nowhere to store the image')
+        try:
+            return artwork.load_image(image)
+        except HathorException as error:
+            message = f'Podcast {podcast_id} image {utils.mask_url_secrets(image)}: {error}'
+            self.logger.error(message)
+            raise HathorException(message) from error
+
+    def _image_store(self, podcast_id: int, data: bytes, extension: str) -> str:
+        '''
+        Write a podcast's artwork under the podcast directory, replacing its previous one
+
+        Returns: the path stored in the database, relative to the podcast directory
+        '''
+        directory = self.podcast_directory / IMAGE_DIRECTORY
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f'{podcast_id}{extension}'
+        utils.write_bytes_atomic(path, data)
+        self.logger.info(f'Stored {len(data)} byte image for podcast {podcast_id}')
+        return path.relative_to(self.podcast_directory).as_posix()
+
+    def _image_path(self, relative_path: str | None) -> Path | None:
+        '''
+        File for a stored image path, or None if there is no such file inside the podcast directory
+        '''
+        if not relative_path or self.podcast_directory is None:
+            return None
+        path = (self.podcast_directory / relative_path).resolve()
+        try:
+            path.relative_to(self.podcast_directory.resolve())
+        except ValueError:
+            return None
+        return path if path.is_file() else None
+
+    def _image_remove(self, relative_path: str):
+        path = self._image_path(relative_path)
+        if path:
+            path.unlink()
+            self.logger.info(f'Removed stored image {relative_path}')
 
 
     @run_plugins
@@ -475,6 +544,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             # delete files if needed
             if delete_files:
                 utils.rm_tree(Path(podcast.file_location))
+            # the artwork is not an episode file, so goes either way
+            self._image_remove(podcast.image)
             podcasts_deleted.append(podcast.id)
         return podcasts_deleted
 
@@ -1040,7 +1111,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                 'filename': utils.display_filename(podcast.name, date, episode.title, path.suffix),
                 'path': relative_path.as_posix(),
             })
-            feed_podcasts[podcast.id] = {'id': podcast.id, 'name': podcast.name, 'artist_name': podcast.artist_name}
+            feed_podcasts[podcast.id] = {'id': podcast.id, 'name': podcast.name, 'artist_name': podcast.artist_name,
+                                         'image_source': self._image_path(podcast.image)}
             feed_episodes.setdefault(podcast.id, []).append({
                 'id': episode.id, 'title': episode.title, 'date': episode.date, 'description': episode.description,
                 'path': relative_path.as_posix(), 'size': size, 'content_type': content_type,
@@ -1051,11 +1123,14 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             'generated_at': now.isoformat(),
             'podcasts': list(podcasts.values()),
         }
-        filenames = {}
+        filenames, image_files = {}, {}
         if self.feeds_directory:
             filenames = self._feed_filenames(feed_podcasts)
+            image_files = self._feed_images(feed_podcasts, filenames)
             for podcast_id, entry in podcasts.items():
                 entry['feed'] = f'feeds/{filenames[podcast_id]}'
+                if podcast_id in image_files:
+                    entry['image'] = f'feeds/{image_files[podcast_id][1]}'
             index['opml'] = f'feeds/{feeds.OPML_FILENAME}'
         if dry_run:
             return index
@@ -1067,7 +1142,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             'episodes': episode_count,
         }
         if self.feeds_directory:
-            summary['feeds'] = self._write_feeds(feed_podcasts, feed_episodes, filenames, now)
+            summary['feeds'] = self._write_feeds(feed_podcasts, feed_episodes, filenames, image_files, now)
         return summary
 
     @staticmethod
@@ -1085,10 +1160,29 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             used.add(filename)
         return filenames
 
-    def _write_feeds(self, feed_podcasts: dict, feed_episodes: dict, filenames: dict, now: datetime) -> int:
+    @staticmethod
+    def _feed_images(feed_podcasts: dict, filenames: dict) -> dict[int, tuple[Path, str]]:
         '''
-        Write an rss feed per podcast and the opml, each atomically, and remove the feed files that
-        are no longer wanted (a podcast that was deleted, or has no episodes left)
+        Stored image and the name it is served under, for each podcast that has one on disk
+
+        The name carries a hash of the content, so replacing an image changes its url and a
+        podcast app that caches by url fetches the new one
+        '''
+        images = {}
+        for podcast_id, podcast in feed_podcasts.items():
+            source = podcast['image_source']
+            if source is None:
+                continue
+            digest = sha256(source.read_bytes()).hexdigest()[:10]
+            stem = filenames[podcast_id].removesuffix('.xml')
+            images[podcast_id] = (source, f'{stem}-{digest}{source.suffix}')
+        return images
+
+    def _write_feeds(self, feed_podcasts: dict, feed_episodes: dict, filenames: dict, image_files: dict, now: datetime) -> int:
+        '''
+        Write an rss feed per podcast and the opml, each atomically, copy the podcasts' artwork
+        next to them, and remove the files that are no longer wanted (a podcast that was deleted,
+        or has no episodes left, or an image that was replaced)
 
         Returns: number of feeds written
         '''
@@ -1096,7 +1190,14 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         wanted, listing = set(), []
         for podcast_id, episodes in feed_episodes.items():
             filename = filenames[podcast_id]
-            feed = feeds.build_feed(feed_podcasts[podcast_id], episodes, self.feed_base_url, now, filename)
+            podcast = dict(feed_podcasts[podcast_id])
+            if podcast_id in image_files:
+                source, image_name = image_files[podcast_id]
+                if not (self.feeds_directory / image_name).is_file():
+                    utils.write_bytes_atomic(self.feeds_directory / image_name, source.read_bytes())
+                wanted.add(image_name)
+                podcast['image_url'] = feeds.feed_url(self.feed_base_url, image_name)
+            feed = feeds.build_feed(podcast, episodes, self.feed_base_url, now, filename)
             utils.write_file_atomic(self.feeds_directory / filename, feed.decode('utf-8'))
             wanted.add(filename)
             listing.append({'name': feed_podcasts[podcast_id]['name'], 'filename': filename})
@@ -1104,7 +1205,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         utils.write_file_atomic(self.feeds_directory / feeds.OPML_FILENAME, opml.decode('utf-8'))
         wanted.add(feeds.OPML_FILENAME)
         for existing in self.feeds_directory.iterdir():
-            if existing.is_file() and existing.suffix in ('.xml', '.opml') and existing.name not in wanted:
+            if existing.is_file() and existing.suffix in ('.xml', '.opml', *artwork.IMAGE_EXTENSIONS) and existing.name not in wanted:
                 self.logger.info(f'Removing feed file no longer wanted: {existing.name}')
                 existing.unlink()
         self.logger.info(f'Wrote {len(listing)} feeds to {self.feeds_directory}')

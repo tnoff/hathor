@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.11.0] - 2026-10-09
+
+### Added
+
+- Podcast artwork. `hathor podcast update <id> --image <url-or-file>` reads an image once and stores it under `podcast_directory` (`.artwork/<id>.<ext>`), so a source URL that expires no longer matters; `--remove-image` removes it. Only a jpeg, png, gif or webp up to 5MB is accepted, judged by its bytes rather than its name or content type, and a refused image changes nothing. With `feeds_directory` set, `hathor index` copies the image next to the feeds under a name that includes a hash of its content (so a replacement is a new URL to apps that cache artwork) and adds `<itunes:image>` and `<image>` to the feed; `index.json` gains `image` per podcast. Stale copies are removed with the other feed files. Deleting a podcast deletes its image.
+- Database migration `0002` adds the nullable `podcast.image` column. It runs by itself the first time a client starts on this version.
+
 ## [2.10.0] - 2026-10-09
 
 ### Added

@@ -35,6 +35,8 @@ class Podcast(BASE):
     file_location = Column(String(10*1024))
     artist_name = Column(String(256))
     automatic_episode_download = Column(Boolean)
+    # stored artwork, relative to the podcast directory
+    image = Column(String(10*1024))
 
     def as_dict(self, datetime_output_format):
         '''

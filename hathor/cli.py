@@ -151,9 +151,11 @@ def podcast_show(ctx, podcast_id, show_secrets):
 @click.option('--max-allowed', type=int, help='New max allowed')
 @click.option('--artist-name', help='New artist name')
 @click.option('--automatic-download', type=bool, help='New automatic download setting')
+@click.option('--image', help='Artwork for the podcast feed: an http(s) url or a file. Downloaded once and stored, so the url can expire')
+@click.option('--remove-image', is_flag=True, help='Remove the podcast artwork')
 @click.pass_context
 def podcast_update(ctx, podcast_id, podcast_name, broadcast_id,
-                   archive_type, max_allowed, artist_name, automatic_download):
+                   archive_type, max_allowed, artist_name, automatic_download, image, remove_image):
     '''
     Update podcast info
     '''
@@ -165,6 +167,8 @@ def podcast_update(ctx, podcast_id, podcast_name, broadcast_id,
         max_allowed=max_allowed,
         artist_name=artist_name,
         automatic_download=automatic_download,
+        image=image,
+        remove_image=remove_image,
     )
     render_output(hide_feed_secrets(result), ctx.obj['json'])
 
