@@ -243,7 +243,7 @@ def test_a_podcast_with_no_image_gets_none(world):
     client, library, feed_dir, tmp = world
     add(client, library)
     client.episode_index()
-    assert [p.name for p in feed_dir.iterdir()] == ['Alpha_Show.xml', 'podcasts.opml']
+    assert sorted(p.name for p in feed_dir.iterdir()) == ['Alpha_Show.xml', 'podcasts.opml']
     assert 'image' not in (feed_dir / 'Alpha_Show.xml').read_text(encoding='utf-8')
     assert 'image' not in json.loads((tmp / 'index.json').read_text(encoding='utf-8'))['podcasts'][0]
 
@@ -285,7 +285,7 @@ def test_an_image_missing_from_disk_is_left_out(world):
     stored = client.podcast_update(podcast_id, image=source(tmp, PNG))['image']
     (library / stored).unlink()
     client.episode_index()
-    assert [p.name for p in feed_dir.iterdir()] == ['Alpha_Show.xml', 'podcasts.opml']
+    assert sorted(p.name for p in feed_dir.iterdir()) == ['Alpha_Show.xml', 'podcasts.opml']
 
 def test_an_image_path_outside_the_podcast_directory_is_ignored(world):
     client, library, feed_dir, tmp = world
@@ -295,7 +295,7 @@ def test_an_image_path_outside_the_podcast_directory_is_ignored(world):
     client.db_session.get(Podcast, podcast_id).image = '../secret.png'
     client.db_session.commit()
     client.episode_index()
-    assert [p.name for p in feed_dir.iterdir()] == ['Alpha_Show.xml', 'podcasts.opml']
+    assert sorted(p.name for p in feed_dir.iterdir()) == ['Alpha_Show.xml', 'podcasts.opml']
 
 def test_dry_run_names_the_image_and_writes_nothing(world):
     client, library, feed_dir, tmp = world
