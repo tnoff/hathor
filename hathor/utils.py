@@ -192,6 +192,44 @@ def mask_url_secrets(value):
         rest = f'{rest.split("#", 1)[0]}#{URL_MASK}'
     return f'{scheme}://{rest}'
 
+SECRET_KEY_NAME = re.compile(r'key|secret|token|passw', re.IGNORECASE)
+# Settings whose url carries the secret in its path or password, where nothing in the url's
+# shape gives it away: hide what follows the host
+PATH_SECRET_KEYS = ('feed_base_url',)
+CONNECTION_PASSWORD = re.compile(r'^([a-z][a-z0-9+.-]*://[^/@:]*):[^/@]*@', re.IGNORECASE)
+
+def mask_config_secrets(data, key: str | None = None, secret: bool = False):
+    '''
+    A copy of config data that is safe to print: the value of any setting whose name looks
+    like a credential (key, secret, token, password) is hidden, a url keeps its host but loses
+    its query string, fragment and user:password@, and settings known to carry a secret in
+    their path or password (feed_base_url, a database connection string) lose that part too
+
+    Matching is by name, so a new setting called something else is not hidden: check
+    dump-config output when adding one. Empty values are left as they are, so a setting that
+    is not set still reads as not set
+
+    Everything beneath a credential-named setting is hidden, whatever its own names are
+
+    data:   Config data, nested however deeply
+    key:    The name of the setting data was found under
+    secret: True when an enclosing setting already has a credential name
+    '''
+    secret = secret or bool(key and SECRET_KEY_NAME.search(key))
+    if isinstance(data, dict):
+        return {name: mask_config_secrets(value, name, secret) for name, value in data.items()}
+    if isinstance(data, (list, tuple)):
+        return [mask_config_secrets(item, key, secret) for item in data]
+    if not isinstance(data, str) or not data:
+        return data
+    if secret:
+        return URL_MASK
+    if key in PATH_SECRET_KEYS:
+        match = re.match(r'(https?://[^/?#]+)', data, re.IGNORECASE)
+        return f'{match.group(1)}/{URL_MASK}' if match else URL_MASK
+    data = CONNECTION_PASSWORD.sub(rf'\1:{URL_MASK}@', data)
+    return mask_url_secrets(data)
+
 def scrub_error(message: str) -> str:
     '''
     Drop the query string and fragment from every url in an error message

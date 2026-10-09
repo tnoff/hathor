@@ -43,6 +43,11 @@ commands print `broadcast_id` with the query string, fragment and any `user:pass
 it in full. Only what is printed is masked; the database and the python client still hold the real
 value. A key placed in the URL's path cannot be told apart from the rest of it, so it is not hidden.
 
+`hathor dump-config` hides credentials the same way: settings named like a credential (`key`, `secret`,
+`token`, `password`), the path of `feed_base_url`, the password in a database connection string, and the
+query string and `user:password@` of any URL. `--show-secrets` prints everything. It matches by name, so check
+the output when you add a setting that holds a credential under an unusual name.
+
 ### Initialization and Settings
 
 These variables can be loaded from a settings file. The default location of this settings file
