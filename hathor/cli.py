@@ -8,7 +8,7 @@ from hathor.client import HathorClient
 from hathor.exc import CliException
 from hathor.output import render_output
 from hathor.podcast.archive import VALID_ARCHIVE_KEYS
-from hathor.utils import mask_url_secrets, setup_logger
+from hathor.utils import mask_config_secrets, mask_url_secrets, setup_logger
 
 HOME_DIR = Path.home()
 SETTINGS_DEFAULT = HOME_DIR / '.hathor_config.yml'
@@ -81,12 +81,15 @@ def cli(ctx, config, as_json):
     ctx.obj['client'] = HathorClient(**config_copy)
 
 @cli.command(name='dump-config')
+@click.option('--show-secrets', is_flag=True, default=False,
+              help='Print credentials in full: api keys, secrets, tokens, passwords and urls with keys')
 @click.pass_context
-def dump_config(ctx):
+def dump_config(ctx, show_secrets):
     '''
-    Dump config data to screen
+    Dump config data to screen. Credentials are hidden unless --show-secrets is given
     '''
-    render_output(ctx.obj['config'], ctx.obj['json'])
+    config = ctx.obj['config']
+    render_output(config if show_secrets else mask_config_secrets(config), ctx.obj['json'])
 
 @cli.group()
 @click.pass_context

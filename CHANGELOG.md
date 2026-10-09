@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.2] - 2026-10-09
+
+### Changed
+
+- `hathor dump-config` now hides credentials, which it printed in full: any setting whose name contains `key`, `secret`, `token` or `password` (everything beneath it too), the path of `feed_base_url` (the URL token lives there; the host stays), the password in a database connection string, and the query string, fragment and `user:password@` of any URL, such as a proxy in `ytdlp_options`. Unset values still read as unset. `--show-secrets` prints everything as before. Matching is by name, so a new credential setting with an unusual name is not hidden: check the output when adding one. Only what is printed changes; the client still gets the real config.
+
 ## [2.9.1] - 2026-10-09
 
 ### Changed
