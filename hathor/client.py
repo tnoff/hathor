@@ -191,9 +191,18 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             self._fail('feeds_directory needs feed_base_url: an rss feed has to link to its episodes with absolute urls')
 
     def close(self):
-        '''Close database session and engine connections'''
-        self.db_session.close()
-        self.engine.dispose()
+        '''
+        Close database session and engine connections
+
+        Safe on a client whose __init__ failed before it got that far: __del__ calls this, and
+        an AttributeError there is printed on top of the real error and hides it
+        '''
+        db_session = getattr(self, 'db_session', None)
+        if db_session is not None:
+            db_session.close()
+        engine = getattr(self, 'engine', None)
+        if engine is not None:
+            engine.dispose()
 
     def __enter__(self):
         return self

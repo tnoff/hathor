@@ -5,6 +5,16 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-10-09
+
+### Changed
+
+- `podcast list`, `podcast show`, `podcast create`, `podcast update`, `podcast update-file-location` and `podcast delete` now hide the query string, fragment and any `user:password@` of a feed URL in `broadcast_id` when printing, since a private feed (Patreon) carries its key there. `podcast list` and `podcast show` take `--show-secrets` to print them in full. Only what is printed changes: the database, the client API and plugins still get the real value. A key placed in the URL path itself cannot be detected and is not hidden.
+
+### Fixed
+
+- A `HathorClient` whose `__init__` failed early (a bad config value, for example) printed `AttributeError: 'HathorClient' object has no attribute 'db_session'` from `__del__` on top of the real error, hiding it. `close()` now tolerates a client that never finished initialising.
+
 ## [2.9.0] - 2026-10-09
 
 ### Added

@@ -8,7 +8,7 @@ from hathor.client import HathorClient
 from hathor.exc import CliException
 from hathor.output import render_output
 from hathor.podcast.archive import VALID_ARCHIVE_KEYS
-from hathor.utils import setup_logger
+from hathor.utils import mask_url_secrets, setup_logger
 
 HOME_DIR = Path.home()
 SETTINGS_DEFAULT = HOME_DIR / '.hathor_config.yml'
@@ -28,6 +28,23 @@ def _generate_cluders(include_podcasts, exclude_podcasts):
         except ValueError as e:
             raise CliException('Invalid exclude podcasts arg, must be comma separated list of ints') from e
     return include_podcasts, exclude_podcasts
+
+def hide_feed_secrets(data):
+    '''
+    Mask the url secrets in the broadcast_id of podcast dicts, however deeply they are nested
+    The client returns real values; only what is printed is masked
+
+    data: A podcast dict, or any list or dict containing them
+    '''
+    if isinstance(data, list):
+        return [hide_feed_secrets(item) for item in data]
+    if isinstance(data, dict):
+        return {key: mask_url_secrets(value) if key == 'broadcast_id' else hide_feed_secrets(value)
+                for key, value in data.items()}
+    return data
+
+show_secrets_option = click.option('--show-secrets', is_flag=True, default=False,
+                                   help='Print feed urls in full, including query string keys')
 
 @click.group()
 @click.option('-c', '--config',
@@ -98,24 +115,30 @@ def podcast_create(ctx, archive_type, broadcast_id, podcast_name,
         file_location=file_location,
         artist_name=artist_name,
         automatic_download=not no_automatic_download)
-    render_output(result, ctx.obj['json'])
+    render_output(hide_feed_secrets(result), ctx.obj['json'])
 
 @podcast.command(name='list')
+@show_secrets_option
 @click.pass_context
-def podcast_list(ctx):
+def podcast_list(ctx, show_secrets):
     '''
-    List all podcasts
+    List all podcasts. Feed url query strings, which can hold a private feed's key, are hidden
+    unless --show-secrets is given
     '''
-    render_output(ctx.obj['client'].podcast_list(), ctx.obj['json'])
+    result = ctx.obj['client'].podcast_list()
+    render_output(result if show_secrets else hide_feed_secrets(result), ctx.obj['json'])
 
 @podcast.command(name='show')
 @click.argument('podcast_id', type=int, nargs=-1)
+@show_secrets_option
 @click.pass_context
-def podcast_show(ctx, podcast_id):
+def podcast_show(ctx, podcast_id, show_secrets):
     '''
-    Show podcast info
+    Show podcast info. Feed url query strings, which can hold a private feed's key, are hidden
+    unless --show-secrets is given
     '''
-    render_output(ctx.obj['client'].podcast_show(list(podcast_id)), ctx.obj['json'])
+    result = ctx.obj['client'].podcast_show(list(podcast_id))
+    render_output(result if show_secrets else hide_feed_secrets(result), ctx.obj['json'])
 
 @podcast.command(name='update')
 @click.argument('podcast_id', type=int)
@@ -140,7 +163,7 @@ def podcast_update(ctx, podcast_id, podcast_name, broadcast_id,
         artist_name=artist_name,
         automatic_download=automatic_download,
     )
-    render_output(result, ctx.obj['json'])
+    render_output(hide_feed_secrets(result), ctx.obj['json'])
 
 @podcast.command(name='update-file-location')
 @click.argument('podcast_id', type=int)
@@ -156,7 +179,7 @@ def podcast_update_file_location(ctx, podcast_id, file_location, no_move_files):
         file_location,
         move_files=not no_move_files,
     )
-    render_output(result, ctx.obj['json'])
+    render_output(hide_feed_secrets(result), ctx.obj['json'])
 
 @podcast.command(name='delete')
 @click.argument('podcast_id', type=int, nargs=-1)
@@ -170,7 +193,7 @@ def podcast_delete(ctx, podcast_id, no_delete_files):
         list(podcast_id),
         delete_files=not no_delete_files,
     )
-    render_output(result, ctx.obj['json'])
+    render_output(hide_feed_secrets(result), ctx.obj['json'])
 
 @cli.group(name='filter')
 @click.pass_context

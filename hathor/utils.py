@@ -167,6 +167,31 @@ def write_file_atomic(path: Path, text: str):
     os.chmod(temp.name, 0o644)
     os.replace(temp.name, path)
 
+URL_MASK = '<hidden>'
+
+def mask_url_secrets(value):
+    '''
+    Hide the parts of a url that carry credentials: the query string and fragment (a private
+    patreon feed puts its key there) and any user:password@ in front of the host
+
+    Anything that is not an http(s) url, such as a youtube channel id, comes back unchanged
+    A secret inside the path itself cannot be told from the rest of the path, so it is not hidden
+
+    value: Anything; only strings that start with http:// or https:// are changed
+    '''
+    if not isinstance(value, str) or not re.match(r'https?://', value, re.IGNORECASE):
+        return value
+    scheme, rest = value.split('://', 1)
+    authority, separator, remainder = rest.partition('/')
+    if '@' in authority:
+        authority = f'{URL_MASK}@{authority.rsplit("@", 1)[1]}'
+    rest = authority + separator + remainder
+    if '?' in rest:
+        rest = f'{rest.split("?", 1)[0]}?{URL_MASK}'
+    elif '#' in rest:
+        rest = f'{rest.split("#", 1)[0]}#{URL_MASK}'
+    return f'{scheme}://{rest}'
+
 def scrub_error(message: str) -> str:
     '''
     Drop the query string and fragment from every url in an error message
