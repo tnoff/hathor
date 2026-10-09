@@ -12,8 +12,11 @@ kind: Component
 metadata:
   name: hathor
   description: >-
-    Downloads and maintains podcast media from RSS feeds, keeping a local library in
-    order. Pip-installable Python package, run on demand.
+    Downloads and maintains podcast media from RSS feeds, YouTube and Twitch, keeping a
+    local library in order, and can write an episode index plus RSS feeds and an OPML for a
+    podcast app. A pip-installable Python package run on demand, and published as an arm64
+    container image (iad.ocir.io/tnoff/hathor) that runs the hathor-podcasts service in the
+    cluster.
   annotations:
     backstage.io/techdocs-ref: dir:.
 spec:
