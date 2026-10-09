@@ -338,11 +338,40 @@ to `<feed_base_url>/feeds/<podcast>.xml` (or import `<feed_base_url>/feeds/podca
 - Descriptions are written as text and escaped; characters XML cannot carry are dropped, since one of
   them makes a whole feed unparseable.
 - The directory belongs to hathor: each run rewrites the feeds atomically and removes any `.xml` or
-  `.opml` file it did not just write (a podcast that was deleted, or has nothing left on disk).
+  `.opml` file (and artwork image, below) it did not just write (a podcast that was deleted, or has
+  nothing left on disk).
 - `index.json` gains `feed` for each podcast and `opml` at the top, as paths relative to the base URL,
   for a page to link to.
+- `index.json` also gains `image` for a podcast that has artwork (see below).
 - Anyone holding a feed URL can fetch the episodes, so when the base URL carries a secret token (as in
   the example) treat the feed URL like a password.
+
+#### Podcast artwork
+
+A podcast app shows an icon for a podcast only if its feed carries one. Artwork is a property of the
+podcast, like `artist_name`, and `hathor index` only reads it:
+
+```bash
+$ hathor podcast update <podcast-id> --image https://example.com/cover.jpg
+$ hathor podcast update <podcast-id> --image /path/to/cover.png
+$ hathor podcast update <podcast-id> --remove-image
+```
+
+- The image is read once and stored in `.artwork/<podcast id>.<ext>` under `podcast_directory`; the
+  database holds that path, relative to `podcast_directory`. A source URL that expires (a signed
+  Patreon image, say) stops mattering the moment it has been read.
+- The bytes are checked, not the name or the content type: only a jpeg, png, gif or webp is accepted,
+  at most 5MB. An error page served with a `200`, an SVG or an oversized file is refused, and then
+  nothing changes, the podcast's other settings and its previous image included. Failure messages
+  leave out a URL's query string.
+- `podcast_directory` must be set, since that is where the image is stored. `--image` and
+  `--remove-image` together are refused. Deleting a podcast deletes its image.
+- With `feeds_directory` set, `hathor index` copies each podcast's image next to the feeds as
+  `<feed name>-<hash of the content>.<ext>` and adds both `<itunes:image>` (what podcast apps read) and
+  the RSS 2.0 `<image>` to the feed. The hash makes a replaced image a new URL, so an app that caches
+  artwork by URL fetches the new one. A podcast with no image, or whose stored file has gone, gets none.
+- The server has to serve those files with image content types: nginx's `types` list must cover
+  `.jpg`, `.png`, `.gif` and `.webp` for the `feeds/` location.
 
 ## The Audio Tool
 

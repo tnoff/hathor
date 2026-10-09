@@ -147,9 +147,9 @@ def guess_content_type(name: str) -> str:
     '''
     return mimetypes.guess_type(name)[0] or 'application/octet-stream'
 
-def write_file_atomic(path: Path, text: str):
+def write_bytes_atomic(path: Path, data: bytes):
     '''
-    Write a text file so that a reader sees either the old content or the new,
+    Write a file so that a reader sees either the old content or the new,
     never a half written file
 
     The file is made world readable (0644). A temp file is created 0600 and
@@ -158,14 +158,22 @@ def write_file_atomic(path: Path, text: str):
     server sharing the volume
 
     path: File to write
-    text: Content
+    data: Content
     '''
     path = Path(path)
-    with NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, prefix=f'.{path.name}.',
-                            delete=False) as temp:
-        temp.write(text)
+    with NamedTemporaryFile('wb', dir=path.parent, prefix=f'.{path.name}.', delete=False) as temp:
+        temp.write(data)
     os.chmod(temp.name, 0o644)
     os.replace(temp.name, path)
+
+def write_file_atomic(path: Path, text: str):
+    '''
+    write_bytes_atomic for text, written as utf-8
+
+    path: File to write
+    text: Content
+    '''
+    write_bytes_atomic(path, text.encode('utf-8'))
 
 URL_MASK = '<hidden>'
 
