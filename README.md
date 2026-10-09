@@ -37,6 +37,12 @@ before the subcommand for raw JSON, which is easier to pipe into other tools:
 
     hathor --json podcast list | jq '.[].name'
 
+A private feed (Patreon, for example) carries its key in the feed URL's query string, so the podcast
+commands print `broadcast_id` with the query string, fragment and any `user:password@` hidden
+(`https://example.com/feed?<hidden>`). `podcast list` and `podcast show` take `--show-secrets` to print
+it in full. Only what is printed is masked; the database and the python client still hold the real
+value. A key placed in the URL's path cannot be told apart from the rest of it, so it is not hidden.
+
 ### Initialization and Settings
 
 These variables can be loaded from a settings file. The default location of this settings file
