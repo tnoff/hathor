@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-10-09
+
+### Added
+
+- Database schema migrations with Alembic. The client now runs `upgrade head` when it starts instead of `create_all`, which could create missing tables but never add a column to an existing one. A new database gets every table; a database made by an earlier hathor has no `alembic_version` table, so it is checked against the baseline schema (all three tables and their columns), stamped, then upgraded, keeping its data; a database with the hathor tables but a different layout raises `HathorException` rather than being stamped. Migrations ship inside the package and render sqlite changes in batch mode. See `docs/DEVELOPMENT.md` for adding one. Copy the database file before upgrading one you care about: hathor does not do it for you.
+
 ## [2.9.2] - 2026-10-09
 
 ### Changed

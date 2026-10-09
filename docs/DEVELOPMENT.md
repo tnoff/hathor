@@ -50,6 +50,42 @@ pylint --rcfile .pylintrc.test tests/
 bandit -r hathor/ --exclude hathor/plugins
 ```
 
+## Database migrations
+
+The schema is managed with Alembic. The scripts live in `hathor/database/migrations/versions/` and
+ship in the wheel; `hathor/database/migrate.py` runs them from `HathorClient.__init__` (there is no
+`alembic.ini`, and no `alembic` CLI setup: configuration is built in code).
+
+To change the schema, edit the models in `hathor/database/tables.py`, then add a revision. With a
+scratch database at the current head:
+
+```bash
+python - <<'PY'
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import create_engine
+from hathor.database.migrate import MIGRATIONS_DIRECTORY, migrate
+import logging
+
+engine = create_engine('sqlite:////tmp/scratch.db')
+migrate(engine, logging.getLogger())
+config = Config()
+config.set_main_option('script_location', str(MIGRATIONS_DIRECTORY))
+with engine.begin() as connection:
+    config.attributes['connection'] = connection
+    command.revision(config, 'what changed', autogenerate=True, rev_id='0002')
+PY
+```
+
+Read the generated file before keeping it: autogenerate misses renames and constraint changes. Use
+`op.batch_alter_table` for anything that alters a table, since sqlite cannot `ALTER` most things. The
+`test_migrations_match_models` test fails when the models and migrations disagree, and a new
+revision needs a test with real data in the table it changes. Never edit a revision that has been
+released; add a new one.
+
+An unversioned database (made before migrations existed) is only stamped at `0001` if it has the
+baseline tables and columns, so `BASELINE_COLUMNS` in `migrate.py` must never change.
+
 ## Plugins
 
 Plugins can be added for most functions in the hathor client.
