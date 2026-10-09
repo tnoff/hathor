@@ -300,6 +300,39 @@ Episodes with no file on disk, or a file outside `podcast_directory`, are left o
 file is replaced atomically, so a reader never sees a half written index. Run it after
 `podcast sync`.
 
+### Podcast Feeds
+
+A podcast app subscribes to an RSS feed, not to a web page, so `hathor index` can also write one feed per
+podcast, plus an OPML file that imports all of them in a single step. Both settings are needed:
+
+```yaml
+hathor:
+  podcast_directory: /data/podcasts
+  index_file: /data/index.json
+  feeds_directory: /data/feeds
+  feed_base_url: https://example.com/hathor/some-secret-token   # where the library is served
+```
+
+`feed_base_url` is the address of the directory that holds `files/` and `feeds/`, and feeds link to the
+episode files below it with absolute URLs, so it has to be what a phone can reach. Serve
+`feeds_directory` at `<feed_base_url>/feeds/` and the library at `<feed_base_url>/files/`, and subscribe
+to `<feed_base_url>/feeds/<podcast>.xml` (or import `<feed_base_url>/feeds/podcasts.opml`).
+
+- Only podcasts with at least one episode on disk get a feed, and a feed lists exactly the episodes in
+  the index (newest first, files that exist under `podcast_directory`).
+- A feed is named after its podcast (`My_Show.xml`). Two names that reduce to the same file name get
+  the podcast id added, and a name with nothing usable in it becomes `podcast-<id>.xml`.
+- Each item's `guid` is `hathor-<podcast id>-<episode id>`. It never depends on the URL, so an app still
+  recognises an episode after the base URL, the token or the file name changes.
+- Descriptions are written as text and escaped; characters XML cannot carry are dropped, since one of
+  them makes a whole feed unparseable.
+- The directory belongs to hathor: each run rewrites the feeds atomically and removes any `.xml` or
+  `.opml` file it did not just write (a podcast that was deleted, or has nothing left on disk).
+- `index.json` gains `feed` for each podcast and `opml` at the top, as paths relative to the base URL,
+  for a page to link to.
+- Anyone holding a feed URL can fetch the episodes, so when the base URL carries a secret token (as in
+  the example) treat the feed URL like a password.
+
 ## The Audio Tool
 
 `audio-tool` provides standalone commands for reading and modifying audio file metadata.

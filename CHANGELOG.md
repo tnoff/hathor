@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-10-09
+
+### Added
+
+- `feeds_directory` and `feed_base_url` settings: `hathor index` also writes an RSS 2.0 feed (with the iTunes tags podcast apps look for) for every podcast that has episodes on disk, and a `podcasts.opml` that imports them all at once, so a podcast app such as AntennaPod can subscribe and download new episodes by itself. Item guids are `hathor-<podcast id>-<episode id>` and never depend on a URL; enclosures carry the real size and content type; file names are percent encoded and text that XML cannot carry is dropped. Feeds are written atomically and feed files no longer wanted are removed. `index.json` gains `feed` per podcast and `opml` so a page can link to them. `feeds_directory` without `feed_base_url` is an error.
+
 ## [2.8.2] - 2026-10-09
 
 ### Changed
