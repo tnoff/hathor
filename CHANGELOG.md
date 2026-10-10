@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.1] - 2026-10-10
+
+### Fixed
+
+- The shorts check no longer treats every answer other than a 200 as "not a short". Only the shorts player's bounce to /watch clears a video now; a 429, a 5xx or a redirect to a consent page leaves the video undecided, so it is left out of the sync and asked about again on the next one. Before, a stretch of such answers stored the shorts it covered as regular episodes, permanently.
+
 ## [2.12.0] - 2026-10-10
 
 ### Changed
