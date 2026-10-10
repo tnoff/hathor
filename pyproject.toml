@@ -19,6 +19,7 @@ dependencies = [
     "feedparser==6.0.14",
     "google-api-python-client==2.201.0",
     "mutagen==1.48.1",
+    "Pillow==12.3.0",
     "pyaml-env==1.2.2",
     "requests==2.34.2",
     "SQLAlchemy==2.1.4",

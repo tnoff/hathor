@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
+from io import BytesIO
 import json
 import stat
 import xml.etree.ElementTree as ET
 
 import feedparser
+from PIL import Image
 from click.testing import CliRunner
 import pytest
 import requests
@@ -16,10 +18,22 @@ from hathor.database.tables import Podcast, PodcastEpisode
 from hathor.exc import HathorException
 
 BASE = 'https://example.com/hathor/TOKEN'
-JPEG = b'\xff\xd8\xff\xe0' + b'jpeg-body' * 10
-PNG = b'\x89PNG\r\n\x1a\n' + b'png-body' * 10
-GIF = b'GIF89a' + b'gif-body' * 10
-WEBP = b'RIFF\x24\x00\x00\x00WEBPVP8 ' + b'webp-body' * 10
+
+def make_image(fmt='PNG', size=(8, 8), color=(200, 30, 30), mode='RGB'):
+    buffer = BytesIO()
+    Image.new(mode, size, color).save(buffer, fmt)
+    return buffer.getvalue()
+
+def decode(data):
+    image = Image.open(BytesIO(data))
+    image.load()
+    return image
+
+JPEG = make_image('JPEG')
+PNG = make_image('PNG')
+PNG_OTHER = make_image('PNG', color=(10, 200, 10))
+GIF = make_image('GIF')
+WEBP = make_image('WEBP')
 HTML = b'<!doctype html><html><body>Sorry, not found</body></html>'
 URL = 'https://cdn.example.com/art/cover.jpg?token-hash=SECRETSIGNATURE&expires=1'
 
@@ -53,6 +67,59 @@ def test_load_refuses_a_large_file(tmp_path):
     path.write_bytes(JPEG + b'x' * 100)
     with pytest.raises(HathorException, match='larger than'):
         artwork.load_image(str(path), max_bytes=50)
+
+def test_load_keeps_a_small_image_exactly_as_it_came(tmp_path):
+    path = tmp_path / 'cover.jpg'
+    path.write_bytes(JPEG)
+    assert artwork.load_image(str(path))[0] == JPEG
+
+def test_load_shrinks_a_large_image(tmp_path):
+    big = make_image('JPEG', size=(3000, 2000))
+    path = tmp_path / 'big.jpg'
+    path.write_bytes(big)
+    data, extension = artwork.load_image(str(path))
+    assert extension == '.jpg' and len(data) < len(big)
+    assert decode(data).size == (1400, 933)                          # aspect ratio kept
+
+def test_load_shrinks_a_large_opaque_png_to_jpeg(tmp_path):
+    path = tmp_path / 'big.png'
+    path.write_bytes(make_image('PNG', size=(2000, 2000)))
+    data, extension = artwork.load_image(str(path))
+    assert extension == '.jpg' and decode(data).format == 'JPEG' and decode(data).size == (1400, 1400)
+
+def test_load_keeps_transparency_when_it_shrinks(tmp_path):
+    path = tmp_path / 'big.png'
+    path.write_bytes(make_image('PNG', size=(2000, 2000), color=(200, 30, 30, 0), mode='RGBA'))
+    data, extension = artwork.load_image(str(path))
+    image = decode(data)
+    assert extension == '.png' and image.size == (1400, 1400) and image.mode == 'RGBA'
+    assert image.getpixel((0, 0))[3] == 0
+
+def test_load_refuses_a_truncated_image(tmp_path):
+    path = tmp_path / 'cut.jpg'
+    path.write_bytes(make_image('JPEG', size=(600, 600))[:200])      # right magic bytes, then it stops
+    with pytest.raises(HathorException, match='Not a readable image'):
+        artwork.load_image(str(path))
+
+def test_load_refuses_magic_bytes_with_garbage_after(tmp_path):
+    path = tmp_path / 'junk.png'
+    path.write_bytes(b'\x89PNG\r\n\x1a\n' + b'not really a png' * 20)
+    with pytest.raises(HathorException, match='Not a readable image'):
+        artwork.load_image(str(path))
+
+def test_load_refuses_a_bitmap_far_larger_than_its_file(tmp_path):
+    path = tmp_path / 'bomb.png'
+    Image.new('1', (8000, 8000)).save(path)                          # a few KB of file, 64 million pixels
+    assert path.stat().st_size < 1024 * 1024
+    with pytest.raises(HathorException, match='larger than 50000000'):
+        artwork.load_image(str(path))
+
+def test_load_refuses_what_pillow_calls_a_decompression_bomb(tmp_path, monkeypatch):
+    path = tmp_path / 'bomb.png'
+    path.write_bytes(make_image('PNG', size=(100, 100)))
+    monkeypatch.setattr(Image, 'MAX_IMAGE_PIXELS', 1000)             # Pillow's own limit, which warns past it
+    with pytest.raises(HathorException, match='Not a readable image'):
+        artwork.load_image(str(path))
 
 def test_load_from_a_url(requests_mock):
     requests_mock.get(URL, content=WEBP, headers={'Content-Type': 'text/plain'})    # content type is ignored
@@ -131,6 +198,27 @@ def test_update_stores_the_image_under_the_podcast_directory(world):
     assert (library / result['image']).read_bytes() == PNG
     assert client.podcast_show([podcast_id])[0]['image'] == result['image']
 
+def test_update_stores_a_large_image_shrunk_under_the_type_it_ended_up_as(world):
+    client, library, _, tmp = world
+    podcast_id = add(client, library)
+    result = client.podcast_update(podcast_id, image=source(tmp, make_image('PNG', size=(3000, 3000))))
+    assert result['image'] == f'.artwork/{podcast_id}.jpg'            # an opaque png is stored as jpeg once resized
+    assert decode((library / result['image']).read_bytes()).size == (1400, 1400)
+    assert [p.name for p in (library / '.artwork').iterdir()] == [f'{podcast_id}.jpg']
+
+def test_resetting_a_stored_image_from_its_own_file_shrinks_it_in_place(world):
+    # how an image stored before the resize existed is brought down: point --image at it
+    client, library, _, _ = world
+    podcast_id = add(client, library)
+    (library / '.artwork').mkdir()
+    stored = library / '.artwork' / f'{podcast_id}.jpg'
+    stored.write_bytes(make_image('JPEG', size=(3000, 3000)))
+    client.db_session.get(Podcast, podcast_id).image = f'.artwork/{podcast_id}.jpg'
+    client.db_session.commit()
+    result = client.podcast_update(podcast_id, image=str(stored))
+    assert result['image'] == f'.artwork/{podcast_id}.jpg'
+    assert decode(stored.read_bytes()).size == (1400, 1400)
+
 def test_update_downloads_a_url_once_and_keeps_no_trace_of_it(world, requests_mock):
     client, library, _, _ = world
     podcast_id = add(client, library)
@@ -175,8 +263,8 @@ def test_replacing_with_the_same_type_keeps_one_file(world):
     client, library, _, tmp = world
     podcast_id = add(client, library)
     client.podcast_update(podcast_id, image=source(tmp, PNG))
-    result = client.podcast_update(podcast_id, image=source(tmp, PNG + b'more', 'second'))
-    assert (library / result['image']).read_bytes() == PNG + b'more'
+    result = client.podcast_update(podcast_id, image=source(tmp, PNG_OTHER, 'second'))
+    assert (library / result['image']).read_bytes() == PNG_OTHER
     assert len(list((library / '.artwork').iterdir())) == 1
 
 def test_remove_image(world):
@@ -253,7 +341,7 @@ def test_a_new_image_gets_a_new_url_and_the_old_copy_goes(world):
     client.podcast_update(podcast_id, image=source(tmp, PNG))
     client.episode_index()
     [first] = [p.name for p in feed_dir.iterdir() if p.suffix == '.png']
-    client.podcast_update(podcast_id, image=source(tmp, PNG + b'changed', 'second'))
+    client.podcast_update(podcast_id, image=source(tmp, PNG_OTHER, 'second'))
     client.episode_index()
     [second] = [p.name for p in feed_dir.iterdir() if p.suffix == '.png']
     assert first != second                                          # an app caching by url fetches the new one

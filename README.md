@@ -361,9 +361,14 @@ $ hathor podcast update <podcast-id> --remove-image
   database holds that path, relative to `podcast_directory`. A source URL that expires (a signed
   Patreon image, say) stops mattering the moment it has been read.
 - The bytes are checked, not the name or the content type: only a jpeg, png, gif or webp is accepted,
-  at most 5MB. An error page served with a `200`, an SVG or an oversized file is refused, and then
-  nothing changes, the podcast's other settings and its previous image included. Failure messages
-  leave out a URL's query string.
+  at most 5MB, and it has to decode in full. An error page served with a `200`, an SVG, a truncated
+  file or an oversized one is refused, and then nothing changes, the podcast's other settings and its
+  previous image included. Failure messages leave out a URL's query string.
+- An image over 1400 pixels on its longest side is shrunk to 1400 before it is stored (podcast apps
+  ask for 1400 to 3000 square, and the larger file only makes the feed and any page slower on a phone).
+  A shrunk image is written as png if it has transparency, otherwise as jpeg, so an opaque png ends up
+  as `.jpg`. A smaller image is stored exactly as it came. To shrink artwork stored by an earlier
+  version, point `--image` at its own file: `hathor podcast update <id> --image <podcast_directory>/.artwork/<id>.jpg`.
 - `podcast_directory` must be set, since that is where the image is stored. `--image` and
   `--remove-image` together are refused. Deleting a podcast deletes its image.
 - With `feeds_directory` set, `hathor index` copies each podcast's image next to the feeds as

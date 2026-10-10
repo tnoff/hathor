@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-10-10
+
+### Changed
+
+- Podcast artwork is decoded in full when it is set (`podcast update --image`), which needs Pillow (new dependency), and an image larger than 1400 pixels on its longest side is shrunk to 1400 before it is stored. A feed, and a page that shows the artwork, no longer carry 3000 pixel images to a phone. A small image is stored exactly as it came; a shrunk one is written as png if it has transparency and as jpeg otherwise (so an opaque png comes out as `.jpg`). An animated gif or webp keeps only its first frame when it is shrunk. A corrupt or truncated file with valid magic bytes, and a small file that decodes to more than 50 million pixels, are now refused instead of stored. Artwork stored by 2.11.0 is not touched; set it again, pointing `--image` at its own stored file, to shrink it.
+
 ## [2.11.0] - 2026-10-09
 
 ### Added
