@@ -360,8 +360,9 @@ def test_youtube_quota_exhausted_shapes(details, expected):
     assert youtube_quota_exhausted(error) is expected
 
 class MockHeadResponse():
-    def __init__(self, status_code):
+    def __init__(self, status_code, location=None):
         self.status_code = status_code
+        self.headers = {'location': location} if location else {}
 
 
 def mock_shorts_head(mocker, short_ids=(), error=None, error_ids=None):
@@ -378,7 +379,9 @@ def mock_shorts_head(mocker, short_ids=(), error=None, error_ids=None):
         video_id = url.rsplit('/', 1)[-1]
         if error and (error_ids is None or video_id in error_ids):
             raise error
-        return MockHeadResponse(200 if video_id in short_ids else 303)
+        if video_id in short_ids:
+            return MockHeadResponse(200)
+        return MockHeadResponse(303, f'https://www.youtube.com/watch?v={video_id}')
 
     mocker.patch('hathor.podcast.archive.head', side_effect=_head)
     return calls
@@ -448,6 +451,18 @@ def test_youtube_broadcast_update_short_keeps_known_streak(mocker):
     # streak and keep a shorts heavy channel paging to the ceiling every sync
     assert not episode_list
     assert client.playlist_items_mock.pages_served == 1
+
+
+@pytest.mark.parametrize('status,location', [
+    (429, None),
+    (503, None),
+    (302, 'https://consent.youtube.com/m?continue=x'),
+    (303, None),
+])
+def test_youtube_is_short_unexpected_answer_is_undecided(mocker, status, location):
+    manager = youtube_manager(mocker, youtube_skip_shorts=True)
+    mocker.patch('hathor.podcast.archive.head', return_value=MockHeadResponse(status, location))
+    assert manager._is_short('abcdefghijk') is None #pylint:disable=protected-access
 
 
 def test_youtube_broadcast_update_defers_video_when_shorts_check_fails(mocker):

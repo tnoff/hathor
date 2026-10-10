@@ -325,7 +325,9 @@ class YoutubeManager(ArchiveInterface):
         Returns None when the check cannot be made. An unreachable shorts player
         says nothing about the video, and answering False there would store a
         short permanently -- the check only ever runs on the listing walk, so a
-        video that gets past it is never looked at again
+        video that gets past it is never looked at again. That covers any answer
+        that is neither a 200 nor the bounce to /watch (a 429, a 5xx, a redirect
+        to a consent page), not only a failed request
         '''
         try:
             response = head(f'{YOUTUBE_SHORTS_URL}/{video_id}', allow_redirects=False,
@@ -333,7 +335,12 @@ class YoutubeManager(ArchiveInterface):
         except Exception as e: #pylint:disable=broad-except
             self.logger.warning(f'Shorts check failed for video {video_id}: {str(e)}')
             return None
-        return response.status_code == 200
+        if response.status_code == 200:
+            return True
+        if 300 <= response.status_code < 400 and '/watch' in response.headers.get('location', ''):
+            return False
+        self.logger.warning(f'Shorts check for video {video_id} got an unexpected answer: {response.status_code}')
+        return None
 
     def broadcast_update(self, broadcast_id, max_results=None, filters=None, known_urls=None,
                          backfill=False, **_):
