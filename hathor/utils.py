@@ -78,8 +78,8 @@ def setup_logger(name: str,
     console_logging: Defaults to true, logs to stdout
     '''
     logger = getLogger(name)
-    formatter = Formatter('%(asctime)s - %(levelname)s - %(message)s',
-                          datefmt='%Y-%m-%d %H:%M:%S')
+    formatter = MaskingFormatter('%(asctime)s - %(levelname)s - %(message)s',
+                                 datefmt='%Y-%m-%d %H:%M:%S')
     logger.setLevel(log_level)
     if logging_file is not None:
         # Create logging dir if does not exist
@@ -199,6 +199,36 @@ def mask_url_secrets(value):
     elif '#' in rest:
         rest = f'{rest.split("#", 1)[0]}#{URL_MASK}'
     return f'{scheme}://{rest}'
+
+URL_IN_TEXT = re.compile(r'[a-z][a-z0-9+.-]*://[^\s"\'<>)\]]+', re.IGNORECASE)
+
+def _mask_found_url(match: re.Match) -> str:
+    url = match.group(0)
+    if re.match(r'https?://', url, re.IGNORECASE):
+        return mask_url_secrets(url)
+    # a database connection string: only the password is a secret
+    return CONNECTION_PASSWORD.sub(rf'\1:{URL_MASK}@', url)
+
+def mask_log_text(text: str) -> str:
+    '''
+    Hide credentials in every url inside a piece of text (a log line, a traceback)
+
+    http(s) urls lose their query string, fragment and user:password@ as mask_url_secrets does,
+    and the password of any other url, such as a database connection string, is hidden. The rest
+    of the text is left alone. A secret in a url's path cannot be told from the path, so it is not
+    hidden
+
+    text: Any string
+    '''
+    return URL_IN_TEXT.sub(_mask_found_url, text)
+
+class MaskingFormatter(Formatter):
+    '''
+    A log formatter that masks the urls in what it formats, tracebacks included. A private feed
+    (patreon) carries its key in the url's query string, and hathor logs the urls it fetches
+    '''
+    def format(self, record) -> str:
+        return mask_log_text(super().format(record))
 
 SECRET_KEY_NAME = re.compile(r'key|secret|token|passw', re.IGNORECASE)
 # Settings whose url carries the secret in its path or password, where nothing in the url's
