@@ -172,7 +172,8 @@ changelog, tags, and creates the GitHub release (shared workflows from
 On the same push, **every merge to `main`** also builds the image for
 `linux/arm64` (the cluster is OKE Ampere) and pushes it to OCIR as
 `iad.ocir.io/tnoff/hathor:<short sha>` (plus `latest`) with the shared
-`docker-push.yml`, then dispatches `bump-image-pin` with source `hathor` so
+`docker-push-oidc.yml` (logging in with the job's GitHub OIDC identity, no stored
+OCIR credential), then dispatches `bump-image-pin` with source `hathor` so
 docker-apps opens a PR that rewrites its pin. There is no path filter and no
 manual trigger, so a docs-only merge also produces an image and a bump PR;
 docker-apps closes the older open bump PRs for the same producer, so they do
@@ -185,5 +186,6 @@ retry it: re-run the failed jobs of that workflow run in the Actions tab, or
 push a new commit to `main`.
 
 The push needs repository variables `OCI_REGISTRY`, `OCI_NAMESPACE` and
-`OCI_REPO_NAME`, and secrets `OCI_USERNAME` and `OCI_TOKEN`, alongside the
+`OCI_REPO_NAME`, plus `OIDC_EXCHANGE_DOMAIN_URL` and `OIDC_EXCHANGE_CLIENT_ID`, and secrets
+`OIDC_EXCHANGE_CLIENT_SECRET` and `OCI_TENANCY_OCID` (tnoff/terraform#180), alongside the
 `CI_APP_CLIENT_ID` / `CI_APP_PRIVATE_KEY` pair the release already uses.

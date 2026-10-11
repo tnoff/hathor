@@ -83,7 +83,13 @@ jobs:
     if: >-
       ${{ github.ref == 'refs/heads/main'
           && !startsWith(github.event.head_commit.message, 'docs: assemble changelog') }}
-    uses: tnoff/github-workflows/.github/workflows/docker-push.yml@a5e07a72bb76a983408e840c3cfcffa27cdbf738  # docker-push-v1.1.0
+    # Logs in to OCIR with a short-lived token from this job's GitHub OIDC identity, not a stored
+    # credential (tnoff/terraform#180). OCI maps this repo's push to main to a user that may push
+    # only this repo's OCIR repositories (terraform-admin ocir-pushers.tf).
+    permissions:
+      contents: read
+      id-token: write
+    uses: tnoff/github-workflows/.github/workflows/docker-push-oidc.yml@5a6f80dffddfa833301b438ec9b2052d7f2c24f2  # docker-push-oidc-v1.0.0
     # registry / namespace / repo_name are INPUTS, not secrets. GitHub refuses
     # to set a job output containing secret material, so while they were
     # secrets the `image` output below came back empty and trigger-bump sent a
@@ -94,12 +100,14 @@ jobs:
     # QEMU emulation of the build. The local box builds its own amd64 image from
     # a clone (~/docker/hathor) and never pulls this one.
     with:
+      oidc_exchange_domain_url: ${{ vars.OIDC_EXCHANGE_DOMAIN_URL }}
+      oidc_exchange_client_id: ${{ vars.OIDC_EXCHANGE_CLIENT_ID }}
       registry: ${{ vars.OCI_REGISTRY }}
       namespace: ${{ vars.OCI_NAMESPACE }}
       repo_name: ${{ vars.OCI_REPO_NAME }}
     secrets:
-      oci_username: ${{ secrets.OCI_USERNAME }}
-      oci_token: ${{ secrets.OCI_TOKEN }}
+      oidc_exchange_client_secret: ${{ secrets.OIDC_EXCHANGE_CLIENT_SECRET }}
+      oci_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
 
   trigger-bump:
     name: Trigger docker-apps bump
