@@ -79,6 +79,19 @@ logging:
   logging_file_max_bytes: 102400
 ```
 
+#### What is logged
+
+At `log_level: 20` (INFO), a sync says which podcast it is in and what it found
+(`Syncing episodes of podcast 3 (Some Show)`, `Podcast 3 (Some Show): 2 new episodes`) and which episode it
+is downloading (`Downloading episode 41 of podcast 3 (Some Show): <title>`), so a run that stops making
+progress shows where. `log_level: 10` (DEBUG) adds the feed and episode URLs being fetched.
+
+Every URL in the log, tracebacks included, is masked before it is written: the query string and fragment
+are replaced with `<hidden>` (a private Patreon feed carries its key there), `user:password@` is hidden,
+and so is the password of a database connection string. A secret in a URL's **path** cannot be told from
+the rest of the path and is not hidden. This applies to the logger hathor builds from the `logging`
+section; a program that hands `HathorClient` its own `logger` gets the formatting it chose.
+
 #### yt-dlp Options
 
 `ytdlp_options` is passed through to yt-dlp when downloading a youtube or twitch archive.

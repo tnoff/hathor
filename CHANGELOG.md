@@ -5,6 +5,16 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-10-11
+
+### Added
+
+- A sync logs its progress at INFO: which podcast it is syncing and how many new episodes it found, and which episode it is downloading (by id, podcast and title; never a URL). A run that stops making progress now shows where, without turning on DEBUG.
+
+### Security
+
+- Log output is masked. Every URL in a log line or a traceback has its query string, fragment and `user:password@` replaced with `<hidden>`, and the password of a database connection string is hidden. DEBUG logging printed the full URL of every feed it fetched, which for a private Patreon feed includes its key (`?auth=`), and of every episode it already knew. This applies to the logger hathor builds from the `logging` section; a program passing its own `logger` to `HathorClient` keeps its own formatting. A secret in the path of a URL cannot be told apart from the rest of the path and is not hidden.
+
 ## [2.12.1] - 2026-10-10
 
 ### Fixed

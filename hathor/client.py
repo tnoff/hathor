@@ -656,8 +656,13 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                 continue
             # Read these now: after a rollback the row has to be reloaded
             podcast_id, podcast_name = podcast.id, podcast.name
+            # Progress at INFO: with it a run that stops making progress shows which podcast it
+            # stopped in, without turning on DEBUG
+            self.logger.info(f'Syncing episodes of podcast {podcast_id} ({podcast_name})')
             try:
-                new_episodes.extend(self._episode_sync_podcast(podcast, max_episode_sync))
+                found = self._episode_sync_podcast(podcast, max_episode_sync)
+                new_episodes.extend(found)
+                self.logger.info(f'Podcast {podcast_id} ({podcast_name}): {len(found)} new episodes')
             except Exception as error: #pylint:disable=broad-exception-caught
                 self._record_failure(failures, 'episode sync', podcast_id, podcast_name, error)
         return new_episodes
@@ -896,6 +901,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
 
         manager = self._archive_manager(podcast.archive_type)
 
+        self.logger.info(f'Downloading episode {episode.id} of podcast {podcast.id} ({podcast.name}): {utils.clean_string(episode.title)}')
         self.logger.debug(f'Downloading episode: {episode.id} data from url: {episode.download_url}')
 
         episode_path_prefix = build_episode_path(episode, podcast)
