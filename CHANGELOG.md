@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.2] - 2026-10-15
+
+### Fixed
+
+- Fetching an RSS feed gives up after 60 seconds without an answer. The feed was fetched by feedparser with no timeout, so a host that accepted the connection and then stalled left the sync hanging on that podcast forever, with the Job stuck and every podcast after it unsynced. A feed that does not answer, or answers with an HTTP error status, now fails that one podcast with a message and the sync moves on.
+
 ## [2.13.1] - 2026-10-15
 
 ### Fixed

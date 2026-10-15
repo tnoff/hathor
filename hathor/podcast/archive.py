@@ -5,12 +5,13 @@ from mimetypes import guess_extension, guess_type
 from pathlib import Path
 from time import mktime
 
-from feedparser import parse
+from feedparser import USER_AGENT, parse
+from feedparser.http import ACCEPT_HEADER
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from validators import url
 
-from requests import get, head, post
+from requests import RequestException, get, head, post
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
@@ -27,6 +28,9 @@ _TWITCH_VIDEO_ID_RE = re.compile(r'twitch\.tv/videos/(?P<id>\d+)')
 TWITCH_OAUTH_URL = 'https://id.twitch.tv/oauth2/token'
 TWITCH_API_URL = 'https://api.twitch.tv/helix'
 TWITCH_REQUEST_TIMEOUT = 30
+# feedparser fetches with urllib and no timeout, so a feed host that accepts the
+# connection and then goes quiet blocks the whole sync forever
+RSS_FEED_REQUEST_TIMEOUT = 60
 # Helix caps a page at 100 items
 TWITCH_PAGE_SIZE = 100
 # While a broadcast is still being recorded, and for a while after it ends, twitch
@@ -161,6 +165,24 @@ def curl_download(episode_url: str, output_path: Path) -> int:
                 download_size += len(chunk)
     return output_path, download_size
 
+def fetch_feed(feed_url: str):
+    '''
+    Fetch and parse an rss feed, giving up on a host that stops answering
+    feed_url : URL of the feed
+    '''
+    try:
+        req = get(feed_url, allow_redirects=True, timeout=RSS_FEED_REQUEST_TIMEOUT,
+                  headers={'User-Agent': USER_AGENT, 'Accept': ACCEPT_HEADER})
+    except RequestException as error:
+        raise HathorException(f'Unable to fetch rss feed {feed_url}: {error}') from error
+    if not req.ok:
+        raise HathorException(f'Unable to fetch rss feed {feed_url}, status code: {req.status_code}')
+    # Give feedparser the url it would have fetched itself, so it has the same base for the feed
+    return parse(req.content, response_headers={
+        'content-location': req.url,
+        'content-type': req.headers.get('content-type', ''),
+    })
+
 def rss_episode_url(item: dict) -> str | None:
     '''
     Pick the url to download an rss item from, None if it has none
@@ -235,7 +257,7 @@ class RSSManager(ArchiveInterface):
         filters      : Regex filters to match against titles
         '''
         self.logger.debug(f'Getting episode info from RSS feed: {broadcast_id}')
-        data = parse(broadcast_id)
+        data = fetch_feed(broadcast_id)
         try:
             data['feed']['link']
         except KeyError as error:
