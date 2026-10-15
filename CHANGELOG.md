@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.1] - 2026-10-15
+
+### Fixed
+
+- RSS episodes download from the feed's `enclosure` (the audio file) rather than the item's `guid`. Spreaker feeds use an API URL as the guid, which answers 404 with JSON, so every episode failed with "Unable to determine extension type". The guid is still the fallback when an item has no enclosure.
+- A download that gets an HTTP error status now fails with that status instead of the misleading extension error.
+
 ## [2.13.0] - 2026-10-11
 
 ### Added

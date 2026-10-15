@@ -131,6 +131,8 @@ def curl_download(episode_url: str, output_path: Path) -> int:
     output_path : Path to output file
     '''
     req = get(episode_url, allow_redirects=True, timeout=120, stream=True)
+    if not req.ok:
+        raise HathorException(f'Unable to download url: {episode_url}, status code: {req.status_code}')
     try:
         content_type = req.headers['content-type']
     except KeyError:
@@ -158,6 +160,30 @@ def curl_download(episode_url: str, output_path: Path) -> int:
             if track_download_size:
                 download_size += len(chunk)
     return output_path, download_size
+
+def rss_episode_url(item: dict) -> str | None:
+    '''
+    Pick the url to download an rss item from, None if it has none
+    item : Entry from the parsed feed
+    '''
+    # The enclosure is the audio itself. The id is only a guid, and some hosts
+    # (spreaker) use an api url there that does not serve the file.
+    for link in item.get('links', []):
+        if link.get('rel') == 'enclosure' and link.get('href'):
+            return link['href']
+    # URL can be in a few different spots, lets check for proper urls
+    try:
+        if url(item['id']):
+            return item['id']
+    except KeyError:
+        pass
+    # Else lets check the links
+    for link in item.get('links', []):
+        if link.get('type') == 'text/html':
+            continue
+        if link.get('href'):
+            return link['href']
+    return None
 
 def verify_title_filters(filters: list[str], title: str) -> bool:
     '''
@@ -229,24 +255,7 @@ class RSSManager(ArchiveInterface):
             except (KeyError, AttributeError):
                 desc = None
 
-            episode_url = None
-            # URL can be in a few different spots, lets check for proper urls
-            try:
-                if url(item['id']):
-                    episode_url = item['id']
-            except KeyError:
-                pass
-            # Else lets check the links
-            if not episode_url:
-                try:
-                    for link in item['links']:
-                        if link['type'] == 'text/html':
-                            continue
-                        episode_url = link['href']
-                        break
-                except KeyError:
-                    pass
-
+            episode_url = rss_episode_url(item)
             if not episode_url:
                 raise HathorException('Cannot find valid url for episode')
 
