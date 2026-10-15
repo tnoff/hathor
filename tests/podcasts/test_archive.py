@@ -12,7 +12,7 @@ from yt_dlp.utils import DownloadError
 from hathor.client import HathorClient
 from hathor.exc import EpisodeNotReady, HathorException, FunctionUndefined
 from hathor.podcast.archive import ArchiveInterface, RSSManager, TwitchManager
-from hathor.podcast.archive import extract_twitch_video_id
+from hathor.podcast.archive import curl_download, extract_twitch_video_id
 from hathor.podcast.archive import twitch_timestamp, verify_title_filters
 
 from tests import utils as test_utils
@@ -38,8 +38,10 @@ RSS_FEED_INVALID_URL = {
 }
 
 class RequestsMockObject():
-    def __init__(self, headers, audio_file):
+    def __init__(self, headers, audio_file, status_code=200):
         self.headers = headers
+        self.status_code = status_code
+        self.ok = status_code < 400
         self.audio_file = audio_file
 
     def iter_content(self, chunk_size: None): #pylint:disable=unused-argument
@@ -105,6 +107,12 @@ def test_curl_download_invalid_type(mocker):
                 client.episode_download([episode_list[0]['id']])
             assert 'Unable to determine extension type for url' in str(error.value)
 
+def test_curl_download_http_error(mocker):
+    mocker.patch('hathor.podcast.archive.get', return_value=RequestsMockObject({'content-type': 'application/json'}, None, status_code=404))
+    with pytest.raises(HathorException) as error:
+        curl_download('https://example.foo/gone', Path('/tmp/unused'))
+    assert 'status code: 404' in str(error.value)
+
 def test_title_filters():
     no_filters = verify_title_filters([], 'foo')
     assert no_filters is True
@@ -164,6 +172,48 @@ def test_rss_valid_id(mocker):
     episode_list = manager.broadcast_update('https://example.foo')
     assert episode_list[0]['title'] == 'Episode 0'
     assert len(episode_list) == 1
+
+def test_rss_prefers_enclosure_over_id(mocker):
+    rss_feed = {
+        'feed': {'link': 'https://example.foo'},
+        'entries': [
+            {
+                'title': 'Episode 0',
+                'published_parsed': struct_time((2024, 12, 11, 22, 40, 1, 2, 346, -1)),
+                'id': 'https://api.example.foo/episode/1',
+                'links': [
+                    {'rel': 'alternate', 'type': 'text/html', 'href': 'https://example.foo/page'},
+                    {'rel': 'enclosure', 'type': 'audio/mpeg', 'href': 'https://cdn.example.foo/1.mp3'},
+                ],
+            },
+        ]
+    }
+    manager = RSSManager(logging)
+    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock.return_value = rss_feed
+    episode_list = manager.broadcast_update('https://example.foo')
+    assert episode_list[0]['download_link'] == 'https://cdn.example.foo/1.mp3'
+
+def test_rss_skips_html_links(mocker):
+    rss_feed = {
+        'feed': {'link': 'https://example.foo'},
+        'entries': [
+            {
+                'title': 'Episode 0',
+                'published_parsed': struct_time((2024, 12, 11, 22, 40, 1, 2, 346, -1)),
+                'id': 'not-a-url',
+                'links': [
+                    {'rel': 'alternate', 'type': 'text/html', 'href': 'https://example.foo/page'},
+                    {'rel': 'related', 'type': 'audio/mpeg', 'href': 'https://example.foo/1.mp3'},
+                ],
+            },
+        ]
+    }
+    manager = RSSManager(logging)
+    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock.return_value = rss_feed
+    episode_list = manager.broadcast_update('https://example.foo')
+    assert episode_list[0]['download_link'] == 'https://example.foo/1.mp3'
 
 def test_rss_invalid_feed(mocker):
     manager = RSSManager(logging)
