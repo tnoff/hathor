@@ -7,12 +7,13 @@ from tempfile import TemporaryDirectory
 from time import struct_time
 
 import pytest
+from requests import ReadTimeout
 from yt_dlp.utils import DownloadError
 
 from hathor.client import HathorClient
 from hathor.exc import EpisodeNotReady, HathorException, FunctionUndefined
 from hathor.podcast.archive import ArchiveInterface, RSSManager, TwitchManager
-from hathor.podcast.archive import curl_download, extract_twitch_video_id
+from hathor.podcast.archive import RSS_FEED_REQUEST_TIMEOUT, curl_download, extract_twitch_video_id, fetch_feed
 from hathor.podcast.archive import twitch_timestamp, verify_title_filters
 
 from tests import utils as test_utils
@@ -64,7 +65,7 @@ def requests_get_mock_no_content(_url, audio_file, **_):
 def test_curl_download(mocker):
     client = HathorClient()
     with TemporaryDirectory() as tmp_dir:
-        parse_mock = mocker.patch('hathor.podcast.archive.parse')
+        parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
         parse_mock.return_value = SIMPLE_RSS_FEED
         client.podcast_create('rss', 'https://example.foo', 'temp', file_location=tmp_dir)
         client.episode_sync()
@@ -80,7 +81,7 @@ def test_curl_download(mocker):
 def test_curl_download_no_content_type(mocker):
     client = HathorClient()
     with TemporaryDirectory() as tmp_dir:
-        parse_mock = mocker.patch('hathor.podcast.archive.parse')
+        parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
         parse_mock.return_value = SIMPLE_RSS_FEED
         client.podcast_create('rss', 'https://example.foo', 'temp', file_location=tmp_dir)
         client.episode_sync()
@@ -96,7 +97,7 @@ def test_curl_download_no_content_type(mocker):
 def test_curl_download_invalid_type(mocker):
     client = HathorClient()
     with TemporaryDirectory() as tmp_dir:
-        parse_mock = mocker.patch('hathor.podcast.archive.parse')
+        parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
         parse_mock.return_value = RSS_FEED_INVALID_URL
         client.podcast_create('rss', 'https://example.foo', 'temp', file_location=tmp_dir)
         client.episode_sync()
@@ -112,6 +113,41 @@ def test_curl_download_http_error(mocker):
     with pytest.raises(HathorException) as error:
         curl_download('https://example.foo/gone', Path('/tmp/unused'))
     assert 'status code: 404' in str(error.value)
+
+RSS_FEED_XML = b'''<?xml version="1.0"?>
+<rss version="2.0"><channel><title>t</title><link>https://example.foo/</link>
+<item><title>e</title><guid>g</guid><enclosure url="/audio/e.mp3" type="audio/mpeg" length="1"/></item>
+</channel></rss>'''
+
+class FeedResponse():
+    def __init__(self, status_code=200, content=RSS_FEED_XML):
+        self.status_code = status_code
+        self.ok = status_code < 400
+        self.content = content
+        self.url = 'https://cdn.example.foo/feed.xml'
+        self.headers = {'content-type': 'application/rss+xml'}
+
+def test_fetch_feed(mocker):
+    get_mock = mocker.patch('hathor.podcast.archive.get', return_value=FeedResponse())
+    data = fetch_feed('https://example.foo/feed.xml')
+    assert data['feed']['link'] == 'https://example.foo/'
+    assert data['entries'][0]['title'] == 'e'
+    assert data['entries'][0]['links'][0]['rel'] == 'enclosure'
+    assert get_mock.call_args.kwargs['timeout'] == RSS_FEED_REQUEST_TIMEOUT
+    assert get_mock.call_args.kwargs['headers']['User-Agent'].startswith('feedparser/')
+
+def test_fetch_feed_timeout(mocker):
+    mocker.patch('hathor.podcast.archive.get', side_effect=ReadTimeout('read timed out'))
+    with pytest.raises(HathorException) as error:
+        fetch_feed('https://example.foo/feed.xml')
+    assert 'Unable to fetch rss feed https://example.foo/feed.xml' in str(error.value)
+    assert 'read timed out' in str(error.value)
+
+def test_fetch_feed_http_error(mocker):
+    mocker.patch('hathor.podcast.archive.get', return_value=FeedResponse(status_code=503))
+    with pytest.raises(HathorException) as error:
+        fetch_feed('https://example.foo/feed.xml')
+    assert 'status code: 503' in str(error.value)
 
 def test_title_filters():
     no_filters = verify_title_filters([], 'foo')
@@ -132,14 +168,14 @@ def test_archive_interface():
 
 def test_rss_interface_broadcast_update(mocker):
     manager = RSSManager(logging)
-    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
     parse_mock.return_value = SIMPLE_RSS_FEED
     episode_list = manager.broadcast_update('https://example.foo')
     assert episode_list[0]['title'] == 'Episode 0'
 
 def test_rss_interface_broadcast_update_max_results(mocker):
     manager = RSSManager(logging)
-    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
     parse_mock.return_value = SIMPLE_RSS_FEED
     episode_list = manager.broadcast_update('https://example.foo', max_results=1)
     assert episode_list[0]['title'] == 'Episode 0'
@@ -147,7 +183,7 @@ def test_rss_interface_broadcast_update_max_results(mocker):
 
 def test_rss_interface_broadcast_update_filters(mocker):
     manager = RSSManager(logging)
-    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
     parse_mock.return_value = SIMPLE_RSS_FEED
     episode_list = manager.broadcast_update('https://example.foo', filters=[r'^Episode 1'])
     assert episode_list[0]['title'] == 'Episode 1'
@@ -167,7 +203,7 @@ def test_rss_valid_id(mocker):
         ]
     }
     manager = RSSManager(logging)
-    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
     parse_mock.return_value = rss_feed_with_id
     episode_list = manager.broadcast_update('https://example.foo')
     assert episode_list[0]['title'] == 'Episode 0'
@@ -189,7 +225,7 @@ def test_rss_prefers_enclosure_over_id(mocker):
         ]
     }
     manager = RSSManager(logging)
-    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
     parse_mock.return_value = rss_feed
     episode_list = manager.broadcast_update('https://example.foo')
     assert episode_list[0]['download_link'] == 'https://cdn.example.foo/1.mp3'
@@ -210,14 +246,14 @@ def test_rss_skips_html_links(mocker):
         ]
     }
     manager = RSSManager(logging)
-    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
     parse_mock.return_value = rss_feed
     episode_list = manager.broadcast_update('https://example.foo')
     assert episode_list[0]['download_link'] == 'https://example.foo/1.mp3'
 
 def test_rss_invalid_feed(mocker):
     manager = RSSManager(logging)
-    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
     parse_mock.return_value = {
         'entries': [
             {
@@ -238,7 +274,7 @@ def test_rss_invalid_feed(mocker):
 
 def test_rss_invalid_link(mocker):
     manager = RSSManager(logging)
-    parse_mock = mocker.patch('hathor.podcast.archive.parse')
+    parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
     parse_mock.return_value = {
         'feed': {
             'link': 'https://example.foo'
