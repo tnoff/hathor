@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.4] - 2026-10-16
+
+### Fixed
+
+- A YouTube or Twitch download that yt-dlp fails is now reported as a failure. It was logged and then treated as "skipped", so the sync exited 0, the Job showed Complete and no alert fired, while the same episode was retried every hour. It now fails that one episode like an RSS download does: the rest still download, and the sync ends with a `SyncFailure` and a nonzero exit.
+
 ## [2.13.3] - 2026-10-16
 
 ### Changed

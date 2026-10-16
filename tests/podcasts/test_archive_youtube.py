@@ -539,9 +539,8 @@ def test_youtube_broadcast_download(mocker):
 def test_youtube_broadcast_download_error(mocker):
     manager = youtube_manager(mocker)
     mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_youtube_error)
-    file_path, size = manager.episode_download('foo', 'bar')
-    assert file_path is None
-    assert size is None
+    with pytest.raises(HathorException, match='Error downloading youtube url: foo, issue downloading file'):
+        manager.episode_download('foo', 'bar')
 
 def capture_ytdlp_options(temp_audio_file, captured):
     @contextmanager
