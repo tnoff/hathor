@@ -545,8 +545,7 @@ class YoutubeManager(ArchiveInterface):
                 file_path = Path(data['requested_downloads'][0]['filepath'])
                 return file_path, file_path.stat().st_size
         except DownloadError as e:
-            self.logger.error(f'Error downloading youtube url: {download_url}, {str(e)}')
-            return None, None
+            raise HathorException(f'Error downloading youtube url: {download_url}, {str(e)}') from e
 
 class TwitchManager(ArchiveInterface):
     '''
@@ -712,8 +711,7 @@ class TwitchManager(ArchiveInterface):
                 file_path = Path(data['requested_downloads'][0]['filepath'])
                 return file_path, file_path.stat().st_size
         except DownloadError as e:
-            self.logger.error(f'Error downloading twitch url: {download_url}, {str(e)}')
-            return None, None
+            raise HathorException(f'Error downloading twitch url: {download_url}, {str(e)}') from e
 
 ARCHIVE_TYPES = {
     'rss' : RSSManager,

@@ -553,9 +553,8 @@ def test_twitch_broadcast_download_error(mocker):
         'videos': {'data': [twitch_video(video_id='123456')]},
     })
     mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_ytdlp_error)
-    file_path, size = manager.episode_download(_twitch_url(), 'bar')
-    assert file_path is None
-    assert size is None
+    with pytest.raises(HathorException, match='Error downloading twitch url: .*issue downloading file'):
+        manager.episode_download(_twitch_url(), 'bar')
 
 
 def test_twitch_download_skips_live_broadcast(mocker):
