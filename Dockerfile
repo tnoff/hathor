@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 # ffmpeg (and ffprobe, same package) for yt-dlp. Most youtube formats are
 # delivered as separate video and audio streams -- the archive manager asks for
