@@ -23,7 +23,7 @@ dependencies = [
     "pyaml-env==1.2.2",
     "requests==2.34.2",
     "SQLAlchemy==2.1.4",
-    "validators==0.35.0",
+    "validators==0.36.0",
     "yt-dlp==2026.8.19",
 ]
 
