@@ -8,12 +8,14 @@ from time import struct_time
 
 import pytest
 from requests import ReadTimeout
+from requests.exceptions import ChunkedEncodingError
 from yt_dlp.utils import DownloadError
 
 from hathor.client import HathorClient
 from hathor.exc import EpisodeNotReady, HathorException, FunctionUndefined
 from hathor.podcast.archive import ArchiveInterface, RSSManager, TwitchManager
-from hathor.podcast.archive import RSS_FEED_REQUEST_TIMEOUT, curl_download, extract_twitch_video_id, fetch_feed
+from hathor.podcast.archive import RSS_FEED_REQUEST_TIMEOUT, RSS_FEED_TOTAL_TIMEOUT, curl_download, extract_twitch_video_id, fetch_feed
+from hathor.podcast.archive import remove_ytdlp_intermediates
 from hathor.podcast.archive import twitch_timestamp, verify_title_filters
 
 from tests import utils as test_utils
@@ -120,12 +122,25 @@ RSS_FEED_XML = b'''<?xml version="1.0"?>
 </channel></rss>'''
 
 class FeedResponse():
-    def __init__(self, status_code=200, content=RSS_FEED_XML):
+    def __init__(self, status_code=200, content=RSS_FEED_XML, error=None):
         self.status_code = status_code
         self.ok = status_code < 400
         self.content = content
+        self.error = error
+        self.closed = False
         self.url = 'https://cdn.example.foo/feed.xml'
         self.headers = {'content-type': 'application/rss+xml'}
+
+    def iter_content(self, **_):
+        # Two chunks, so joining them back together is exercised
+        half = len(self.content) // 2
+        yield self.content[:half]
+        if self.error:
+            raise self.error
+        yield self.content[half:]
+
+    def close(self):
+        self.closed = True
 
 def test_fetch_feed(mocker):
     get_mock = mocker.patch('hathor.podcast.archive.get', return_value=FeedResponse())
@@ -134,6 +149,7 @@ def test_fetch_feed(mocker):
     assert data['entries'][0]['title'] == 'e'
     assert data['entries'][0]['links'][0]['rel'] == 'enclosure'
     assert get_mock.call_args.kwargs['timeout'] == RSS_FEED_REQUEST_TIMEOUT
+    assert get_mock.call_args.kwargs['stream'] is True
     assert get_mock.call_args.kwargs['headers']['User-Agent'].startswith('feedparser/')
 
 def test_fetch_feed_timeout(mocker):
@@ -144,10 +160,30 @@ def test_fetch_feed_timeout(mocker):
     assert 'read timed out' in str(error.value)
 
 def test_fetch_feed_http_error(mocker):
-    mocker.patch('hathor.podcast.archive.get', return_value=FeedResponse(status_code=503))
+    response = FeedResponse(status_code=503)
+    mocker.patch('hathor.podcast.archive.get', return_value=response)
     with pytest.raises(HathorException) as error:
         fetch_feed('https://example.foo/feed.xml')
     assert 'status code: 503' in str(error.value)
+    assert response.closed
+
+def test_fetch_feed_total_timeout(mocker):
+    # A host that keeps sending bytes never trips the per read timeout, only the overall deadline
+    response = FeedResponse()
+    mocker.patch('hathor.podcast.archive.get', return_value=response)
+    mocker.patch('hathor.podcast.archive.monotonic', side_effect=[0, RSS_FEED_TOTAL_TIMEOUT + 1])
+    with pytest.raises(HathorException) as error:
+        fetch_feed('https://example.foo/feed.xml')
+    assert f'not finished after {RSS_FEED_TOTAL_TIMEOUT} seconds' in str(error.value)
+    assert response.closed
+
+def test_fetch_feed_dropped_midway(mocker):
+    response = FeedResponse(error=ChunkedEncodingError('connection broken'))
+    mocker.patch('hathor.podcast.archive.get', return_value=response)
+    with pytest.raises(HathorException) as error:
+        fetch_feed('https://example.foo/feed.xml')
+    assert 'connection broken' in str(error.value)
+    assert response.closed
 
 def test_title_filters():
     no_filters = verify_title_filters([], 'foo')
@@ -555,6 +591,62 @@ def test_twitch_broadcast_download_error(mocker):
     mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_ytdlp_error)
     with pytest.raises(HathorException, match='Error downloading twitch url: .*issue downloading file'):
         manager.episode_download(_twitch_url(), 'bar')
+
+
+class MockTwitchPostprocessingError():
+    def extract_info(self, *args, **kwargs):
+        raise DownloadError('ERROR: Postprocessing: Error opening input files')
+
+
+@contextmanager
+def mock_ytdlp_postprocessing_error(_options):
+    yield MockTwitchPostprocessingError()
+
+
+def test_twitch_download_postprocessing_error_removes_leftovers(mocker, tmp_path):
+    manager = build_twitch_manager(mocker, {
+        'videos': {'data': [twitch_video(video_id='123456')]},
+    })
+    mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_ytdlp_postprocessing_error)
+    leftover = tmp_path / 'ep.f137.mp4'
+    leftover.write_text('partial')
+    with pytest.raises(HathorException, match='Postprocessing'):
+        manager.episode_download(_twitch_url(), str(tmp_path / 'ep'))
+    assert not leftover.exists()
+
+
+def test_remove_ytdlp_intermediates(tmp_path):
+    prefix = tmp_path / '2026-09-23.Ep_6_Recap'
+    leftovers = ['f137.mp4', 'f140.m4a', 'f251-drc.webm', 'f137.mp4.part', 'f137.mp4.ytdl', 'mp4.part', 'mp4.ytdl', 'temp.mp4']
+    kept = ['mp4', 'mp3', 'info.json']
+    for suffix in leftovers + kept:
+        (tmp_path / f'2026-09-23.Ep_6_Recap.{suffix}').write_text('x')
+    # Same start, different episode, and an unrelated file: neither is touched
+    other = tmp_path / '2026-09-23.Ep_6_Recap_Two.f137.mp4'
+    other.write_text('x')
+    unrelated = tmp_path / 'notes.txt'
+    unrelated.write_text('x')
+    remove_ytdlp_intermediates(prefix, logging.getLogger('test'))
+    for suffix in leftovers:
+        assert not (tmp_path / f'2026-09-23.Ep_6_Recap.{suffix}').exists()
+    for suffix in kept:
+        assert (tmp_path / f'2026-09-23.Ep_6_Recap.{suffix}').exists()
+    assert other.exists()
+    assert unrelated.exists()
+
+
+def test_remove_ytdlp_intermediates_missing_folder(tmp_path):
+    remove_ytdlp_intermediates(tmp_path / 'nope' / 'ep', logging.getLogger('test'))
+
+
+def test_remove_ytdlp_intermediates_unlink_fails(mocker, tmp_path, caplog):
+    leftover = tmp_path / 'ep.f137.mp4'
+    leftover.write_text('x')
+    mocker.patch.object(Path, 'unlink', side_effect=PermissionError('denied'))
+    with caplog.at_level(logging.WARNING):
+        remove_ytdlp_intermediates(tmp_path / 'ep', logging.getLogger('test'))
+    assert 'Unable to remove leftover download file' in caplog.text
+    assert leftover.exists()
 
 
 def test_twitch_download_skips_live_broadcast(mocker):

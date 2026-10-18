@@ -3,7 +3,7 @@ from datetime import datetime
 from logging import RootLogger
 from mimetypes import guess_extension, guess_type
 from pathlib import Path
-from time import mktime
+from time import mktime, monotonic
 
 from feedparser import USER_AGENT, parse
 from feedparser.http import ACCEPT_HEADER
@@ -31,6 +31,9 @@ TWITCH_REQUEST_TIMEOUT = 30
 # feedparser fetches with urllib and no timeout, so a feed host that accepts the
 # connection and then goes quiet blocks the whole sync forever
 RSS_FEED_REQUEST_TIMEOUT = 60
+# Ceiling on the whole feed download: the request timeout above only bounds the gap between bytes
+RSS_FEED_TOTAL_TIMEOUT = 300
+RSS_FEED_CHUNK_SIZE = 65536
 # Helix caps a page at 100 items
 TWITCH_PAGE_SIZE = 100
 # While a broadcast is still being recorded, and for a while after it ends, twitch
@@ -168,20 +171,61 @@ def curl_download(episode_url: str, output_path: Path) -> int:
 def fetch_feed(feed_url: str):
     '''
     Fetch and parse an rss feed, giving up on a host that stops answering
+    or keeps trickling bytes for longer than RSS_FEED_TOTAL_TIMEOUT
     feed_url : URL of the feed
     '''
+    deadline = monotonic() + RSS_FEED_TOTAL_TIMEOUT
     try:
-        req = get(feed_url, allow_redirects=True, timeout=RSS_FEED_REQUEST_TIMEOUT,
+        req = get(feed_url, allow_redirects=True, timeout=RSS_FEED_REQUEST_TIMEOUT, stream=True,
                   headers={'User-Agent': USER_AGENT, 'Accept': ACCEPT_HEADER})
     except RequestException as error:
         raise HathorException(f'Unable to fetch rss feed {feed_url}: {error}') from error
-    if not req.ok:
-        raise HathorException(f'Unable to fetch rss feed {feed_url}, status code: {req.status_code}')
+    try:
+        if not req.ok:
+            raise HathorException(f'Unable to fetch rss feed {feed_url}, status code: {req.status_code}')
+        chunks = []
+        try:
+            for chunk in req.iter_content(chunk_size=RSS_FEED_CHUNK_SIZE):
+                chunks.append(chunk)
+                if monotonic() > deadline:
+                    raise HathorException(f'Unable to fetch rss feed {feed_url}: '
+                                          f'not finished after {RSS_FEED_TOTAL_TIMEOUT} seconds')
+        except RequestException as error:
+            raise HathorException(f'Unable to fetch rss feed {feed_url}: {error}') from error
+    finally:
+        req.close()
     # Give feedparser the url it would have fetched itself, so it has the same base for the feed
-    return parse(req.content, response_headers={
+    return parse(b''.join(chunks), response_headers={
         'content-location': req.url,
         'content-type': req.headers.get('content-type', ''),
     })
+
+# What yt-dlp leaves next to an episode while it works: one file per stream (".f137.mp4"), plus
+# ".part" / ".ytdl" bookkeeping. The finished file has none of these, so it never matches.
+YTDLP_INTERMEDIATE = re.compile(r'f\d[\w-]*\.\w+(\.part|\.ytdl)*|temp\.\w+(\.part)?|\w+(\.part|\.ytdl)+')
+
+def remove_ytdlp_intermediates(output_prefix: str | Path, logger: RootLogger):
+    '''
+    Delete the files yt-dlp left behind for an episode whose download failed. yt-dlp counts a
+    stream file it finds as already downloaded, so a truncated one is merged again on every
+    retry and fails the same way each time
+    output_prefix : Episode path without a suffix, as handed to yt-dlp
+    '''
+    prefix = Path(output_prefix)
+    try:
+        candidates = list(prefix.parent.iterdir())
+    except OSError:
+        return
+    for path in candidates:
+        if not path.name.startswith(f'{prefix.name}.'):
+            continue
+        if not YTDLP_INTERMEDIATE.fullmatch(path.name[len(prefix.name) + 1:]):
+            continue
+        try:
+            path.unlink()
+            logger.info(f'Removed leftover download file {path}')
+        except OSError as error:
+            logger.warning(f'Unable to remove leftover download file {path}: {error}')
 
 def rss_episode_url(item: dict) -> str | None:
     '''
@@ -545,6 +589,8 @@ class YoutubeManager(ArchiveInterface):
                 file_path = Path(data['requested_downloads'][0]['filepath'])
                 return file_path, file_path.stat().st_size
         except DownloadError as e:
+            if 'Postprocessing' in str(e):
+                remove_ytdlp_intermediates(output_prefix, self.logger)
             raise HathorException(f'Error downloading youtube url: {download_url}, {str(e)}') from e
 
 class TwitchManager(ArchiveInterface):
@@ -711,6 +757,8 @@ class TwitchManager(ArchiveInterface):
                 file_path = Path(data['requested_downloads'][0]['filepath'])
                 return file_path, file_path.stat().st_size
         except DownloadError as e:
+            if 'Postprocessing' in str(e):
+                remove_ytdlp_intermediates(output_prefix, self.logger)
             raise HathorException(f'Error downloading twitch url: {download_url}, {str(e)}') from e
 
 ARCHIVE_TYPES = {

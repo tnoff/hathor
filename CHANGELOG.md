@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.6] - 2026-10-18
+
+### Fixed
+
+- A YouTube or Twitch episode whose download failed at the merge step ("Postprocessing: Error opening input files") no longer fails the same way on every retry. yt-dlp counts a stream file it finds on disk (`.f137.mp4`, `.f140.m4a`, `.part`, `.ytdl`) as already downloaded, so one truncated by a bad first attempt was merged again each hour. Those leftovers are now deleted when the merge fails, so the next sync downloads the episode fresh. Other download failures keep their partial files so yt-dlp can resume them.
+- Fetching an RSS feed also gives up when the whole download takes longer than 300 seconds. The 60 second timeout only bounds the gap between bytes, so a host sending a trickle never tripped it.
+
 ## [2.13.5] - 2026-10-16
 
 ### Changed
