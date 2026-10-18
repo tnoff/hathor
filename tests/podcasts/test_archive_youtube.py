@@ -542,6 +542,38 @@ def test_youtube_broadcast_download_error(mocker):
     with pytest.raises(HathorException, match='Error downloading youtube url: foo, issue downloading file'):
         manager.episode_download('foo', 'bar')
 
+class MockYoutubePostprocessingError():
+    def extract_info(self, *args, **kwargs):
+        raise DownloadError('ERROR: Postprocessing: Error opening input files: Invalid data found')
+
+@contextmanager
+def mock_youtube_postprocessing_error(_options):
+    yield MockYoutubePostprocessingError()
+
+def test_youtube_broadcast_download_postprocessing_error_removes_leftovers(mocker, tmp_path):
+    manager = youtube_manager(mocker)
+    mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_youtube_postprocessing_error)
+    video = tmp_path / 'ep.f137.mp4'
+    audio = tmp_path / 'ep.f140.m4a'
+    other = tmp_path / 'other.f137.mp4'
+    for path in (video, audio, other):
+        path.write_text('partial')
+    with pytest.raises(HathorException, match='Postprocessing'):
+        manager.episode_download('foo', str(tmp_path / 'ep'))
+    assert not video.exists()
+    assert not audio.exists()
+    assert other.exists()
+
+def test_youtube_broadcast_download_other_error_keeps_files(mocker, tmp_path):
+    # A dropped connection leaves a .part file yt-dlp can resume, so only a failed merge clears files
+    manager = youtube_manager(mocker)
+    mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_youtube_error)
+    partial = tmp_path / 'ep.f137.mp4.part'
+    partial.write_text('partial')
+    with pytest.raises(HathorException):
+        manager.episode_download('foo', str(tmp_path / 'ep'))
+    assert partial.exists()
+
 def capture_ytdlp_options(temp_audio_file, captured):
     @contextmanager
     def mock_youtube_client(options):
