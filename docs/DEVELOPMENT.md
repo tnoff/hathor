@@ -41,7 +41,7 @@ pytest tests/podcasts/test_archive.py::TestClassName::test_method_name
 
 ## Linting
 
-Matches what `tox` runs under its `py314` factor (`tox.ini`) -- pylint,
+Matches what `tox` runs under its `py315` factor (`tox.ini`) -- pylint,
 tests-pylint, and a bandit security scan, all excluding `hathor/plugins/`:
 
 ```bash
