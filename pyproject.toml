@@ -24,7 +24,7 @@ dependencies = [
     "requests==2.34.2",
     "SQLAlchemy==2.1.4",
     "validators==0.36.0",
-    "yt-dlp==2026.8.19",
+    "yt-dlp==2026.10.21",
 ]
 
 [project.optional-dependencies]
