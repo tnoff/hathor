@@ -80,9 +80,9 @@ def cli(ctx, config, as_json):
         logger = setup_logger('hathor', **ctx.obj['config']['logging'])
         config_copy['logger'] = logger
     ctx.obj['client'] = HathorClient(**config_copy)
-    # A short-lived run has to send its telemetry before the process ends
-    ctx.call_on_close(ctx.obj['client'].close)
-    if telemetry.enabled():
+    # A run killed at its deadline gets SIGTERM first: unwind (ending open spans as failed) so the
+    # telemetry queued is sent as the process exits
+    if telemetry.signal_enabled('traces'):
         telemetry.exit_on_sigterm()
 
 @cli.command(name='dump-config')

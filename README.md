@@ -120,19 +120,23 @@ message and in a traceback. Nothing else on the record, such as extra fields, is
 podcast (`hathor.podcast.sync`: `podcast_id`, `podcast_name`, `archive_type`, `new_episodes`) and each
 episode download (`hathor.episode.download`: `episode_id`, `podcast_id`, `archive_type`), and below those
 the steps that can take time: `hathor.broadcast_update` (listing a feed or channel), `hathor.archive_download`,
-`hathor.tag_update` and `hathor.cleanup`. A failed step is marked as an error with the same scrubbed message
-the sync failure report uses. Feed URLs are never span attributes.
+`hathor.tag_update` and `hathor.cleanup`. Every HTTP call made with `requests` (feeds, artwork, the YouTube and
+Twitch checks) is a span too, from the standard `opentelemetry-instrumentation-requests`. A step that raises
+is marked as an error with the exception recorded. Feed URLs are never span attributes, and every URL in a
+span (the `requests` ones included, and the exception messages) has its query string, fragment and
+`user:password@` hidden before it leaves the process. Calls made by `yt-dlp`, `feedparser` and the Google API
+client do not use `requests`, so only the step around them is a span. The database is not traced: the
+SQLAlchemy instrumentation does not support SQLAlchemy 2.1.
 
 A span is exported when it ends, so a step that is stuck forever is not visible until it does end. When the
-process receives `SIGTERM` (a Kubernetes job past its `activeDeadlineSeconds`) hathor ends its open spans as
-failed and exits, so the step it was in is exported with how long it ran. A `SIGKILL` cannot be caught.
+process receives `SIGTERM` (a Kubernetes job past its `activeDeadlineSeconds`) hathor lets the run unwind, which
+ends the open spans, so the step it was in is exported with how long it ran. A `SIGKILL` cannot be caught.
 
 **Never in the way.** Exports are batched and sent from a background thread, each request limited to 3 seconds
 (`OTEL_EXPORTER_OTLP_TIMEOUT` overrides it). A collector that is down, slow or misconfigured does not change a
-sync's result or exit code; the first failed export is logged as one warning and the rest are dropped. When
-the client closes (the CLI does this on exit), what is still queued is sent, waiting at most 8 seconds in
-total. Python code that uses `HathorClient` directly should use it as a context manager or call `close()`
-for the same flush.
+sync's result or exit code. What is still queued is sent as the process exits, which a collector that does not
+answer can delay by a few seconds (the request limit). A problem setting telemetry up is one warning and hathor
+runs without it.
 
 #### yt-dlp Options
 

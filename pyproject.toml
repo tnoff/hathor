@@ -19,9 +19,11 @@ dependencies = [
     "feedparser==6.0.14",
     "google-api-python-client==2.201.0",
     "mutagen==1.48.1",
-    # OTLP export is opt-in (OTEL_EXPORTER_OTLP_ENDPOINT); nothing is imported unless it is set.
+    # OTLP export is opt-in: nothing is set up unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
     # The http exporter is used over grpc to stay pure python (no grpcio wheels to track)
     "opentelemetry-exporter-otlp-proto-http==1.45.1",
+    "opentelemetry-instrumentation-logging==0.66b1",
+    "opentelemetry-instrumentation-requests==0.66b1",
     "opentelemetry-sdk==1.45.1",
     "Pillow==13.0.0",
     "pyaml-env==1.2.2",

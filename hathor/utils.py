@@ -209,18 +209,22 @@ def _mask_found_url(match: re.Match) -> str:
     # a database connection string: only the password is a secret
     return CONNECTION_PASSWORD.sub(rf'\1:{URL_MASK}@', url)
 
+# urllib3 names the request in its errors by path and query alone, with no scheme:
+# "Max retries exceeded with url: /rss/show?auth=KEY (Caused by ...)"
+REQUEST_TARGET_IN_TEXT = re.compile(r'(\burl: /[^\s?#]*)[?#]\S*')
+
 def mask_log_text(text: str) -> str:
     '''
     Hide credentials in every url inside a piece of text (a log line, a traceback)
 
     http(s) urls lose their query string, fragment and user:password@ as mask_url_secrets does,
-    and the password of any other url, such as a database connection string, is hidden. The rest
-    of the text is left alone. A secret in a url's path cannot be told from the path, so it is not
-    hidden
+    and the password of any other url, such as a database connection string, is hidden. So does
+    the "url: /path?query" an urllib3 connection error names the request by. The rest of the text
+    is left alone. A secret in a url's path cannot be told from the path, so it is not hidden
 
     text: Any string
     '''
-    return URL_IN_TEXT.sub(_mask_found_url, text)
+    return REQUEST_TARGET_IN_TEXT.sub(rf'\1?{URL_MASK}', URL_IN_TEXT.sub(_mask_found_url, text))
 
 class MaskingFormatter(Formatter):
     '''
