@@ -6,11 +6,26 @@ import threading
 import time
 import traceback
 
+from opentelemetry._logs import LogRecord, SeverityNumber
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.environment_variables import (
+    OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+    OTEL_EXPORTER_OTLP_TIMEOUT, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
+    OTEL_RESOURCE_ATTRIBUTES, OTEL_SDK_DISABLED, OTEL_SERVICE_NAME,
+)
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace import Status, StatusCode
+
 from hathor.utils import mask_log_text, scrub_error
 
-# Telemetry is opt-in and driven by the standard OTEL_* environment variables. Nothing from
-# OpenTelemetry is imported until an endpoint is set, and every failure in here is swallowed:
-# a sync must never fail or slow down because a collector is unreachable
+# Telemetry is opt-in and driven by the standard OTEL_* environment variables: nothing is started
+# unless an endpoint is set. Every failure in here is swallowed: a sync must never fail or slow
+# down because a collector is unreachable
 
 # Seconds one export request may take, shorter than the SDK's 10. Setting OTEL_EXPORTER_OTLP_TIMEOUT
 # (or the _LOGS_ / _TRACES_ variant) overrides it
@@ -19,14 +34,17 @@ EXPORT_TIMEOUT = 3
 SHUTDOWN_TIMEOUT = 8
 
 ENDPOINT_VARIABLES = {
-    'logs': ('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'OTEL_EXPORTER_OTLP_ENDPOINT'),
-    'traces': ('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'OTEL_EXPORTER_OTLP_ENDPOINT'),
+    'logs': (OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_EXPORTER_OTLP_ENDPOINT),
+    'traces': (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_ENDPOINT),
 }
+# Standard, but the SDK has no constants for these two: it reads them in its auto-configuration
+# entry point, which hathor does not use
 EXPORTER_VARIABLES = {'logs': 'OTEL_LOGS_EXPORTER', 'traces': 'OTEL_TRACES_EXPORTER'}
-TIMEOUT_VARIABLES = {'logs': 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT', 'traces': 'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT'}
+TIMEOUT_VARIABLES = {'logs': OTEL_EXPORTER_OTLP_LOGS_TIMEOUT, 'traces': OTEL_EXPORTER_OTLP_TRACES_TIMEOUT}
 
-# Python level -> OTEL severity number (the SeverityNumber values of the same names)
-SEVERITY_NUMBERS = {logging.DEBUG: 5, logging.INFO: 9, logging.WARNING: 13, logging.ERROR: 17, logging.CRITICAL: 21}
+SEVERITY_NUMBERS = {logging.DEBUG: SeverityNumber.DEBUG, logging.INFO: SeverityNumber.INFO,
+                    logging.WARNING: SeverityNumber.WARN, logging.ERROR: SeverityNumber.ERROR,
+                    logging.CRITICAL: SeverityNumber.FATAL}
 SEVERITY_TEXTS = {'WARNING': 'WARN', 'CRITICAL': 'FATAL'}
 
 def signal_enabled(kind: str) -> bool:
@@ -34,7 +52,7 @@ def signal_enabled(kind: str) -> bool:
     Whether telemetry of this kind ('logs' or 'traces') is switched on: OTEL_SDK_DISABLED is not
     true, the signal's exporter is not "none", and an endpoint is set for it
     '''
-    if os.environ.get('OTEL_SDK_DISABLED', '').strip().lower() == 'true':
+    if os.environ.get(OTEL_SDK_DISABLED, '').strip().lower() == 'true':
         return False
     if os.environ.get(EXPORTER_VARIABLES[kind], '').strip().lower() == 'none':
         return False
@@ -56,16 +74,14 @@ def _clean_attributes(attributes: dict) -> dict:
     return clean
 
 def _timeout_kwargs(kind: str) -> dict:
-    if os.environ.get(TIMEOUT_VARIABLES[kind]) or os.environ.get('OTEL_EXPORTER_OTLP_TIMEOUT'):
+    if os.environ.get(TIMEOUT_VARIABLES[kind]) or os.environ.get(OTEL_EXPORTER_OTLP_TIMEOUT):
         return {}
     return {'timeout': EXPORT_TIMEOUT}
 
 def _span_exporter():
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter #pylint:disable=import-outside-toplevel
     return OTLPSpanExporter(**_timeout_kwargs('traces'))
 
 def _log_exporter():
-    from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter #pylint:disable=import-outside-toplevel
     return OTLPLogExporter(**_timeout_kwargs('logs'))
 
 class OtlpLogHandler(logging.Handler):
@@ -75,11 +91,9 @@ class OtlpLogHandler(logging.Handler):
     and the traceback leave this handler, both with the credentials in urls hidden, as the
     formatter on the stdout and file handlers does
     '''
-    def __init__(self, otel_logger, record_class, severity_class):
+    def __init__(self, otel_logger):
         super().__init__()
         self._otel_logger = otel_logger
-        self._record_class = record_class
-        self._severity_class = severity_class
 
     def emit(self, record):
         # Telemetry is never allowed to break the code being logged. Not handleError: that
@@ -93,10 +107,10 @@ class OtlpLogHandler(logging.Handler):
             if record.exc_info and record.exc_info[0] is not None:
                 attributes['exception.type'] = record.exc_info[0].__name__
                 attributes['exception.stacktrace'] = mask_log_text(''.join(traceback.format_exception(*record.exc_info)))
-            self._otel_logger.emit(self._record_class(
+            self._otel_logger.emit(LogRecord(
                 timestamp=int(record.created * 1e9),
                 severity_text=SEVERITY_TEXTS.get(record.levelname, record.levelname),
-                severity_number=self._severity_class(SEVERITY_NUMBERS.get(record.levelno, 9)),
+                severity_number=SEVERITY_NUMBERS.get(record.levelno, SeverityNumber.INFO),
                 body=mask_log_text(record.getMessage()),
                 attributes=attributes,
             ))
@@ -144,7 +158,6 @@ class _Span:
         if self._otel_span is None:
             return
         with suppress(Exception):
-            from opentelemetry.trace import Status, StatusCode #pylint:disable=import-outside-toplevel
             self._otel_span.set_attribute('exception.type', type(error).__name__)
             self._otel_span.set_status(Status(StatusCode.ERROR, mask_log_text(scrub_error(f'{type(error).__name__}: {error}'))))
 
@@ -163,23 +176,17 @@ class _Telemetry: #pylint:disable=too-few-public-methods
 _STATE = None
 
 def _resource():
-    from opentelemetry.sdk.resources import Resource #pylint:disable=import-outside-toplevel
     attributes = {}
     # Attributes given to Resource.create beat the environment, so only name the service
     # when nobody else has
-    if not os.environ.get('OTEL_SERVICE_NAME') and 'service.name' not in os.environ.get('OTEL_RESOURCE_ATTRIBUTES', ''):
-        attributes['service.name'] = 'hathor'
+    if not os.environ.get(OTEL_SERVICE_NAME) and SERVICE_NAME not in os.environ.get(OTEL_RESOURCE_ATTRIBUTES, ''):
+        attributes[SERVICE_NAME] = 'hathor'
     return Resource.create(attributes)
 
 def _build_providers():
     '''
     Returns (tracer_provider, logger_provider), either None when that signal is not enabled
     '''
-    # pylint:disable=import-outside-toplevel
-    from opentelemetry.sdk._logs import LoggerProvider
-    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
     resource = _resource()
     export_millis = EXPORT_TIMEOUT * 1000
     tracer_provider = logger_provider = None
@@ -197,7 +204,7 @@ def configure(logger: logging.Logger) -> bool:
     '''
     Switch on the exports the environment asks for, attaching the log export to `logger`
 
-    Does nothing, and imports nothing from OpenTelemetry, unless OTEL_EXPORTER_OTLP_ENDPOINT (or
+    Does nothing unless OTEL_EXPORTER_OTLP_ENDPOINT (or
     the _LOGS_ / _TRACES_ variant) is set. Safe to call again: a second call only makes sure this
     logger has the handler. Never raises; a problem setting up is logged as a warning
 
@@ -224,11 +231,10 @@ def configure(logger: logging.Logger) -> bool:
     return True
 
 def _start(logger: logging.Logger) -> _Telemetry:
-    from opentelemetry._logs import LogRecord, SeverityNumber #pylint:disable=import-outside-toplevel
     tracer_provider, logger_provider = _build_providers()
     state = _Telemetry(tracer_provider.get_tracer('hathor') if tracer_provider else None, tracer_provider, logger_provider)
     if logger_provider is not None:
-        state.log_handler = OtlpLogHandler(logger_provider.get_logger('hathor'), LogRecord, SeverityNumber)
+        state.log_handler = OtlpLogHandler(logger_provider.get_logger('hathor'))
         logger.addHandler(state.log_handler)
         state.loggers.append(logger)
     sdk_logger = logging.getLogger('opentelemetry')

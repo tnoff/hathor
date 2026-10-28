@@ -3,8 +3,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 import os
 import signal
-import subprocess
-import sys
 import threading
 import time
 from uuid import uuid4
@@ -83,20 +81,15 @@ def everything_exported(spans, logs):
 
 # ------------------------------------------------------------------ off by default
 
-def test_without_an_endpoint_nothing_changes_and_nothing_is_imported(tmp_path):
-    script = (
-        'import sys\n'
-        'from pathlib import Path\n'
-        'from hathor.client import HathorClient\n'
-        f'client = HathorClient(podcast_directory=Path({str(tmp_path)!r}))\n'
-        'client.podcast_create("rss", "https://feed.example/rss", "Show")\n'
-        'client.podcast_sync(sync_web_episodes=False, download_episodes=False)\n'
-        'client.close()\n'
-        'print(sorted(m for m in sys.modules if m.startswith("opentelemetry")))\n'
-    )
-    env = {key: value for key, value in os.environ.items() if not key.startswith('OTEL_')}
-    result = subprocess.run([sys.executable, '-I', '-c', script], capture_output=True, text=True, check=True, env=env)
-    assert result.stdout.strip() == '[]'
+def test_without_an_endpoint_a_run_starts_nothing(tmp_path, mocker, logger):
+    mocker.patch.object(RSSManager, 'broadcast_update', return_value=[episode(1)])
+    client = HathorClient(podcast_directory=tmp_path, logger=logger)
+    client.podcast_create('rss', 'https://feed.example/rss', 'Show')
+    assert len(client.episode_sync()) == 1
+    assert not telemetry.enabled()
+    assert not logger.handlers
+    assert not logging.getLogger('opentelemetry').handlers
+    client.close()
 
 def test_configure_does_nothing_without_an_endpoint(logger):
     assert telemetry.configure(logger) is False
@@ -299,7 +292,7 @@ def test_a_collector_that_never_answers_cannot_hold_the_process(monkeypatch, log
     stuck = Stuck()
     state = telemetry._Telemetry(None, stuck, None) #pylint:disable=protected-access
     state.error_handler = telemetry.ExportErrorHandler(logger)
-    state.loggers, state.log_handler = [logger], telemetry.OtlpLogHandler(None, None, None)
+    state.loggers, state.log_handler = [logger], telemetry.OtlpLogHandler(None)
     logger.addHandler(state.log_handler)
     monkeypatch.setattr(telemetry, '_STATE', state)
     started = time.monotonic()
