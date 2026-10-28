@@ -125,8 +125,10 @@ Twitch checks) is a span too, from the standard `opentelemetry-instrumentation-r
 is marked as an error with the exception recorded. Feed URLs are never span attributes, and every URL in a
 span (the `requests` ones included, and the exception messages) has its query string, fragment and
 `user:password@` hidden before it leaves the process. Calls made by `yt-dlp`, `feedparser` and the Google API
-client do not use `requests`, so only the step around them is a span. The database is not traced: the
-SQLAlchemy instrumentation does not support SQLAlchemy 2.1.
+client do not use `requests`, so only the step around them is a span. Database statements are spans as well
+(`opentelemetry-instrumentation-sqlalchemy`: the statement text with its parameters left as placeholders), so a
+sync that finds new episodes produces a span for each query it makes. Drop the ones you do not want in the
+collector.
 
 A span is exported when it ends, so a step that is stuck forever is not visible until it does end. When the
 process receives `SIGTERM` (a Kubernetes job past its `activeDeadlineSeconds`) hathor lets the run unwind, which

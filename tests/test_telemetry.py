@@ -17,6 +17,7 @@ from opentelemetry._logs import get_logger_provider
 from opentelemetry.environment_variables import OTEL_LOGS_EXPORTER, OTEL_TRACES_EXPORTER
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
 from opentelemetry.sdk.environment_variables import (
@@ -36,6 +37,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import StatusCode
 import pytest
 import requests
+import sqlalchemy
 from yaml import dump
 
 from hathor import telemetry
@@ -64,8 +66,9 @@ def reset_otel():
     for provider in (trace.get_tracer_provider(), get_logger_provider()):
         if isinstance(provider, (TracerProvider, LoggerProvider)):
             provider.shutdown()
-    if RequestsInstrumentor().is_instrumented_by_opentelemetry:
-        RequestsInstrumentor().uninstrument()
+    for instrumentor in (RequestsInstrumentor(), SQLAlchemyInstrumentor()):
+        if instrumentor.is_instrumented_by_opentelemetry:
+            instrumentor.uninstrument()
     trace._TRACER_PROVIDER = None #pylint:disable=protected-access
     trace._TRACER_PROVIDER_SET_ONCE._done = False #pylint:disable=protected-access
     _logs._internal._LOGGER_PROVIDER = None #pylint:disable=protected-access
@@ -140,6 +143,7 @@ def test_without_an_endpoint_nothing_is_set_up_and_a_run_is_unchanged(tmp_path, 
     assert not isinstance(trace.get_tracer_provider(), TracerProvider)
     assert not isinstance(get_logger_provider(), LoggerProvider)
     assert not RequestsInstrumentor().is_instrumented_by_opentelemetry
+    assert not SQLAlchemyInstrumentor().is_instrumented_by_opentelemetry
     assert not logger.handlers
     client.close()
 
@@ -194,7 +198,7 @@ def test_a_sync_exports_a_span_tree_and_its_log_lines(world, exporters):
     spans, logs = exporters
     world.podcast_sync(download_episodes=False)
     flush()
-    finished = {s.name: s for s in spans.get_finished_spans()}
+    finished = {s.name: s for s in spans.get_finished_spans() if s.name.startswith('hathor.')}    # the database's spans are in there too
     assert set(finished) == {'hathor.podcast_sync', 'hathor.podcast.sync', 'hathor.broadcast_update'}
     run, one, listing = finished['hathor.podcast_sync'], finished['hathor.podcast.sync'], finished['hathor.broadcast_update']
     assert run.parent is None
@@ -371,6 +375,20 @@ def test_http_calls_get_a_span_without_the_key(server, exporters):
     assert 'Max retries exceeded with url: /rss?<hidden>' in str(dict(failed.events[0].attributes))    # the message that names the path and query
     assert 'SECRETKEY' not in everything_exported(spans, logs)
 
+def test_sql_gets_a_span_on_the_installed_sqlalchemy(exporters):
+    '''
+    The instrumentor caps SQLAlchemy below 2.1 and instruments nothing, silently, outside it. hathor
+    passes skip_dep_check, so only a query and a look at the spans can say it still works here
+    '''
+    spans, logs = exporters
+    engine = sqlalchemy.create_engine('sqlite://')                       # made after setup, so the patched create_engine
+    with engine.connect() as connection:
+        connection.execute(sqlalchemy.text('SELECT 1 AS answer'))
+    engine.dispose()
+    flush()
+    assert any('SELECT 1 AS answer' in str(dict(finished.attributes)) for finished in spans.get_finished_spans())
+    assert 'SECRETKEY' not in everything_exported(spans, logs)
+
 # ------------------------------------------------------------------ never in the way
 
 def test_setup_failing_is_a_warning_and_the_sync_still_works(tmp_path, mocker, monkeypatch, logger, caplog):
@@ -426,6 +444,7 @@ def test_a_short_run_delivers_its_telemetry_as_the_process_exits(tmp_path, serve
     assert {path for path, _ in Server.received} == {'/v1/traces', '/v1/logs'}
     payload = b''.join(body for _, body in Server.received)
     assert b'hathor.episode_sync' in payload and b'hathor-sync' in payload and b'Syncing episodes of podcast 1' in payload
+    assert b'SELECT' in payload                                          # the client's own engine, built by the create_engine it imported
     assert b'SECRETKEY' not in payload and b'SECRETSIG' not in payload
 
 # ------------------------------------------------------------------ attaching and the cli

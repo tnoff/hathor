@@ -11,6 +11,7 @@ from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.logging.handler import LoggingHandler
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.environment_variables import (
@@ -145,6 +146,12 @@ def setup_otlp():
                                                                   export_timeout_millis=EXPORT_TIMEOUT * 1000))
             trace.set_tracer_provider(tracer_provider)
             RequestsInstrumentor().instrument(tracer_provider=tracer_provider)
+            # skip_dep_check: the instrumentor caps SQLAlchemy at < 2.1.0 (opentelemetry-python-contrib
+            # #5118, lifted upstream but not released), so on 2.1.x it logs an error and instruments
+            # nothing. 0.66b1 does produce spans on 2.1.6, which test_sql_gets_a_span asserts, and it
+            # fails if a bump ever stops that. Drop the flag once a release carries the wider range.
+            # This is what discord-bot did for its db pod (discord-bot#1149)
+            SQLAlchemyInstrumentor().instrument(tracer_provider=tracer_provider, skip_dep_check=True)
         if signal_enabled('logs') and not isinstance(get_logger_provider(), LoggerProvider):
             logger_provider = LoggerProvider(resource=resource)
             logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter(),

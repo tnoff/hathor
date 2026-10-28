@@ -4,5 +4,22 @@
     "github>tnoff/github-workflows//renovate/default-github",
     "github>tnoff/github-workflows//renovate/python"
   ],
-  "enabledManagers": ["github-actions", "pep621", "dockerfile", "custom.regex"]
+  "enabledManagers": [
+    "github-actions",
+    "pep621",
+    "dockerfile",
+    "custom.regex"
+  ],
+  "packageRules": [
+    {
+      "description": "OpenTelemetry moves as one unit. The sdk, the OTLP exporter and the instrumentation packages are released together and pin each other: the sdk requires opentelemetry-api==X and opentelemetry-semantic-conventions==Y, each instrumentation package requires the same semantic-conventions and opentelemetry-instrumentation==Y, and the exporter requires opentelemetry-proto==X and opentelemetry-sdk~=X. Bumping one without the rest does not resolve. The shared python preset already batches opentelemetry-* but only minor and patch, and together with unrelated libraries (click, requests, feedparser); this rule is applied after the preset's, so it replaces that group with one of its own that includes majors. The dev- branch prefix from the preset's base rule is left alone, so the update still cuts a release.",
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchPackageNames": [
+        "opentelemetry-*"
+      ],
+      "groupName": "opentelemetry"
+    }
+  ]
 }
