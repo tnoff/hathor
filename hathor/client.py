@@ -167,8 +167,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             self.podcast_directory = Path(podcast_directory)
         self.datetime_output_format = datetime_output_format
         self.logger = logger or utils.setup_logger('Hathor')
-        # Opt-in, from the OTEL_* environment: also exports this logger's records
-        self._telemetry = telemetry.configure(self.logger)
+        # With OTEL_* set in the environment, also exports this logger's records
+        telemetry.attach(self.logger)
 
         # Default to in memory db
         # Mostly for tests
@@ -212,10 +212,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         engine = getattr(self, 'engine', None)
         if engine is not None:
             engine.dispose()
-        # Only the client that switched it on gives it up, and only once: __del__ calls this again
-        if getattr(self, '_telemetry', False):
-            self._telemetry = False
-            telemetry.shutdown()
+        # Only sends what is queued: other clients may still be running
+        telemetry.flush()
 
     def __enter__(self):
         return self

@@ -95,8 +95,9 @@ section; a program that hands `HathorClient` its own `logger` gets the formattin
 #### Telemetry (OpenTelemetry)
 
 hathor can send its logs and traces to an OTLP collector. It is off unless an endpoint is set, and it is
-configured with the standard `OTEL_*` environment variables, so nothing is added to the config file. With
-none set, behaviour is unchanged.
+configured with the standard `OTEL_*` environment variables, so nothing is added to the config file. They are
+read once, when hathor loads, so they must be set before the process starts. With none set, behaviour is
+unchanged.
 
 | Variable | Effect |
 | --- | --- |

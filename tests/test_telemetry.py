@@ -8,7 +8,20 @@ import time
 from uuid import uuid4
 
 from click.testing import CliRunner
+from opentelemetry.environment_variables import OTEL_LOGS_EXPORTER, OTEL_TRACES_EXPORTER
 from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter
+from opentelemetry.sdk.environment_variables import (
+    OTEL_EXPORTER_OTLP_ENDPOINT,
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+    OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+    OTEL_EXPORTER_OTLP_TIMEOUT,
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+    OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
+    OTEL_RESOURCE_ATTRIBUTES,
+    OTEL_SDK_DISABLED,
+    OTEL_SERVICE_NAME,
+)
+from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 import pytest
@@ -23,10 +36,10 @@ from hathor.podcast.archive import RSSManager
 from tests.utils import temp_audio_file
 
 KEY_URL = 'https://www.patreon.com/rss/someshow?auth=SECRETKEY&show=123'
-OTEL_VARIABLES = ('OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
-                  'OTEL_SDK_DISABLED', 'OTEL_LOGS_EXPORTER', 'OTEL_TRACES_EXPORTER', 'OTEL_SERVICE_NAME',
-                  'OTEL_RESOURCE_ATTRIBUTES', 'OTEL_EXPORTER_OTLP_TIMEOUT', 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT',
-                  'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT')
+OTEL_VARIABLES = (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+                  OTEL_SDK_DISABLED, OTEL_LOGS_EXPORTER, OTEL_TRACES_EXPORTER, OTEL_SERVICE_NAME,
+                  OTEL_RESOURCE_ATTRIBUTES, OTEL_EXPORTER_OTLP_TIMEOUT, OTEL_EXPORTER_OTLP_LOGS_TIMEOUT,
+                  OTEL_EXPORTER_OTLP_TRACES_TIMEOUT)
 
 def episode(n):
     return {'download_link': f'https://cdn.example/ep{n}.mp3?token-hash=SECRETSIG&e=1', 'title': f'Episode {n}',
@@ -37,9 +50,12 @@ def clean_environment_fixture(monkeypatch):
     for name in OTEL_VARIABLES:
         monkeypatch.delenv(name, raising=False)
     yield
-    while telemetry.enabled():
-        telemetry.shutdown(timeout=1)
-    logging.getLogger('opentelemetry').handlers.clear()
+
+def start_telemetry(monkeypatch):
+    '''A Telemetry made from the environment as it is now, standing in for the one made when hathor loaded'''
+    instance = telemetry.Telemetry()
+    monkeypatch.setattr(telemetry, 'TELEMETRY', instance)
+    return instance
 
 @pytest.fixture(name='exporters')
 def exporters_fixture(monkeypatch):
@@ -47,8 +63,10 @@ def exporters_fixture(monkeypatch):
     spans, logs = InMemorySpanExporter(), InMemoryLogRecordExporter()
     monkeypatch.setattr(telemetry, '_span_exporter', lambda: spans)
     monkeypatch.setattr(telemetry, '_log_exporter', lambda: logs)
-    monkeypatch.setenv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://collector.invalid:4318')
-    return spans, logs
+    monkeypatch.setenv(OTEL_EXPORTER_OTLP_ENDPOINT, 'http://collector.invalid:4318')
+    instance = start_telemetry(monkeypatch)
+    yield spans, logs
+    instance.shutdown(timeout=1)
 
 @pytest.fixture(name='logger')
 def logger_fixture():
@@ -81,7 +99,8 @@ def everything_exported(spans, logs):
 
 # ------------------------------------------------------------------ off by default
 
-def test_without_an_endpoint_a_run_starts_nothing(tmp_path, mocker, logger):
+def test_without_an_endpoint_a_run_starts_nothing(tmp_path, mocker, monkeypatch, logger):
+    start_telemetry(monkeypatch)
     mocker.patch.object(RSSManager, 'broadcast_update', return_value=[episode(1)])
     client = HathorClient(podcast_directory=tmp_path, logger=logger)
     client.podcast_create('rss', 'https://feed.example/rss', 'Show')
@@ -91,26 +110,28 @@ def test_without_an_endpoint_a_run_starts_nothing(tmp_path, mocker, logger):
     assert not logging.getLogger('opentelemetry').handlers
     client.close()
 
-def test_configure_does_nothing_without_an_endpoint(logger):
-    assert telemetry.configure(logger) is False
-    assert not telemetry.enabled()
+def test_attaching_does_nothing_without_an_endpoint(monkeypatch, logger):
+    start_telemetry(monkeypatch)
+    telemetry.attach(logger)
     assert not logger.handlers
 
-def test_spans_do_nothing_without_telemetry():
+def test_spans_do_nothing_without_telemetry(monkeypatch):
+    instance = start_telemetry(monkeypatch)
     with telemetry.span('anything', podcast_id=1) as handle:
         handle.set(more=2)
         handle.fail(RuntimeError('x'))
     assert handle is telemetry.NOOP_SPAN
-    telemetry.shutdown()                                                 # and shutting down nothing is fine
+    telemetry.flush()                                                    # and flushing or stopping nothing is fine
+    instance.shutdown()
 
 @pytest.mark.parametrize('environment, logs, traces', [
-    ({'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://c:4318'}, True, True),
-    ({'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT': 'http://c:4318/v1/logs'}, True, False),
-    ({'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT': 'http://c:4318/v1/traces'}, False, True),
-    ({'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://c:4318', 'OTEL_SDK_DISABLED': 'True'}, False, False),
-    ({'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://c:4318', 'OTEL_TRACES_EXPORTER': 'none'}, True, False),
-    ({'OTEL_EXPORTER_OTLP_ENDPOINT': 'http://c:4318', 'OTEL_LOGS_EXPORTER': 'none'}, False, True),
-    ({'OTEL_EXPORTER_OTLP_ENDPOINT': '  '}, False, False),
+    ({OTEL_EXPORTER_OTLP_ENDPOINT: 'http://c:4318'}, True, True),
+    ({OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: 'http://c:4318/v1/logs'}, True, False),
+    ({OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://c:4318/v1/traces'}, False, True),
+    ({OTEL_EXPORTER_OTLP_ENDPOINT: 'http://c:4318', OTEL_SDK_DISABLED: 'True'}, False, False),
+    ({OTEL_EXPORTER_OTLP_ENDPOINT: 'http://c:4318', OTEL_TRACES_EXPORTER: 'none'}, True, False),
+    ({OTEL_EXPORTER_OTLP_ENDPOINT: 'http://c:4318', OTEL_LOGS_EXPORTER: 'none'}, False, True),
+    ({OTEL_EXPORTER_OTLP_ENDPOINT: '  '}, False, False),
 ])
 def test_the_environment_picks_the_signals(monkeypatch, environment, logs, traces):
     for name, value in environment.items():
@@ -122,9 +143,9 @@ def test_the_environment_picks_the_signals(monkeypatch, environment, logs, trace
 
 def test_a_sync_exports_a_span_tree_and_its_log_lines(world, exporters):
     spans, logs = exporters
-    assert telemetry.configure(world.logger)
+    telemetry.attach(world.logger)
     world.podcast_sync(download_episodes=False)
-    telemetry.shutdown()                                                 # what close() does at the end of a run
+    telemetry.flush()                                                    # what close() does at the end of a run
     finished = {s.name: s for s in spans.get_finished_spans()}
     assert set(finished) == {'hathor.podcast_sync', 'hathor.podcast.sync', 'hathor.broadcast_update'}
     run, one, listing = finished['hathor.podcast_sync'], finished['hathor.podcast.sync'], finished['hathor.broadcast_update']
@@ -139,7 +160,7 @@ def test_a_sync_exports_a_span_tree_and_its_log_lines(world, exporters):
     assert 'Syncing episodes of podcast 1 (Some Show)' in bodies
     assert logs.get_finished_logs()[0].log_record.trace_id                # log lines inside a span carry its trace
 
-def test_the_client_switches_telemetry_on_from_the_environment_and_close_flushes(tmp_path, mocker, exporters, logger):
+def test_the_client_exports_from_the_environment_and_close_flushes(tmp_path, mocker, exporters, logger):
     spans, logs = exporters
     mocker.patch.object(RSSManager, 'broadcast_update', return_value=[])
     client = HathorClient(podcast_directory=tmp_path, logger=logger)
@@ -148,20 +169,31 @@ def test_the_client_switches_telemetry_on_from_the_environment_and_close_flushes
     client.episode_sync()
     assert not spans.get_finished_spans()                                 # the batch has not been sent yet: a run this short ends first
     client.close()
-    assert not telemetry.enabled()
     assert [s.name for s in spans.get_finished_spans()] == ['hathor.broadcast_update', 'hathor.podcast.sync', 'hathor.episode_sync']
     assert logs.get_finished_logs()
 
+def test_closing_a_client_only_flushes_so_another_keeps_exporting(tmp_path, exporters, logger):
+    spans, _ = exporters
+    first = HathorClient(podcast_directory=tmp_path, logger=logger)
+    second = HathorClient(podcast_directory=tmp_path, logger=logger)
+    first.close()
+    first.close()                                                        # close and then __del__
+    assert telemetry.enabled()
+    with telemetry.span('still-running'):
+        pass
+    second.close()
+    assert [s.name for s in spans.get_finished_spans()] == ['still-running']
+
 def test_downloads_get_a_span_per_episode_with_stages(world, exporters, mocker):
     spans, _ = exporters
-    telemetry.configure(world.logger)
+    telemetry.attach(world.logger)
     world.episode_sync()
     with temp_audio_file() as audio:
         mocker.patch.object(RSSManager, 'episode_download', return_value=(world.podcast_directory / 'a.mp3', 10))
         mocker.patch('hathor.client.tags_update')
         mocker.patch('pathlib.Path.resolve', return_value=audio)
         world.episode_download([1])
-    telemetry.shutdown()
+    telemetry.flush()
     finished = {s.name: s for s in spans.get_finished_spans()}
     one = finished['hathor.episode.download']
     assert dict(one.attributes) == {'episode_id': 1, 'podcast_id': 1, 'podcast_name': 'Some Show', 'archive_type': 'rss',
@@ -173,23 +205,23 @@ def test_downloads_get_a_span_per_episode_with_stages(world, exporters, mocker):
 
 def test_cleanup_gets_a_span(world, exporters):
     spans, _ = exporters
-    telemetry.configure(world.logger)
+    telemetry.attach(world.logger)
     world.podcast_update(1, max_allowed=1)
     world.episode_sync()
     for stored in world.db_session.query(PodcastEpisode):
         stored.file_path = str(world.podcast_directory / f'{stored.id}.mp3')
     world.db_session.commit()
     world.podcast_sync(sync_web_episodes=False)
-    telemetry.shutdown()
+    telemetry.flush()
     assert 'hathor.cleanup' in [s.name for s in spans.get_finished_spans()]
 
 def test_a_failed_podcast_marks_its_span_and_the_run_still_reports(world, exporters, mocker):
     spans, _ = exporters
-    telemetry.configure(world.logger)
+    telemetry.attach(world.logger)
     mocker.patch.object(RSSManager, 'broadcast_update', side_effect=RuntimeError(f'cannot fetch {KEY_URL}'))
     with pytest.raises(SyncFailure):
         world.podcast_sync(download_episodes=False)
-    telemetry.shutdown()
+    telemetry.flush()
     finished = {s.name: s for s in spans.get_finished_spans()}
     for name in ('hathor.broadcast_update', 'hathor.podcast.sync', 'hathor.podcast_sync'):
         assert finished[name].status.status_code == StatusCode.ERROR
@@ -202,7 +234,7 @@ def test_a_failed_podcast_marks_its_span_and_the_run_still_reports(world, export
 def test_a_feed_url_with_a_key_is_in_no_log_record_and_no_span(world, exporters, mocker):
     spans, logs = exporters
     world.logger.setLevel(logging.DEBUG)
-    telemetry.configure(world.logger)
+    telemetry.attach(world.logger)
     world.episode_sync()
     world.episode_sync()                                                  # the second sees the episodes as known: a DEBUG line with their urls
     mocker.patch.object(RSSManager, 'broadcast_update', side_effect=RuntimeError(f'cannot fetch {KEY_URL}'))
@@ -210,7 +242,7 @@ def test_a_feed_url_with_a_key_is_in_no_log_record_and_no_span(world, exporters,
         world.episode_sync()
     with telemetry.span('hathor.manual', feed=KEY_URL, detail=f'fetched {KEY_URL} ok') as handle:
         handle.set(again=KEY_URL, count=3, ok=True, nothing=None)
-    telemetry.shutdown()
+    telemetry.flush()
     text = everything_exported(spans, logs)
     assert 'SECRETKEY' not in text and 'SECRETSIG' not in text and 'auth=' not in text
     assert 'has same url' in text                                         # the line that carried the url was exported, masked
@@ -221,12 +253,12 @@ def test_a_feed_url_with_a_key_is_in_no_log_record_and_no_span(world, exporters,
 
 def test_the_log_handler_exports_the_message_and_traceback_only(logger, exporters):
     _, logs = exporters
-    telemetry.configure(logger)
+    telemetry.attach(logger)
     try:
         raise ValueError(f'bad {KEY_URL}')
     except ValueError:
         logger.error('failed on %s', KEY_URL, exc_info=True, extra={'cookie': 'COOKIEVALUE'})
-    telemetry.shutdown()
+    telemetry.flush()
     [data] = logs.get_finished_logs()
     record = data.log_record
     assert record.body == 'failed on https://www.patreon.com/rss/someshow?<hidden>'
@@ -237,28 +269,29 @@ def test_the_log_handler_exports_the_message_and_traceback_only(logger, exporter
 
 def test_levels_map_to_otel_names(logger, exporters):
     _, logs = exporters
-    telemetry.configure(logger)
+    telemetry.attach(logger)
     logger.warning('w')
     logger.critical('c')
-    telemetry.shutdown()
+    telemetry.flush()
     assert [d.log_record.severity_text for d in logs.get_finished_logs()] == ['WARN', 'FATAL']
 
 def test_a_record_that_cannot_be_formatted_is_dropped_quietly(logger, exporters):
     _, logs = exporters
-    telemetry.configure(logger)
+    telemetry.attach(logger)
     handler = [h for h in logger.handlers if isinstance(h, telemetry.OtlpLogHandler)][0]
     handler.emit(logging.LogRecord('x', logging.INFO, __file__, 1, 'needs %s and %s', ('one',), None))
-    telemetry.shutdown()
+    telemetry.flush()
     assert not logs.get_finished_logs()
 
 # ------------------------------------------------------------------ never in the way
 
 def test_setup_failing_is_a_warning_and_the_sync_still_works(tmp_path, mocker, monkeypatch, logger, caplog):
-    monkeypatch.setenv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://collector.invalid:4318/?k=SECRETKEY')
-    mocker.patch.object(telemetry, '_build_providers', side_effect=RuntimeError('no go https://c.invalid/?k=SECRETKEY'))
+    monkeypatch.setenv(OTEL_EXPORTER_OTLP_ENDPOINT, 'http://collector.invalid:4318/?k=SECRETKEY')
+    mocker.patch.object(telemetry.Telemetry, '_start', side_effect=RuntimeError('no go https://c.invalid/?k=SECRETKEY'))
     mocker.patch.object(RSSManager, 'broadcast_update', return_value=[episode(1)])
     with caplog.at_level(logging.WARNING):
-        client = HathorClient(podcast_directory=tmp_path, logger=logger)
+        start_telemetry(monkeypatch)
+    client = HathorClient(podcast_directory=tmp_path, logger=logger)
     assert not telemetry.enabled()
     client.podcast_create('rss', 'https://feed.example/rss', 'Show')
     assert len(client.episode_sync()) == 1
@@ -266,9 +299,10 @@ def test_setup_failing_is_a_warning_and_the_sync_still_works(tmp_path, mocker, m
     client.close()
 
 def test_an_unreachable_collector_costs_nothing_but_one_warning(tmp_path, mocker, monkeypatch, logger, caplog):
-    monkeypatch.setenv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://127.0.0.1:1')        # nothing listens: refused at once
+    monkeypatch.setenv(OTEL_EXPORTER_OTLP_ENDPOINT, 'http://127.0.0.1:1')        # nothing listens: refused at once
     monkeypatch.setattr(telemetry, 'EXPORT_TIMEOUT', 1)
     mocker.patch.object(RSSManager, 'broadcast_update', return_value=[episode(1), episode(2)])
+    instance = start_telemetry(monkeypatch)
     with caplog.at_level(logging.WARNING):
         client = HathorClient(podcast_directory=tmp_path, logger=logger)
         client.podcast_create('rss', 'https://feed.example/rss', 'Show')
@@ -277,73 +311,71 @@ def test_an_unreachable_collector_costs_nothing_but_one_warning(tmp_path, mocker
         client.episode_sync()
         assert time.monotonic() - started < 2                            # the sync itself never waits on an export
         client.close()
+    instance.shutdown(timeout=1)
     assert len(new) == 2
-    assert time.monotonic() - started < telemetry.SHUTDOWN_TIMEOUT + 2
+    assert time.monotonic() - started < telemetry.FLUSH_TIMEOUT + 2
     assert len([r for r in caplog.records if 'Telemetry export is failing' in r.getMessage()]) <= 1
 
-def test_a_collector_that_never_answers_cannot_hold_the_process(monkeypatch, logger, caplog):
-    class Stuck:
-        def __init__(self):
-            self.release = threading.Event()
-        def force_flush(self, _timeout_millis):
-            self.release.wait(5)
-        def shutdown(self):
-            pass
-    stuck = Stuck()
-    state = telemetry._Telemetry(None, stuck, None) #pylint:disable=protected-access
-    state.error_handler = telemetry.ExportErrorHandler(logger)
-    state.loggers, state.log_handler = [logger], telemetry.OtlpLogHandler(None)
-    logger.addHandler(state.log_handler)
-    monkeypatch.setattr(telemetry, '_STATE', state)
-    started = time.monotonic()
-    with caplog.at_level(logging.DEBUG):
-        telemetry.shutdown(timeout=0.2)
-    assert time.monotonic() - started < 2
-    assert 'giving up' in caplog.text
-    stuck.release.set()
+class StuckExporter(SpanExporter):
+    '''A collector that accepts the connection and never answers'''
+    def __init__(self):
+        self.release = threading.Event()
+    def export(self, spans):
+        self.release.wait(10)
+        return SpanExportResult.SUCCESS
+    def shutdown(self):
+        self.release.set()
 
-def test_a_provider_that_raises_while_stopping_is_ignored(monkeypatch, logger):
+def test_a_collector_that_never_answers_cannot_hold_a_flush(monkeypatch):
+    stuck = StuckExporter()
+    monkeypatch.setattr(telemetry, '_span_exporter', lambda: stuck)
+    monkeypatch.setenv(OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://collector.invalid:4318/v1/traces')
+    instance = start_telemetry(monkeypatch)
+    with telemetry.span('hangs'):
+        pass
+    started = time.monotonic()
+    instance.flush(timeout=0.3)
+    assert time.monotonic() - started < 2
+    stuck.release.set()
+    instance.shutdown(timeout=1)
+
+def test_a_provider_that_raises_is_ignored(monkeypatch):
     class Broken:
         def force_flush(self, _timeout_millis):
             raise RuntimeError('boom')
-    state = telemetry._Telemetry(None, Broken(), None) #pylint:disable=protected-access
-    state.error_handler = telemetry.ExportErrorHandler(logger)
-    monkeypatch.setattr(telemetry, '_STATE', state)
-    telemetry.shutdown(timeout=1)
-    assert not telemetry.enabled()
+        def shutdown(self):
+            raise RuntimeError('boom')
+    instance = start_telemetry(monkeypatch)
+    instance.tracer_provider = instance.logger_provider = Broken()
+    instance.flush()
+    instance.shutdown()
+    assert not instance.enabled
 
 @pytest.mark.usefixtures('exporters')
-def test_only_the_first_export_error_is_passed_on(logger, caplog):
-    telemetry.configure(logger)
+def test_only_the_first_export_error_is_passed_on_to_the_clients_logger(logger, caplog):
+    telemetry.attach(logger)
+    telemetry.attach(logging.getLogger(f'hathor-telemetry-{uuid4().hex}'))   # a second client does not take the warning over
     sdk_logger = logging.getLogger('opentelemetry.exporter.otlp.proto.http.trace_exporter')
     with caplog.at_level(logging.WARNING):
         sdk_logger.error('Failed to export batch: https://c.invalid/v1/traces?k=SECRETKEY')
         sdk_logger.error('Failed to export batch again')
-    messages = [r.getMessage() for r in caplog.records if 'Telemetry export is failing' in r.getMessage()]
-    assert messages == ['Telemetry export is failing, continuing without it: Failed to export batch: https://c.invalid/v1/traces']
+    records = [r for r in caplog.records if 'Telemetry export is failing' in r.getMessage()]
+    assert [r.getMessage() for r in records] == ['Telemetry export is failing, continuing without it: Failed to export batch: https://c.invalid/v1/traces']
+    assert records[0].name == logger.name
+
+def test_an_export_error_before_any_client_is_reported_by_the_module(exporters, caplog):
+    del exporters
+    with caplog.at_level(logging.WARNING):
+        logging.getLogger('opentelemetry.sdk').error('early failure')
+    assert [r.name for r in caplog.records if 'Telemetry export is failing' in r.getMessage()] == [telemetry.__name__]
 
 def test_an_error_handler_whose_logger_breaks_stays_quiet():
     class Broken:
         def warning(self, _message):
             raise RuntimeError('boom')
-    telemetry.ExportErrorHandler(Broken()).emit(logging.LogRecord('x', logging.ERROR, __file__, 1, 'm', (), None))
-
-@pytest.mark.usefixtures('exporters')
-def test_a_tracer_that_breaks_gives_a_noop_span(monkeypatch, logger):
-    class Broken:
-        def start_as_current_span(self, *_, **__):
-            raise RuntimeError('boom')
-    telemetry.configure(logger)
-    monkeypatch.setattr(telemetry._STATE, 'tracer', Broken()) #pylint:disable=protected-access
-    with telemetry.span('x') as handle:
-        pass
-    assert handle is telemetry.NOOP_SPAN
-
-def test_ending_a_span_that_breaks_is_ignored():
-    class Broken:
-        def __exit__(self, *_):
-            raise RuntimeError('boom')
-    telemetry._end(Broken(), None) #pylint:disable=protected-access
+    handler = telemetry.ExportErrorHandler()
+    handler.logger = Broken()
+    handler.emit(logging.LogRecord('x', logging.ERROR, __file__, 1, 'm', (), None))
 
 def test_a_span_that_breaks_while_annotated_is_ignored():
     class Broken:
@@ -356,84 +388,55 @@ def test_a_span_that_breaks_while_annotated_is_ignored():
 def test_logs_only_gives_no_spans(logger, monkeypatch):
     logs = InMemoryLogRecordExporter()
     monkeypatch.setattr(telemetry, '_log_exporter', lambda: logs)
-    monkeypatch.setenv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'http://collector.invalid:4318/v1/logs')
-    assert telemetry.configure(logger)
+    monkeypatch.setenv(OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://collector.invalid:4318/v1/logs')
+    instance = start_telemetry(monkeypatch)
+    telemetry.attach(logger)
     with telemetry.span('x') as handle:
         logger.warning('inside')
     assert handle is telemetry.NOOP_SPAN
-    telemetry.shutdown()
+    telemetry.flush()
     assert [d.log_record.body for d in logs.get_finished_logs()] == ['inside']
+    instance.shutdown(timeout=1)
 
 def test_traces_only_adds_no_log_handler(logger, monkeypatch):
     spans = InMemorySpanExporter()
     monkeypatch.setattr(telemetry, '_span_exporter', lambda: spans)
-    monkeypatch.setenv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'http://collector.invalid:4318/v1/traces')
-    assert telemetry.configure(logger)
+    monkeypatch.setenv(OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://collector.invalid:4318/v1/traces')
+    instance = start_telemetry(monkeypatch)
+    telemetry.attach(logger)
     assert not logger.handlers
     with telemetry.span('x'):
         pass
-    telemetry.shutdown()
+    telemetry.flush()
     assert [s.name for s in spans.get_finished_spans()] == ['x']
+    instance.shutdown(timeout=1)
 
-def test_a_second_client_logger_gets_the_handler_too(logger, exporters):
+def test_every_client_logger_gets_the_handler_once(logger, exporters):
     _, logs = exporters
     other = logging.getLogger(f'hathor-telemetry-{uuid4().hex}')
-    telemetry.configure(logger)
-    assert telemetry.configure(other)
-    assert telemetry.configure(other)                                    # and asking again adds nothing
+    telemetry.attach(logger)
+    telemetry.attach(other)
+    telemetry.attach(other)                                              # asking again adds nothing
     assert len(other.handlers) == 1
     other.warning('from the other')
-    for _ in range(3):                                                   # one shutdown for each configure that returned True
-        telemetry.shutdown()
+    telemetry.flush()
     assert [d.log_record.body for d in logs.get_finished_logs()] == ['from the other']
-    assert not other.handlers
-
-@pytest.mark.usefixtures('exporters')
-def test_a_caller_that_asks_with_telemetry_off_is_not_a_user_of_it(logger, monkeypatch):
-    telemetry.configure(logger)
-    monkeypatch.delenv('OTEL_EXPORTER_OTLP_ENDPOINT')
-    assert telemetry.configure(logger) is False
-    telemetry.shutdown()                                                 # the one real user leaving
-    assert not telemetry.enabled()
-
-def test_telemetry_stops_only_when_the_last_client_closes(tmp_path, exporters, logger):
-    spans, _ = exporters
-    first = HathorClient(podcast_directory=tmp_path, logger=logger)
-    second = HathorClient(podcast_directory=tmp_path, logger=logger)
-    first.close()
-    first.close()                                                        # closing twice (close, then __del__) gives up only one use
-    assert telemetry.enabled()
-    with telemetry.span('still-running'):
-        pass
-    second.close()
-    assert not telemetry.enabled()
-    assert [s.name for s in spans.get_finished_spans()] == ['still-running']
-
-def test_a_client_made_with_telemetry_off_never_stops_it(tmp_path, monkeypatch, exporters, logger):
-    spans, _ = exporters
-    running = HathorClient(podcast_directory=tmp_path, logger=logger)
-    monkeypatch.delenv('OTEL_EXPORTER_OTLP_ENDPOINT')
-    stray = HathorClient(podcast_directory=tmp_path, logger=logger)
-    stray.close()
-    assert telemetry.enabled()
-    running.close()
-    assert not telemetry.enabled()
-    assert not spans.get_finished_spans()
+    other.handlers.clear()
 
 def test_the_timeout_is_ours_unless_the_environment_sets_one(monkeypatch):
     assert telemetry._timeout_kwargs('logs') == {'timeout': telemetry.EXPORT_TIMEOUT} #pylint:disable=protected-access
-    monkeypatch.setenv('OTEL_EXPORTER_OTLP_TIMEOUT', '30000')
+    monkeypatch.setenv(OTEL_EXPORTER_OTLP_TIMEOUT, '30000')
     assert not telemetry._timeout_kwargs('logs') #pylint:disable=protected-access
-    monkeypatch.delenv('OTEL_EXPORTER_OTLP_TIMEOUT')
-    monkeypatch.setenv('OTEL_EXPORTER_OTLP_TRACES_TIMEOUT', '30000')
+    monkeypatch.delenv(OTEL_EXPORTER_OTLP_TIMEOUT)
+    monkeypatch.setenv(OTEL_EXPORTER_OTLP_TRACES_TIMEOUT, '30000')
     assert not telemetry._timeout_kwargs('traces') #pylint:disable=protected-access
 
 def test_the_service_is_named_hathor_unless_the_environment_says_otherwise(monkeypatch):
     assert telemetry._resource().attributes['service.name'] == 'hathor' #pylint:disable=protected-access
-    monkeypatch.setenv('OTEL_SERVICE_NAME', 'hathor-sync')
+    monkeypatch.setenv(OTEL_SERVICE_NAME, 'hathor-sync')
     assert telemetry._resource().attributes['service.name'] == 'hathor-sync' #pylint:disable=protected-access
-    monkeypatch.delenv('OTEL_SERVICE_NAME')
-    monkeypatch.setenv('OTEL_RESOURCE_ATTRIBUTES', 'service.name=from-attributes,k8s.namespace=hathor')
+    monkeypatch.delenv(OTEL_SERVICE_NAME)
+    monkeypatch.setenv(OTEL_RESOURCE_ATTRIBUTES, 'service.name=from-attributes,k8s.namespace=hathor')
     assert telemetry._resource().attributes['service.name'] == 'from-attributes' #pylint:disable=protected-access
 
 # ------------------------------------------------------------------ over the wire
@@ -454,9 +457,11 @@ def test_the_real_exporters_deliver_a_short_run_without_the_key(tmp_path, mocker
     server = HTTPServer(('127.0.0.1', 0), Collector)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    instance = None
     try:
-        monkeypatch.setenv('OTEL_EXPORTER_OTLP_ENDPOINT', f'http://127.0.0.1:{server.server_port}')
-        monkeypatch.setenv('OTEL_SERVICE_NAME', 'hathor-sync')
+        monkeypatch.setenv(OTEL_EXPORTER_OTLP_ENDPOINT, f'http://127.0.0.1:{server.server_port}')
+        monkeypatch.setenv(OTEL_SERVICE_NAME, 'hathor-sync')
+        instance = start_telemetry(monkeypatch)
         mocker.patch.object(RSSManager, 'broadcast_update', return_value=[episode(1)])
         client = HathorClient(podcast_directory=tmp_path, logger=logger)
         client.podcast_create('rss', KEY_URL, 'Some Show')
@@ -464,6 +469,8 @@ def test_the_real_exporters_deliver_a_short_run_without_the_key(tmp_path, mocker
         client.episode_sync()
         client.close()                                                   # the run ends here, long before a batch would be sent
     finally:
+        if instance is not None:
+            instance.shutdown(timeout=1)
         server.shutdown()
         server.server_close()
         thread.join()
@@ -475,9 +482,8 @@ def test_the_real_exporters_deliver_a_short_run_without_the_key(tmp_path, mocker
 
 # ------------------------------------------------------------------ the cli
 
-def test_a_cli_run_sends_its_telemetry_before_it_exits(tmp_path, mocker, monkeypatch, exporters):
+def test_a_cli_run_sends_its_telemetry_before_it_exits(tmp_path, mocker, exporters):
     spans, logs = exporters
-    monkeypatch.delenv('OTEL_EXPORTER_OTLP_ENDPOINT')          # the setup command runs with telemetry off
     mocker.patch.object(RSSManager, 'broadcast_update', return_value=[])
     config = tmp_path / 'config.yml'
     config.write_text(dump({'hathor': {'database_connection_string': f'sqlite:///{tmp_path / "h.db"}', 'podcast_directory': str(tmp_path / 'p')},
@@ -486,7 +492,6 @@ def test_a_cli_run_sends_its_telemetry_before_it_exits(tmp_path, mocker, monkeyp
     try:
         runner = CliRunner()
         runner.invoke(cli, ['-c', str(config), 'podcast', 'create', 'rss', 'https://feed.example/rss', 'Show'])
-        monkeypatch.setenv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://collector.invalid:4318')
         result = runner.invoke(cli, ['-c', str(config), 'podcast', 'sync', '--no-download-episodes'])
         assert result.exit_code == 0
         assert 'hathor.podcast_sync' in [s.name for s in spans.get_finished_spans()]
@@ -500,7 +505,7 @@ def test_a_cli_run_sends_its_telemetry_before_it_exits(tmp_path, mocker, monkeyp
 
 def test_sigterm_unwinds_the_open_spans(exporters, logger):
     spans, _ = exporters
-    telemetry.configure(logger)
+    telemetry.attach(logger)
     previous = signal.getsignal(signal.SIGTERM)
     telemetry.exit_on_sigterm()
     try:
@@ -510,7 +515,7 @@ def test_sigterm_unwinds_the_open_spans(exporters, logger):
                 time.sleep(5)
     finally:
         signal.signal(signal.SIGTERM, previous)
-    telemetry.shutdown()
+    telemetry.flush()
     assert caught.value.code == 143
     [stuck] = spans.get_finished_spans()
     assert stuck.status.status_code == StatusCode.ERROR and dict(stuck.attributes)['exception.type'] == 'SystemExit'

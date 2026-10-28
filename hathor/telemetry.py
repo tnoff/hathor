@@ -3,10 +3,10 @@ import logging
 import os
 import signal
 import threading
-import time
 import traceback
 
 from opentelemetry._logs import LogRecord, SeverityNumber
+from opentelemetry.environment_variables import OTEL_LOGS_EXPORTER, OTEL_TRACES_EXPORTER
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk._logs import LoggerProvider
@@ -31,15 +31,15 @@ from hathor.utils import mask_log_text, scrub_error
 # (or the _LOGS_ / _TRACES_ variant) overrides it
 EXPORT_TIMEOUT = 3
 # Seconds close() waits, in total, for what is still queued to be sent
-SHUTDOWN_TIMEOUT = 8
+FLUSH_TIMEOUT = 8
+
+LOGGER = logging.getLogger(__name__)
 
 ENDPOINT_VARIABLES = {
     'logs': (OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_EXPORTER_OTLP_ENDPOINT),
     'traces': (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_EXPORTER_OTLP_ENDPOINT),
 }
-# Standard, but the SDK has no constants for these two: it reads them in its auto-configuration
-# entry point, which hathor does not use
-EXPORTER_VARIABLES = {'logs': 'OTEL_LOGS_EXPORTER', 'traces': 'OTEL_TRACES_EXPORTER'}
+EXPORTER_VARIABLES = {'logs': OTEL_LOGS_EXPORTER, 'traces': OTEL_TRACES_EXPORTER}
 TIMEOUT_VARIABLES = {'logs': OTEL_EXPORTER_OTLP_LOGS_TIMEOUT, 'traces': OTEL_EXPORTER_OTLP_TRACES_TIMEOUT}
 
 SEVERITY_NUMBERS = {logging.DEBUG: SeverityNumber.DEBUG, logging.INFO: SeverityNumber.INFO,
@@ -118,18 +118,18 @@ class OtlpLogHandler(logging.Handler):
 class ExportErrorHandler(logging.Handler):
     '''
     The OTEL SDK reports every failed export through the "opentelemetry" logger, which would print
-    a line for each batch while the collector is down. Pass the first one on to hathor's own
-    logger as a warning and drop the rest
+    a line for each batch while the collector is down. Pass the first one on as a warning, to the
+    logger given to Telemetry.attach (this module's own until then), and drop the rest
     '''
-    def __init__(self, logger):
+    def __init__(self):
         super().__init__(level=logging.WARNING)
-        self.logger = logger
-        self._reported = False
+        self.logger = LOGGER
+        self.reported = False
 
     def emit(self, record):
-        if self._reported:
+        if self.reported:
             return
-        self._reported = True
+        self.reported = True
         with suppress(Exception):
             self.logger.warning(f'Telemetry export is failing, continuing without it: {mask_log_text(scrub_error(record.getMessage()))}')
 
@@ -163,18 +163,6 @@ class _Span:
 
 NOOP_SPAN = _Span()
 
-class _Telemetry: #pylint:disable=too-few-public-methods
-    def __init__(self, tracer, tracer_provider, logger_provider):
-        self.tracer = tracer
-        self.tracer_provider = tracer_provider
-        self.logger_provider = logger_provider
-        self.log_handler = None
-        self.loggers = []
-        self.users = 0
-        self.error_handler = None
-
-_STATE = None
-
 def _resource():
     attributes = {}
     # Attributes given to Resource.create beat the environment, so only name the service
@@ -183,137 +171,149 @@ def _resource():
         attributes[SERVICE_NAME] = 'hathor'
     return Resource.create(attributes)
 
-def _build_providers():
+class Telemetry:
     '''
-    Returns (tracer_provider, logger_provider), either None when that signal is not enabled
+    The exports the environment asks for, started when the object is made (this module makes one,
+    TELEMETRY, when hathor loads). With no endpoint set it holds nothing and every method does
+    nothing. A problem starting is a logged warning, never an exception
     '''
-    resource = _resource()
-    export_millis = EXPORT_TIMEOUT * 1000
-    tracer_provider = logger_provider = None
-    if signal_enabled('traces'):
-        # shutdown_on_exit=False: the SDK's atexit hook has no bound on how long it waits.
-        # close() does the shutdown, with one
-        tracer_provider = TracerProvider(resource=resource, shutdown_on_exit=False)
-        tracer_provider.add_span_processor(BatchSpanProcessor(_span_exporter(), export_timeout_millis=export_millis))
-    if signal_enabled('logs'):
-        logger_provider = LoggerProvider(resource=resource, shutdown_on_exit=False)
-        logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter(), export_timeout_millis=export_millis))
-    return tracer_provider, logger_provider
+    def __init__(self):
+        self.tracer = None
+        self.tracer_provider = None
+        self.logger_provider = None
+        self.log_handler = None
+        self.error_handler = None
+        if not (signal_enabled('logs') or signal_enabled('traces')):
+            return
+        try:
+            self._start()
+        except Exception as error: #pylint:disable=broad-exception-caught
+            self.shutdown()
+            LOGGER.warning(f'Telemetry is set up but could not start, continuing without it: {mask_log_text(scrub_error(str(error)))}')
 
-def configure(logger: logging.Logger) -> bool:
-    '''
-    Switch on the exports the environment asks for, attaching the log export to `logger`
+    def _start(self):
+        resource = _resource()
+        export_millis = EXPORT_TIMEOUT * 1000
+        # shutdown_on_exit=False: the SDK's atexit hook has no bound on how long it waits
+        if signal_enabled('traces'):
+            self.tracer_provider = TracerProvider(resource=resource, shutdown_on_exit=False)
+            self.tracer_provider.add_span_processor(BatchSpanProcessor(_span_exporter(), export_timeout_millis=export_millis))
+            self.tracer = self.tracer_provider.get_tracer('hathor')
+        if signal_enabled('logs'):
+            self.logger_provider = LoggerProvider(resource=resource, shutdown_on_exit=False)
+            self.logger_provider.add_log_record_processor(BatchLogRecordProcessor(_log_exporter(), export_timeout_millis=export_millis))
+            self.log_handler = OtlpLogHandler(self.logger_provider.get_logger('hathor'))
+        self.error_handler = ExportErrorHandler()
+        sdk_logger = logging.getLogger('opentelemetry')
+        sdk_logger.addHandler(self.error_handler)
+        sdk_logger.propagate = False
 
-    Does nothing unless OTEL_EXPORTER_OTLP_ENDPOINT (or
-    the _LOGS_ / _TRACES_ variant) is set. Safe to call again: a second call only makes sure this
-    logger has the handler. Never raises; a problem setting up is logged as a warning
+    @property
+    def enabled(self) -> bool:
+        '''
+        Whether any export is running
+        '''
+        return self.tracer_provider is not None or self.logger_provider is not None
 
-    Every call that returns True must be matched by one shutdown(): the exporters stop when the
-    last caller has shut down, so one client closing does not cut off another that is still running
+    def attach(self, logger: logging.Logger):
+        '''
+        Export what this logger records, and report a failing export on it. Safe to repeat
+        '''
+        if self.log_handler is not None and self.log_handler not in logger.handlers:
+            logger.addHandler(self.log_handler)
+        if self.error_handler is not None and self.error_handler.logger is LOGGER:
+            self.error_handler.logger = logger
 
-    Returns: whether this caller now uses an export
-    '''
-    global _STATE #pylint:disable=global-statement
-    if not (signal_enabled('logs') or signal_enabled('traces')):
-        return False
-    try:
-        if _STATE is None:
-            _STATE = _start(logger)
-        elif _STATE.logger_provider is not None and logger not in _STATE.loggers:
-            logger.addHandler(_STATE.log_handler)
-            _STATE.loggers.append(logger)
-    except Exception as error: #pylint:disable=broad-exception-caught
-        _STATE = None
-        logger.warning(f'Telemetry is set up but could not start, continuing without it: {mask_log_text(scrub_error(str(error)))}')
-    if _STATE is None:
-        return False
-    _STATE.users += 1
-    return True
+    @contextmanager
+    def span(self, name: str, **attributes):
+        '''
+        Run a block inside a trace span; yields an object with `set(**attributes)` and `fail(error)`.
+        An exception leaving the block marks the span failed and carries on. With tracing off this
+        does nothing
 
-def _start(logger: logging.Logger) -> _Telemetry:
-    tracer_provider, logger_provider = _build_providers()
-    state = _Telemetry(tracer_provider.get_tracer('hathor') if tracer_provider else None, tracer_provider, logger_provider)
-    if logger_provider is not None:
-        state.log_handler = OtlpLogHandler(logger_provider.get_logger('hathor'))
-        logger.addHandler(state.log_handler)
-        state.loggers.append(logger)
-    sdk_logger = logging.getLogger('opentelemetry')
-    state.error_handler = ExportErrorHandler(logger)
-    sdk_logger.addHandler(state.error_handler)
-    sdk_logger.propagate = False
-    return state
+        name        : Span name
+        attributes  : Starting attributes. Text values have the credentials in any url hidden;
+                      still never pass a feed url
+        '''
+        if self.tracer is None:
+            yield NOOP_SPAN
+            return
+        with self.tracer.start_as_current_span(name, attributes=_clean_attributes(attributes),
+                                               record_exception=False, set_status_on_exception=False) as otel_span:
+            handle = _Span(otel_span)
+            try:
+                yield handle
+            except BaseException as error:
+                handle.fail(error)
+                raise
+
+    def _providers(self) -> list:
+        return [provider for provider in (self.tracer_provider, self.logger_provider) if provider is not None]
+
+    def flush(self, timeout: float = FLUSH_TIMEOUT):
+        '''
+        Send what is still queued, waiting no longer than `timeout` seconds in total. A short-lived
+        run ends before a batching exporter would send on its own. Nothing is stopped, so this can
+        be called whenever a client closes
+        '''
+        providers = self._providers()
+        def send():
+            for provider in providers:
+                with suppress(Exception):
+                    provider.force_flush(int(timeout * 1000))
+        # The SDK's own timeout does not hold while an exporter is blocked on a collector that
+        # never answers, so the wait is bounded here. The thread is left to finish on its own
+        if providers:
+            worker = threading.Thread(target=send, name='hathor-telemetry-flush', daemon=True)
+            worker.start()
+            worker.join(timeout)
+
+    @staticmethod
+    def _stop(provider):
+        with suppress(Exception):
+            provider.shutdown()
+
+    def shutdown(self, timeout: float = FLUSH_TIMEOUT):
+        '''
+        Flush, then stop the exporters and put the "opentelemetry" logger back as it was. The
+        object does nothing afterwards
+        '''
+        self.flush(timeout)
+        for provider in self._providers():
+            worker = threading.Thread(target=self._stop, args=(provider,), name='hathor-telemetry-stop', daemon=True)
+            worker.start()
+            worker.join(timeout)
+        if self.error_handler is not None:
+            sdk_logger = logging.getLogger('opentelemetry')
+            sdk_logger.removeHandler(self.error_handler)
+            sdk_logger.propagate = True
+        self.tracer = self.tracer_provider = self.logger_provider = self.log_handler = self.error_handler = None
+
+TELEMETRY = Telemetry()
 
 def enabled() -> bool:
     '''
-    Whether configure() switched anything on
+    Whether any export is running
     '''
-    return _STATE is not None
+    return TELEMETRY.enabled
 
-@contextmanager
+def attach(logger: logging.Logger):
+    '''
+    Export what this logger records
+    '''
+    TELEMETRY.attach(logger)
+
 def span(name: str, **attributes):
     '''
-    Run a block inside a trace span; yields an object with `set(**attributes)` and `fail(error)`.
-    An exception leaving the block marks the span failed and carries on. With tracing off this
-    does nothing
-
-    name        : Span name
-    attributes  : Starting attributes. Text values have the credentials in any url hidden;
-                  still never pass a feed url
+    Run a block inside a trace span, see Telemetry.span
     '''
-    if _STATE is None or _STATE.tracer is None:
-        yield NOOP_SPAN
-        return
-    try:
-        manager = _STATE.tracer.start_as_current_span(name, attributes=_clean_attributes(attributes),
-                                                      record_exception=False, set_status_on_exception=False)
-        otel_span = manager.__enter__() #pylint:disable=unnecessary-dunder-call
-    except Exception: #pylint:disable=broad-exception-caught
-        yield NOOP_SPAN
-        return
-    handle = _Span(otel_span)
-    try:
-        yield handle
-    except BaseException as error:
-        handle.fail(error)
-        _end(manager, error)
-        raise
-    _end(manager, None)
+    return TELEMETRY.span(name, **attributes)
 
-def _end(manager, error):
-    with suppress(Exception):
-        manager.__exit__(type(error) if error else None, error, error.__traceback__ if error else None)
-
-def shutdown(timeout: float = SHUTDOWN_TIMEOUT):
+def flush(timeout: float = FLUSH_TIMEOUT):
     '''
-    Give up one use of telemetry, and when it was the last, send what is still queued and stop
-    the exporters, waiting no longer than `timeout` seconds in total. A short-lived run ends before
-    a batching exporter would send on its own. Does nothing when telemetry is off
+    Send what is still queued, see Telemetry.flush
     '''
-    global _STATE #pylint:disable=global-statement
-    state = _STATE
-    if state is None:
-        return
-    state.users -= 1
-    if state.users > 0:
-        return
-    _STATE = None
-    for logger in state.loggers:
-        logger.removeHandler(state.log_handler)
-    def stop():
-        for provider in (state.tracer_provider, state.logger_provider):
-            if provider is None:
-                continue
-            with suppress(Exception):
-                provider.force_flush(int(timeout * 1000))
-                provider.shutdown()
-    worker = threading.Thread(target=stop, name='hathor-telemetry-shutdown', daemon=True)
-    started = time.monotonic()
-    worker.start()
-    worker.join(timeout)
-    if worker.is_alive() and state.error_handler is not None:
-        state.error_handler.logger.debug(f'Telemetry did not finish sending in {time.monotonic() - started:.1f}s, giving up')
-    logging.getLogger('opentelemetry').removeHandler(state.error_handler)
-    logging.getLogger('opentelemetry').propagate = True
+    TELEMETRY.flush(timeout)
 
 def exit_on_sigterm():
     '''
