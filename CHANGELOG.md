@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0] - 2026-10-28
+
+### Added
+
+- Opt-in OpenTelemetry export of logs and traces over OTLP/HTTP, enabled by the standard `OTEL_EXPORTER_OTLP_ENDPOINT` (and related `OTEL_*`) environment variables: a span per sync run, podcast, episode download and slow step, and the client's log records, masked like stdout. Flushed when the client closes with a short bound, never changes a sync's result, and `SIGTERM` ends open spans as failed so a run killed at its deadline shows where it was (#295)
+
 ## [2.14.4] - 2026-10-23
 
 ### Changed

@@ -37,6 +37,15 @@ def test_a_connection_string_with_no_password_and_sqlite_are_unchanged():
     for line in ('database sqlite:////data/hathor.db', 'database postgresql://db.example/hathor'):
         assert utils.mask_log_text(line) == line
 
+def test_a_connection_error_names_the_request_by_path_and_query_and_that_is_masked():
+    # urllib3 words it this way, with no scheme for the url masker to find
+    line = ("HTTPSConnectionPool(host='www.patreon.com', port=443): Max retries exceeded with url: "
+            "/rss/someshow?auth=SECRETKEY&show=123 (Caused by NewConnectionError('boom'))")
+    masked = utils.mask_log_text(line)
+    assert masked == ("HTTPSConnectionPool(host='www.patreon.com', port=443): Max retries exceeded with url: "
+                      "/rss/someshow?<hidden> (Caused by NewConnectionError('boom'))")
+    assert utils.mask_log_text('Max retries exceeded with url: /rss/someshow (Caused by X)') == 'Max retries exceeded with url: /rss/someshow (Caused by X)'
+
 def test_text_without_urls_and_urls_without_secrets_are_unchanged():
     for line in ('Syncing episodes of podcast 3 (Some Show)', 'fetch https://example.com/feed.xml ok', ''):
         assert utils.mask_log_text(line) == line

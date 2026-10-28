@@ -92,6 +92,54 @@ and so is the password of a database connection string. A secret in a URL's **pa
 the rest of the path and is not hidden. This applies to the logger hathor builds from the `logging`
 section; a program that hands `HathorClient` its own `logger` gets the formatting it chose.
 
+#### Telemetry (OpenTelemetry)
+
+hathor can send its logs and traces to an OTLP collector. It is off unless an endpoint is set, and it is
+configured with the standard `OTEL_*` environment variables, so nothing is added to the config file. They are
+read once, when hathor loads, so they must be set before the process starts. With none set, behaviour is
+unchanged.
+
+| Variable | Effect |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector base URL, such as `http://otel-collector:4318`. Turns logs and traces on |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Per signal endpoints (the full URL, `.../v1/logs`). Setting only one turns on only that signal |
+| `OTEL_LOGS_EXPORTER=none` / `OTEL_TRACES_EXPORTER=none` | Turn one signal off |
+| `OTEL_SDK_DISABLED=true` | Turn everything off |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | Name the service (default `hathor`) and add resource attributes |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_TIMEOUT`, `OTEL_EXPORTER_OTLP_CERTIFICATE` | Passed to the exporter as usual |
+
+Only the OTLP over HTTP (`http/protobuf`) protocol is supported, so use the collector's HTTP port (4318),
+not gRPC (4317).
+
+**Logs.** The records of the client's logger, at the level its `logging` section sets, are exported as well as
+written to stdout or the log file. They are masked the same way as that output (see
+[What is logged](#what-is-logged)): URLs lose their query string, fragment and `user:password@`, in the
+message and in a traceback. Nothing else on the record, such as extra fields, is exported.
+
+**Traces.** Every `podcast sync`, `episode sync` and `episode download` run is a span, with a child for each
+podcast (`hathor.podcast.sync`: `podcast_id`, `podcast_name`, `archive_type`, `new_episodes`) and each
+episode download (`hathor.episode.download`: `episode_id`, `podcast_id`, `archive_type`), and below those
+the steps that can take time: `hathor.broadcast_update` (listing a feed or channel), `hathor.archive_download`,
+`hathor.tag_update` and `hathor.cleanup`. Every HTTP call made with `requests` (feeds, artwork, the YouTube and
+Twitch checks) is a span too, from the standard `opentelemetry-instrumentation-requests`. A step that raises
+is marked as an error with the exception recorded. Feed URLs are never span attributes, and every URL in a
+span (the `requests` ones included, and the exception messages) has its query string, fragment and
+`user:password@` hidden before it leaves the process. Calls made by `yt-dlp`, `feedparser` and the Google API
+client do not use `requests`, so only the step around them is a span. Database statements are spans as well
+(`opentelemetry-instrumentation-sqlalchemy`: the statement text with its parameters left as placeholders), so a
+sync that finds new episodes produces a span for each query it makes. Drop the ones you do not want in the
+collector.
+
+A span is exported when it ends, so a step that is stuck forever is not visible until it does end. When the
+process receives `SIGTERM` (a Kubernetes job past its `activeDeadlineSeconds`) hathor lets the run unwind, which
+ends the open spans, so the step it was in is exported with how long it ran. A `SIGKILL` cannot be caught.
+
+**Never in the way.** Exports are batched and sent from a background thread, each request limited to 3 seconds
+(`OTEL_EXPORTER_OTLP_TIMEOUT` overrides it). A collector that is down, slow or misconfigured does not change a
+sync's result or exit code. What is still queued is sent as the process exits, which a collector that does not
+answer can delay by a few seconds (the request limit). A problem setting telemetry up is one warning and hathor
+runs without it.
+
 #### yt-dlp Options
 
 `ytdlp_options` is passed through to yt-dlp when downloading a youtube or twitch archive.
