@@ -92,6 +92,47 @@ and so is the password of a database connection string. A secret in a URL's **pa
 the rest of the path and is not hidden. This applies to the logger hathor builds from the `logging`
 section; a program that hands `HathorClient` its own `logger` gets the formatting it chose.
 
+#### Telemetry (OpenTelemetry)
+
+hathor can send its logs and traces to an OTLP collector. It is off unless an endpoint is set, and it is
+configured with the standard `OTEL_*` environment variables, so nothing is added to the config file. With
+none set, behaviour is unchanged and nothing from OpenTelemetry is even imported.
+
+| Variable | Effect |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector base URL, such as `http://otel-collector:4318`. Turns logs and traces on |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Per signal endpoints (the full URL, `.../v1/logs`). Setting only one turns on only that signal |
+| `OTEL_LOGS_EXPORTER=none` / `OTEL_TRACES_EXPORTER=none` | Turn one signal off |
+| `OTEL_SDK_DISABLED=true` | Turn everything off |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | Name the service (default `hathor`) and add resource attributes |
+| `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_EXPORTER_OTLP_TIMEOUT`, `OTEL_EXPORTER_OTLP_CERTIFICATE` | Passed to the exporter as usual |
+
+Only the OTLP over HTTP (`http/protobuf`) protocol is supported, so use the collector's HTTP port (4318),
+not gRPC (4317).
+
+**Logs.** The records of the client's logger, at the level its `logging` section sets, are exported as well as
+written to stdout or the log file. They are masked the same way as that output (see
+[What is logged](#what-is-logged)): URLs lose their query string, fragment and `user:password@`, in the
+message and in a traceback. Nothing else on the record, such as extra fields, is exported.
+
+**Traces.** Every `podcast sync`, `episode sync` and `episode download` run is a span, with a child for each
+podcast (`hathor.podcast.sync`: `podcast_id`, `podcast_name`, `archive_type`, `new_episodes`) and each
+episode download (`hathor.episode.download`: `episode_id`, `podcast_id`, `archive_type`), and below those
+the steps that can take time: `hathor.broadcast_update` (listing a feed or channel), `hathor.archive_download`,
+`hathor.tag_update` and `hathor.cleanup`. A failed step is marked as an error with the same scrubbed message
+the sync failure report uses. Feed URLs are never span attributes.
+
+A span is exported when it ends, so a step that is stuck forever is not visible until it does end. When the
+process receives `SIGTERM` (a Kubernetes job past its `activeDeadlineSeconds`) hathor ends its open spans as
+failed and exits, so the step it was in is exported with how long it ran. A `SIGKILL` cannot be caught.
+
+**Never in the way.** Exports are batched and sent from a background thread, each request limited to 3 seconds
+(`OTEL_EXPORTER_OTLP_TIMEOUT` overrides it). A collector that is down, slow or misconfigured does not change a
+sync's result or exit code; the first failed export is logged as one warning and the rest are dropped. When
+the client closes (the CLI does this on exit), what is still queued is sent, waiting at most 8 seconds in
+total. Python code that uses `HathorClient` directly should use it as a context manager or call `close()`
+for the same flush.
+
 #### yt-dlp Options
 
 `ytdlp_options` is passed through to yt-dlp when downloading a youtube or twitch archive.

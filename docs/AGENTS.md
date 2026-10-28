@@ -46,6 +46,16 @@ Separate CLI (`audio-tool`) for direct audio file tag operations.
 **`hathor/output.py`**
 Shared `render_output(data, as_json)` used by both CLIs. Every command result flows through it: `--json` (stored in `ctx.obj['json']`, set by each group's root command) prints raw JSON via `json.dumps`; otherwise it renders a `dappertable` table -- columns from dict keys for a list of dicts, a `key`/`value` table for a single dict, one line per item for a list of scalars, and a bare `str()` for anything else.
 
+### Telemetry
+
+`hathor/telemetry.py`: opt-in OTLP logs and traces from the standard `OTEL_*` variables (http/protobuf only). `HathorClient.__init__` calls `telemetry.configure(self.logger)`; `close()` calls `telemetry.shutdown()`, which flushes with a bound in a daemon thread, and the CLI registers `client.close` with `ctx.call_on_close` so a short run sends what it has. Rules that are easy to break:
+
+- **Nothing from `opentelemetry` is imported unless an endpoint is set** (the imports inside functions are deliberate; `tests/test_telemetry.py` checks in a subprocess). `span()` is a no-op yielding `NOOP_SPAN` when off, so call sites need no `if`.
+- **Telemetry must not fail or slow a sync**: every call into the SDK is wrapped (`suppress(Exception)`), providers are built with `shutdown_on_exit=False` (the SDK's atexit hook is unbounded), and `ExportErrorHandler` turns the SDK's per-batch error logs into one warning.
+- **Masking**: `OtlpLogHandler` is our own (the SDK's `LoggingHandler` is deprecated, and exports the raw `exc_info` and every extra field); it sends only `mask_log_text(message)` and a masked traceback. Span attributes and error descriptions go through `mask_log_text(scrub_error(...))` in `_clean_attributes` / `_Span.fail`. Never put a `broadcast_id` or download URL in an attribute: an rss `broadcast_id` is the feed URL.
+- Spans are named `hathor.*`, one per public run (`episode_sync`, `podcast_sync`, `episode_download`), per podcast / episode, and per slow step. A span exports when it ends, so `exit_on_sigterm()` (installed by the CLI when telemetry is on) turns SIGTERM into `SystemExit` to end the open ones.
+- Tests swap `_span_exporter` / `_log_exporter` for the SDK's in-memory exporters; `test_the_real_exporters_deliver...` runs the real ones against a local HTTP server.
+
 ### Sync failure handling
 
 `episode_sync`, `podcast_sync` and `episode_download` isolate failures. The web sync of each podcast runs in `_episode_sync_podcast` and each download in `_episode_download_one`; both are called inside a `try/except Exception` that calls `_record_failure` (logs, **rolls the session back**, appends to a `failures` list) and carries on. The public method raises `SyncFailure` once, at the end, via `_raise_failures`. Raising only after the decorated helper returns means its plugin hooks still run. The private helpers take `failures`; `None` makes `_record_failure` re-raise, i.e. the old fail-fast behaviour. Error text goes through `utils.scrub_error` (URL query strings may hold credentials). Query objects are materialized with `list()` before iterating, since a rollback must not happen under a live cursor. Deletes (`__episode_delete_file_input`) are not isolated.

@@ -25,6 +25,7 @@ from hathor.database.migrate import migrate
 from hathor.database.tables import Podcast
 from hathor.database.tables import PodcastEpisode, PodcastTitleFilter
 from hathor import feeds
+from hathor import telemetry
 from hathor.exc import AudioFileException, EpisodeNotReady, HathorException, SyncFailure
 from hathor.podcast.archive import ARCHIVE_TYPES, VALID_ARCHIVE_KEYS
 from hathor import utils
@@ -166,6 +167,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             self.podcast_directory = Path(podcast_directory)
         self.datetime_output_format = datetime_output_format
         self.logger = logger or utils.setup_logger('Hathor')
+        # Opt-in, from the OTEL_* environment: also exports this logger's records
+        self._telemetry = telemetry.configure(self.logger)
 
         # Default to in memory db
         # Mostly for tests
@@ -198,7 +201,7 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
 
     def close(self):
         '''
-        Close database session and engine connections
+        Close database session and engine connections, and send any telemetry still queued
 
         Safe on a client whose __init__ failed before it got that far: __del__ calls this, and
         an AttributeError there is printed on top of the real error and hides it
@@ -209,6 +212,10 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         engine = getattr(self, 'engine', None)
         if engine is not None:
             engine.dispose()
+        # Only the client that switched it on gives it up, and only once: __del__ calls this again
+        if getattr(self, '_telemetry', False):
+            self._telemetry = False
+            telemetry.shutdown()
 
     def __enter__(self):
         return self
@@ -632,9 +639,11 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         listing what failed (carrying the new episodes as `results`) is raised at the end
         '''
         failures = []
-        new_episodes = self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
-                                                   max_episode_sync=max_episode_sync, failures=failures)
-        self._raise_failures(failures, new_episodes)
+        with telemetry.span('hathor.episode_sync') as run:
+            new_episodes = self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
+                                                       max_episode_sync=max_episode_sync, failures=failures)
+            run.set(new_episodes=len(new_episodes), failures=len(failures))
+            self._raise_failures(failures, new_episodes)
         return new_episodes
 
     @run_plugins
@@ -660,7 +669,10 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             # stopped in, without turning on DEBUG
             self.logger.info(f'Syncing episodes of podcast {podcast_id} ({podcast_name})')
             try:
-                found = self._episode_sync_podcast(podcast, max_episode_sync)
+                with telemetry.span('hathor.podcast.sync', podcast_id=podcast_id, podcast_name=podcast_name,
+                                    archive_type=podcast.archive_type, stage='episode sync') as podcast_span:
+                    found = self._episode_sync_podcast(podcast, max_episode_sync)
+                    podcast_span.set(new_episodes=len(found))
                 new_episodes.extend(found)
                 self.logger.info(f'Podcast {podcast_id} ({podcast_name}): {len(found)} new episodes')
             except Exception as error: #pylint:disable=broad-exception-caught
@@ -706,11 +718,14 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         else:
             max_results = max_episode_sync
 
-        current_episodes = manager.broadcast_update(podcast.broadcast_id,
-                                                    max_results=max_results,
-                                                    filters=compiled_filters,
-                                                    known_urls=known_urls,
-                                                    backfill=backfill)
+        with telemetry.span('hathor.broadcast_update', podcast_id=podcast.id, archive_type=podcast.archive_type,
+                            backfill=backfill) as listing:
+            current_episodes = manager.broadcast_update(podcast.broadcast_id,
+                                                        max_results=max_results,
+                                                        filters=compiled_filters,
+                                                        known_urls=known_urls,
+                                                        backfill=backfill)
+            listing.set(episodes_found=len(current_episodes))
         for episode in current_episodes:
             episode_processed_url = episode['download_link']
             # Patreon keeps the same basic url but changes up the query params
@@ -868,8 +883,10 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             filter(PodcastEpisode.podcast_id == Podcast.id).\
             filter(PodcastEpisode.id.in_(episode_input))
         failures = []
-        downloaded = self.__episode_download_input(query, failures)
-        self._raise_failures(failures, downloaded)
+        with telemetry.span('hathor.episode_download', episodes_requested=len(episode_input)) as run:
+            downloaded = self.__episode_download_input(query, failures)
+            run.set(episodes_downloaded=len(downloaded), failures=len(failures))
+            self._raise_failures(failures, downloaded)
         return downloaded
 
     @run_plugins
@@ -883,7 +900,11 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             # Read these now: after a rollback the rows have to be reloaded
             episode_id, podcast_id, podcast_name = episode.id, podcast.id, podcast.name
             try:
-                downloaded = self._episode_download_one(episode, podcast)
+                with telemetry.span('hathor.episode.download', episode_id=episode_id, podcast_id=podcast_id,
+                                    podcast_name=podcast_name, archive_type=podcast.archive_type,
+                                    stage='download') as download_span:
+                    downloaded = self._episode_download_one(episode, podcast)
+                    download_span.set(downloaded=downloaded is not None)
             except Exception as error: #pylint:disable=broad-exception-caught
                 self._record_failure(failures, 'download', podcast_id, podcast_name, error, episode_id=episode_id)
                 continue
@@ -907,8 +928,9 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         episode_path_prefix = build_episode_path(episode, podcast)
 
         try:
-            output_path, download_size = manager.episode_download(episode.download_url,
-                                                                  episode_path_prefix)
+            with telemetry.span('hathor.archive_download', episode_id=episode.id, archive_type=podcast.archive_type):
+                output_path, download_size = manager.episode_download(episode.download_url,
+                                                                      episode_path_prefix)
         except EpisodeNotReady as error:
             self.logger.debug(f'Skipping episode: {episode.id}, not ready for download: {str(error)}')
             return None
@@ -932,7 +954,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
             'date' : episode.date.strftime(self.datetime_output_format),
         }
         try:
-            tags_update(output_path, audio_tags)
+            with telemetry.span('hathor.tag_update', episode_id=episode.id):
+                tags_update(output_path, audio_tags)
             self.logger.debug(f'Updated database audio tags for episode {episode.id}')
         except AudioFileException as error:
             self.logger.warning(f'Unable to update tags on file {str(output_path)} : {str(error)}')
@@ -996,13 +1019,16 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
         Returns: True
         '''
         failures = []
-        if sync_web_episodes:
-            self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
-                                        automatic_sync=False, failures=failures)
-        # Download even when some podcast failed to sync: the others still have episodes to get
-        if download_episodes:
-            self._podcast_download_episodes(include_podcasts, exclude_podcasts, failures=failures)
-        self._raise_failures(failures)
+        with telemetry.span('hathor.podcast_sync', sync_web_episodes=sync_web_episodes,
+                            download_episodes=download_episodes) as run:
+            if sync_web_episodes:
+                self.__episode_sync_cluders(include_podcasts, exclude_podcasts,
+                                            automatic_sync=False, failures=failures)
+            # Download even when some podcast failed to sync: the others still have episodes to get
+            if download_episodes:
+                self._podcast_download_episodes(include_podcasts, exclude_podcasts, failures=failures)
+            run.set(failures=len(failures))
+            self._raise_failures(failures)
         return True
 
     @run_plugins
@@ -1063,7 +1089,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                     delete_episodes.append(episode)
         if delete_episodes:
             self.logger.debug(f'Episodes {[i.id for i in delete_episodes]} set for deletion for max allowed from file sync')
-            self.__episode_delete_file_input(delete_episodes)
+            with telemetry.span('hathor.cleanup', episodes=len(delete_episodes)):
+                self.__episode_delete_file_input(delete_episodes)
 
     @run_plugins
     def episode_index(self, dry_run: bool = False) -> dict:

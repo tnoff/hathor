@@ -8,6 +8,7 @@ from hathor.client import HathorClient
 from hathor.exc import CliException
 from hathor.output import render_output
 from hathor.podcast.archive import VALID_ARCHIVE_KEYS
+from hathor import telemetry
 from hathor.utils import mask_config_secrets, mask_url_secrets, setup_logger
 
 HOME_DIR = Path.home()
@@ -79,6 +80,10 @@ def cli(ctx, config, as_json):
         logger = setup_logger('hathor', **ctx.obj['config']['logging'])
         config_copy['logger'] = logger
     ctx.obj['client'] = HathorClient(**config_copy)
+    # A short-lived run has to send its telemetry before the process ends
+    ctx.call_on_close(ctx.obj['client'].close)
+    if telemetry.enabled():
+        telemetry.exit_on_sigterm()
 
 @cli.command(name='dump-config')
 @click.option('--show-secrets', is_flag=True, default=False,
