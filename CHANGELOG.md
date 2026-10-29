@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.1] - 2026-10-29
+
+### Changed
+
+- Feed fetches retry twice, 5 seconds apart, after a timeout, a connection error or an HTTP 5xx, so a feed host that stalls once no longer fails the sync; a 4xx is never retried. The per-attempt timeout is tighter (10s connect, 30s read), `RSS_FEED_TOTAL_TIMEOUT` still caps all attempts together, and each retry is logged at WARNING (#306)
+
 ## [2.15.0] - 2026-10-28
 
 ### Added

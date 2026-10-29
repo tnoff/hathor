@@ -7,14 +7,14 @@ from tempfile import TemporaryDirectory
 from time import struct_time
 
 import pytest
-from requests import ReadTimeout
+from requests import ConnectionError as RequestsConnectionError, ReadTimeout
 from requests.exceptions import ChunkedEncodingError
 from yt_dlp.utils import DownloadError
 
 from hathor.client import HathorClient
 from hathor.exc import EpisodeNotReady, HathorException, FunctionUndefined
 from hathor.podcast.archive import ArchiveInterface, RSSManager, TwitchManager
-from hathor.podcast.archive import RSS_FEED_REQUEST_TIMEOUT, RSS_FEED_TOTAL_TIMEOUT, curl_download, extract_twitch_video_id, fetch_feed
+from hathor.podcast.archive import RSS_FEED_REQUEST_TIMEOUT, RSS_FEED_RETRIES, RSS_FEED_RETRY_BACKOFF, RSS_FEED_TOTAL_TIMEOUT, curl_download, extract_twitch_video_id, fetch_feed
 from hathor.podcast.archive import remove_ytdlp_intermediates
 from hathor.podcast.archive import twitch_timestamp, verify_title_filters
 
@@ -153,19 +153,68 @@ def test_fetch_feed(mocker):
     assert get_mock.call_args.kwargs['headers']['User-Agent'].startswith('feedparser/')
 
 def test_fetch_feed_timeout(mocker):
-    mocker.patch('hathor.podcast.archive.get', side_effect=ReadTimeout('read timed out'))
+    sleep_mock = mocker.patch('hathor.podcast.archive.sleep')
+    get_mock = mocker.patch('hathor.podcast.archive.get', side_effect=ReadTimeout('read timed out'))
     with pytest.raises(HathorException) as error:
         fetch_feed('https://example.foo/feed.xml')
     assert 'Unable to fetch rss feed https://example.foo/feed.xml' in str(error.value)
     assert 'read timed out' in str(error.value)
+    assert get_mock.call_count == RSS_FEED_RETRIES + 1
+    assert sleep_mock.call_count == RSS_FEED_RETRIES
+    sleep_mock.assert_called_with(RSS_FEED_RETRY_BACKOFF)
+
+def test_fetch_feed_retry_then_success(mocker, caplog):
+    sleep_mock = mocker.patch('hathor.podcast.archive.sleep')
+    get_mock = mocker.patch('hathor.podcast.archive.get',
+                            side_effect=[ReadTimeout('read timed out'), RequestsConnectionError('reset'), FeedResponse()])
+    with caplog.at_level(logging.WARNING):
+        data = fetch_feed('https://example.foo/feed.xml')
+    assert data['entries'][0]['title'] == 'e'
+    assert get_mock.call_count == 3
+    assert sleep_mock.call_count == 2
+    assert 'read timed out, retrying' in caplog.text
+    assert 'attempt 2 of 2' in caplog.text
+
+def test_fetch_feed_retry_5xx(mocker):
+    mocker.patch('hathor.podcast.archive.sleep')
+    bad = FeedResponse(status_code=502)
+    mocker.patch('hathor.podcast.archive.get', side_effect=[bad, FeedResponse()])
+    data = fetch_feed('https://example.foo/feed.xml')
+    assert data['entries'][0]['title'] == 'e'
+    assert bad.closed
 
 def test_fetch_feed_http_error(mocker):
+    sleep_mock = mocker.patch('hathor.podcast.archive.sleep')
     response = FeedResponse(status_code=503)
-    mocker.patch('hathor.podcast.archive.get', return_value=response)
+    get_mock = mocker.patch('hathor.podcast.archive.get', return_value=response)
     with pytest.raises(HathorException) as error:
         fetch_feed('https://example.foo/feed.xml')
     assert 'status code: 503' in str(error.value)
     assert response.closed
+    assert get_mock.call_count == RSS_FEED_RETRIES + 1
+    assert sleep_mock.call_count == RSS_FEED_RETRIES
+
+def test_fetch_feed_no_retry_4xx(mocker):
+    sleep_mock = mocker.patch('hathor.podcast.archive.sleep')
+    response = FeedResponse(status_code=404)
+    get_mock = mocker.patch('hathor.podcast.archive.get', return_value=response)
+    with pytest.raises(HathorException) as error:
+        fetch_feed('https://example.foo/feed.xml')
+    assert 'status code: 404' in str(error.value)
+    assert response.closed
+    assert get_mock.call_count == 1
+    sleep_mock.assert_not_called()
+
+def test_fetch_feed_retry_stops_at_deadline(mocker):
+    # Not enough of the total deadline left for another backoff, so fail rather than overrun it
+    sleep_mock = mocker.patch('hathor.podcast.archive.sleep')
+    get_mock = mocker.patch('hathor.podcast.archive.get', side_effect=ReadTimeout('read timed out'))
+    mocker.patch('hathor.podcast.archive.monotonic', side_effect=[0, RSS_FEED_TOTAL_TIMEOUT - 1])
+    with pytest.raises(HathorException) as error:
+        fetch_feed('https://example.foo/feed.xml')
+    assert 'read timed out' in str(error.value)
+    assert get_mock.call_count == 1
+    sleep_mock.assert_not_called()
 
 def test_fetch_feed_total_timeout(mocker):
     # A host that keeps sending bytes never trips the per read timeout, only the overall deadline
@@ -178,6 +227,7 @@ def test_fetch_feed_total_timeout(mocker):
     assert response.closed
 
 def test_fetch_feed_dropped_midway(mocker):
+    mocker.patch('hathor.podcast.archive.sleep')
     response = FeedResponse(error=ChunkedEncodingError('connection broken'))
     mocker.patch('hathor.podcast.archive.get', return_value=response)
     with pytest.raises(HathorException) as error:
