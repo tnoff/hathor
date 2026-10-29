@@ -1,9 +1,9 @@
 import re
 from datetime import datetime
-from logging import RootLogger
+from logging import RootLogger, getLogger
 from mimetypes import guess_extension, guess_type
 from pathlib import Path
-from time import mktime, monotonic
+from time import mktime, monotonic, sleep
 
 from feedparser import USER_AGENT, parse
 from feedparser.http import ACCEPT_HEADER
@@ -18,6 +18,8 @@ from yt_dlp.utils import DownloadError
 from hathor.exc import EpisodeNotReady, FunctionUndefined, HathorException
 from hathor import utils
 
+feed_logger = getLogger(__name__)
+
 _YOUTUBE_VIDEO_ID_RE = re.compile(
     r'(?:youtube\.com/(?:watch\?(?:[^ ]*&)?v=|live/|embed/|shorts/)|youtu\.be/)'
     r'(?P<id>[A-Za-z0-9_-]{11})'
@@ -30,7 +32,11 @@ TWITCH_API_URL = 'https://api.twitch.tv/helix'
 TWITCH_REQUEST_TIMEOUT = 30
 # feedparser fetches with urllib and no timeout, so a feed host that accepts the
 # connection and then goes quiet blocks the whole sync forever
-RSS_FEED_REQUEST_TIMEOUT = 60
+RSS_FEED_REQUEST_TIMEOUT = (10, 30)
+# Extra attempts after a timeout, a connection error or an HTTP 5xx, never after a 4xx. A feed
+# normally answers in well under a second, so a stall is a hung backend that a fresh request clears
+RSS_FEED_RETRIES = 2
+RSS_FEED_RETRY_BACKOFF = 5
 # Ceiling on the whole feed download: the request timeout above only bounds the gap between bytes
 RSS_FEED_TOTAL_TIMEOUT = 300
 RSS_FEED_CHUNK_SIZE = 65536
@@ -171,16 +177,41 @@ def curl_download(episode_url: str, output_path: Path) -> int:
 def fetch_feed(feed_url: str):
     '''
     Fetch and parse an rss feed, giving up on a host that stops answering
-    or keeps trickling bytes for longer than RSS_FEED_TOTAL_TIMEOUT
+    or keeps trickling bytes for longer than RSS_FEED_TOTAL_TIMEOUT. A timeout,
+    connection error or HTTP 5xx is retried up to RSS_FEED_RETRIES times, all
+    within the same total deadline
     feed_url : URL of the feed
     '''
     deadline = monotonic() + RSS_FEED_TOTAL_TIMEOUT
+    attempt = 0
+    while True:
+        try:
+            return _fetch_feed_once(feed_url, deadline)
+        except _RetryableFeedError as error:
+            attempt += 1
+            if attempt > RSS_FEED_RETRIES or monotonic() + RSS_FEED_RETRY_BACKOFF > deadline:
+                raise HathorException(str(error)) from error.__cause__
+            feed_logger.warning(f'{error}, retrying in {RSS_FEED_RETRY_BACKOFF} seconds '
+                                f'(attempt {attempt} of {RSS_FEED_RETRIES})')
+            sleep(RSS_FEED_RETRY_BACKOFF)
+
+class _RetryableFeedError(Exception):
+    '''A failed feed fetch that a fresh request may clear'''
+
+def _fetch_feed_once(feed_url: str, deadline: float):
+    '''
+    Single attempt at fetching and parsing an rss feed
+    feed_url : URL of the feed
+    deadline : monotonic time after which the download is abandoned
+    '''
     try:
         req = get(feed_url, allow_redirects=True, timeout=RSS_FEED_REQUEST_TIMEOUT, stream=True,
                   headers={'User-Agent': USER_AGENT, 'Accept': ACCEPT_HEADER})
     except RequestException as error:
-        raise HathorException(f'Unable to fetch rss feed {feed_url}: {error}') from error
+        raise _RetryableFeedError(f'Unable to fetch rss feed {feed_url}: {error}') from error
     try:
+        if req.status_code >= 500:
+            raise _RetryableFeedError(f'Unable to fetch rss feed {feed_url}, status code: {req.status_code}')
         if not req.ok:
             raise HathorException(f'Unable to fetch rss feed {feed_url}, status code: {req.status_code}')
         chunks = []
@@ -191,7 +222,7 @@ def fetch_feed(feed_url: str):
                     raise HathorException(f'Unable to fetch rss feed {feed_url}: '
                                           f'not finished after {RSS_FEED_TOTAL_TIMEOUT} seconds')
         except RequestException as error:
-            raise HathorException(f'Unable to fetch rss feed {feed_url}: {error}') from error
+            raise _RetryableFeedError(f'Unable to fetch rss feed {feed_url}: {error}') from error
     finally:
         req.close()
     # Give feedparser the url it would have fetched itself, so it has the same base for the feed
