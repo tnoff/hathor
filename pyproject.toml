@@ -32,7 +32,7 @@ dependencies = [
     # [asyncio] is only for greenlet: opentelemetry-instrumentation-sqlalchemy wraps
     # sqlalchemy.ext.asyncio whether or not an async engine is ever made, and that import
     # fails without it. hathor itself is sync
-    "SQLAlchemy[asyncio]==2.1.6",
+    "SQLAlchemy[asyncio]==2.1.8",
     "validators==0.36.0",
     "yt-dlp==2026.10.26",
 ]
