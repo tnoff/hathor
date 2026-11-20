@@ -17,7 +17,7 @@ dependencies = [
     # the same way discord-bot pins it.
     "dappertable @ https://github.com/tnoff/dappertable/archive/refs/tags/v1.1.8.tar.gz",
     "feedparser==6.0.14",
-    "google-api-python-client==2.201.0",
+    "google-api-python-client==2.202.0",
     "mutagen==1.48.1",
     # OTLP export is opt-in: nothing is set up unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
     # The http exporter is used over grpc to stay pure python (no grpcio wheels to track)
