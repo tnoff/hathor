@@ -1,0 +1,1 @@
+A YouTube episode whose download fails with a live or premiere error from yt-dlp (such as "This live event has ended") is now skipped and retried on the next sync instead of failing the whole sync job. The `videos.list` liveness check can miss a finished live whose VOD is not downloadable yet, so the job failed every hour until it was.
