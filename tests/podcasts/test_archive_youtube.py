@@ -542,6 +542,21 @@ def test_youtube_broadcast_download_error(mocker):
     with pytest.raises(HathorException, match='Error downloading youtube url: foo, issue downloading file'):
         manager.episode_download('foo', 'bar')
 
+class MockYoutubeLiveEndedError():
+    def extract_info(self, *args, **kwargs):
+        raise DownloadError('ERROR: [youtube] abc: This live event has ended.')
+
+@contextmanager
+def mock_youtube_live_ended_error(_options):
+    yield MockYoutubeLiveEndedError()
+
+def test_youtube_broadcast_download_live_ended_is_not_ready(mocker, tmp_path):
+    # The api check can miss a finished live whose VOD is not downloadable yet; retry on a later sync
+    manager = youtube_manager(mocker)
+    mocker.patch('hathor.podcast.archive.YoutubeDL', side_effect=mock_youtube_live_ended_error)
+    with pytest.raises(EpisodeNotReady, match='live event has ended'):
+        manager.episode_download('foo', str(tmp_path / 'ep'))
+
 class MockYoutubePostprocessingError():
     def extract_info(self, *args, **kwargs):
         raise DownloadError('ERROR: Postprocessing: Error opening input files: Invalid data found')
