@@ -1,0 +1,1 @@
+Bumped yt-dlp to v2026.11.23. The previous version failed to solve the YouTube n challenge in the deno runtime (`a.addOnDisposeCallback is not a function`), so syncs logged a warning on every download and "some formats may be missing". Checked against a regular video: the solver now runs without the error.
