@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.8] - 2026-11-24
+
+### Changed
+
+- A YouTube episode whose download fails with a live or premiere error from yt-dlp (such as "This live event has ended") is now skipped and retried on the next sync instead of failing the whole sync job. The `videos.list` liveness check can miss a finished live whose VOD is not downloadable yet, so the job failed every hour until it was.
+
 ## [2.15.7] - 2026-11-20
 
 ### Changed
