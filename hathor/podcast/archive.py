@@ -27,6 +27,16 @@ _YOUTUBE_VIDEO_ID_RE = re.compile(
 
 _TWITCH_VIDEO_ID_RE = re.compile(r'twitch\.tv/videos/(?P<id>\d+)')
 
+# yt-dlp errors (lowercase substrings) that mean the video exists but is not
+# downloadable yet. The liveness check can miss these, e.g. a finished live whose
+# VOD the api already reports with a duration, so the download itself is the backstop.
+YOUTUBE_NOT_READY_MESSAGES = (
+    'live event has ended',
+    'live event will begin',
+    'premieres in',
+    'premiere will begin',
+)
+
 TWITCH_OAUTH_URL = 'https://id.twitch.tv/oauth2/token'
 TWITCH_API_URL = 'https://api.twitch.tv/helix'
 TWITCH_REQUEST_TIMEOUT = 30
@@ -620,6 +630,9 @@ class YoutubeManager(ArchiveInterface):
                 file_path = Path(data['requested_downloads'][0]['filepath'])
                 return file_path, file_path.stat().st_size
         except DownloadError as e:
+            if any(message in str(e).lower() for message in YOUTUBE_NOT_READY_MESSAGES):
+                self.logger.info(f'Deferring {download_url}: yt-dlp reports it is not ready: {str(e)}')
+                raise EpisodeNotReady(f'Episode not ready for download: {download_url}, {str(e)}') from e
             if 'Postprocessing' in str(e):
                 remove_ytdlp_intermediates(output_prefix, self.logger)
             raise HathorException(f'Error downloading youtube url: {download_url}, {str(e)}') from e
