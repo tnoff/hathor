@@ -178,12 +178,12 @@ To make the file:
    of the standard "cookies.txt" add-ons). Export while on youtube.com, in
    Netscape format.
 3. Close the private window without signing out.
-4. Keep only the YouTube and Google cookies. An export normally holds cookies for
+4. Keep only the cookies for `youtube.com`, `google.com` and `accounts.google.com`. An export normally holds cookies for
    every site you are signed in to, and the file is read on every download:
    ```bash
    umask 077
    awk -F'\t' '/^#/ && !/^#HttpOnly_/ {print; next}
-               {d=$1; sub(/^#HttpOnly_/,"",d); if (d ~ /(^|\.)(youtube|google)\.com$/) print}' \
+               {d=$1; sub(/^#HttpOnly_/,"",d); if (d ~ /(^|\.)youtube\.com$|^\.?(accounts\.)?google\.com$/) print}' \
      ~/Downloads/cookies.txt > ~/.hathor/youtube-cookies.txt
    ```
 5. Delete the original export, which still holds the other sites.
