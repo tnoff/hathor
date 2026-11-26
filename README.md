@@ -157,6 +157,47 @@ you're not a bot`, and from then on nothing downloads until the client backs off
 download. Raise them if you are still being throttled; lower them at your own
 risk.
 
+#### YouTube Cookies
+
+Some videos only download for a signed in account. The usual sign is a failed
+download with `Sign in to confirm your age` (age restricted videos) or `Sign in
+to confirm you're not a bot`. Give yt-dlp your YouTube cookies with the
+`cookiefile` option:
+
+```yaml
+hathor:
+  ytdlp_options:
+    cookiefile: /home/user/.hathor/youtube-cookies.txt
+```
+
+To make the file:
+
+1. Sign in to youtube.com in a private window, so the browser does not rotate
+   the session out from under the exported cookies later.
+2. Export the cookies with a `cookies.txt` browser extension (for Firefox, any
+   of the standard "cookies.txt" add-ons). Export while on youtube.com, in
+   Netscape format.
+3. Close the private window without signing out.
+4. Keep only the cookies for `youtube.com`, `google.com` and `accounts.google.com`. An export normally holds cookies for
+   every site you are signed in to, and the file is read on every download:
+   ```bash
+   umask 077
+   awk -F'\t' '/^#/ && !/^#HttpOnly_/ {print; next}
+               {d=$1; sub(/^#HttpOnly_/,"",d); if (d ~ /(^|\.)youtube\.com$|^\.?(accounts\.)?google\.com$/) print}' \
+     ~/Downloads/cookies.txt > ~/.hathor/youtube-cookies.txt
+   ```
+5. Delete the original export, which still holds the other sites.
+
+The file must start with the `# Netscape HTTP Cookie File` line, which the awk
+above keeps. yt-dlp rewrites the file as it runs, and YouTube eventually
+expires or rotates the session, so repeat these steps if the sign in errors come
+back. Treat the file like a password: it signs in as you.
+
+If you set `extractor_args.youtube.player_client` in `ytdlp_options`, that list
+decides which clients yt-dlp tries, whether or not you are signed in. Make sure
+it includes a client that can play age restricted videos while signed in, or the
+cookies will not help.
+
 #### YouTube Shorts
 
 Shorts sit in a channel's uploads playlist next to everything else, so by default a
