@@ -80,6 +80,20 @@ def test_curl_download(mocker):
             path = Path(episode_list[0]['file_path'])
             assert path.exists()
 
+def test_curl_download_missing_directory(mocker):
+    client = HathorClient()
+    with TemporaryDirectory() as tmp_dir:
+        podcast_dir = Path(tmp_dir) / 'does' / 'not' / 'exist'
+        parse_mock = mocker.patch('hathor.podcast.archive.fetch_feed')
+        parse_mock.return_value = SIMPLE_RSS_FEED
+        client.podcast_create('rss', 'https://example.foo', 'temp', file_location=str(podcast_dir))
+        client.episode_sync()
+        episode_list = client.episode_list(only_files=False)
+        with test_utils.temp_audio_file() as temp_audio_file:
+            mocker.patch('hathor.podcast.archive.get', side_effect=requests_get_mock('https://example.foo/download1', temp_audio_file))
+            client.episode_download([episode_list[0]['id']])
+            assert Path(client.episode_list()[0]['file_path']).exists()
+
 def test_curl_download_no_content_type(mocker):
     client = HathorClient()
     with TemporaryDirectory() as tmp_dir:

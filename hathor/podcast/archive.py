@@ -177,6 +177,8 @@ def curl_download(episode_url: str, output_path: Path) -> int:
         track_download_size = True
         download_size = 0
     chunk_size = 16 * 1024
+    # The podcast directory may not exist yet, or may have been removed since the last sync
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(str(output_path), 'wb') as file_output:
         for chunk in req.iter_content(chunk_size=chunk_size):
             file_output.write(chunk)
