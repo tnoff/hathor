@@ -979,7 +979,8 @@ class HathorClient():  # pylint: disable=too-many-instance-attributes,too-many-p
                 try:
                     file_path.unlink()
                 except FileNotFoundError:
-                    continue
+                    # Already gone, still clear the record so it is not stuck pointing at a missing file
+                    self.logger.warning(f'File for episode {episode.id} already missing: {file_path}')
                 episode.file_path = None
                 episode.file_size = None
                 # Make sure prevent delete is turned off

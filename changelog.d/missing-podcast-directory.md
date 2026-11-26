@@ -1,0 +1,1 @@
+Downloads now create the podcast directory when it is missing, instead of failing every episode with `FileNotFoundError`. Deleting the file of an episode whose file is already gone now clears its record instead of leaving a stale file path, so the episode can be downloaded again.

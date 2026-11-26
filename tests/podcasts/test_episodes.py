@@ -386,6 +386,20 @@ def test_episode_delete_file(mocker):
             episode_list = client.episode_list()
             assert len(episode_list) == 0
 
+def test_episode_delete_file_already_missing(mocker):
+    with TemporaryDirectory() as tmp_dir:
+        with temp_audio_file() as temp_audio:
+            client = HathorClient(podcast_directory=tmp_dir, google_api_key='foo')
+            new_pod1 = client.podcast_create('rss', '1234', 'foo')
+            mocker.patch.object(RSSManager, 'broadcast_update', return_value=mock_episode_data)
+            mocker.patch.object(RSSManager, 'episode_download', return_value=(Path(temp_audio), 123))
+            client.episode_sync(include_podcasts=[new_pod1['id']])
+            episode_id = client.episode_list(only_files=False)[0]['id']
+            client.episode_download([episode_id])
+            Path(client.episode_list()[0]['file_path']).unlink()
+            assert client.episode_delete_file(episode_id) == [episode_id]
+            assert len(client.episode_list()) == 0
+
 def test_episode_delete(mocker):
     with TemporaryDirectory() as tmp_dir:
         with temp_audio_file() as temp_audio:
