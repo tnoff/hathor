@@ -5,6 +5,12 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.10] - 2026-11-26
+
+### Changed
+
+- Downloads now create the podcast directory when it is missing, instead of failing every episode with `FileNotFoundError`. Deleting the file of an episode whose file is already gone now clears its record instead of leaving a stale file path, so the episode can be downloaded again.
+
 ## [2.15.9] - 2026-11-24
 
 ### Changed
