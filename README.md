@@ -542,6 +542,20 @@ it is replaced with `<token>` in every message, an error from the network librar
 that gets a 502, 503 or 504, or a connection error, is retried (`--retries`), since the server restarts
 on every deploy.
 
+### Where it runs
+
+Two probes run the same checks, so a difference between them points at where the fault is:
+
+- **In the cluster** (docker-apps `apps/hathor/smoke-cronjob.yaml`, every 15 minutes) talks to the
+  `hathor-server` Service. A pod cannot reach the public url (ingress-nginx requires PROXY protocol and
+  kube-proxy bypasses the load balancer), so this covers the server and the volume but not the front door.
+- **From GitHub** (`.github/workflows/smoke-public.yml`, every 15 minutes) uses the public url, so it
+  also covers DNS, the TLS certificate, the load balancer and the ingress. Its `HATHOR_TOKEN` and
+  `DISCORD_SMOKE_WEBHOOK_URL` secrets are written by tnoff/terraform (`infra/repos.tf`), and a failure
+  posts to `#smoke-tests`.
+
+Public passes and in-cluster fails: look behind the server. The reverse: look in front of it.
+
 ## Docker
 
 Build the image:
