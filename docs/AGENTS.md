@@ -76,6 +76,16 @@ Shared `render_output(data, as_json)` used by both CLIs. Every command result fl
 
 `utils.setup_logger` gives its handlers a `MaskingFormatter`, which runs `mask_log_text` over the *finished* line (message with its %-args and any traceback, so an exception's text is covered too). `mask_log_text` finds every `scheme://...` in the text: http(s) goes through `mask_url_secrets`, anything else (a database connection string) loses only its password. This exists because DEBUG logs print feed and episode URLs and a private Patreon feed has its key in `?auth=`; hathor's `--json`/table output is masked separately by `mask_config_secrets`. A logger handed to `HathorClient(logger=...)` bypasses it, and anything new that logs a secret outside a URL (a bare token) needs masking at the call site. Progress lines are INFO: `Syncing episodes of podcast N (name)` / `Podcast N (name): X new episodes` in `__episode_sync_cluders` and `Downloading episode N of podcast P (name): title` in `_episode_download_one`; keep URLs out of them. Tests: `tests/test_log_masking.py` includes a client run at DEBUG that asserts neither a feed key nor an episode-url token reaches the log file.
 
+### Smoke test
+
+`hathor/smoke.py` is the `hathor-smoke` entry point (`hathor.smoke:cli`, not a `main` wrapper). It is a client of what `episode_index` writes and nginx serves, so it breaks if either changes shape: `tests/test_smoke.py` builds its fixture with the real client (`episode_index`, feeds and all) and serves it from a `requests_mock` that behaves like the deployed nginx config (token prefix only, range requests, per directory content types), so a change to the index or the feeds fails here instead of in production. Rules that are easy to break:
+
+- **Read only, no database.** It must never build a `HathorClient`: that runs the Alembic migrations, and a smoke run on a new image would migrate the production database before the sync does. It only does HTTP GETs.
+- **The url token never leaves `Smoke.scrub`.** Every message goes through it, `requests` errors included (they name the whole url). Do not print a url, a response body or an exception without it. The token is the whole of the server's authentication.
+- **A new check** is a function `(smoke, state) -> detail` that raises `SmokeFailure` (or lets a `requests` error through) and is added to `CHECKS`. Checks do not stop each other; one that needs the index calls `index_of(state)`, which fails with a clear message when the index check did not pass.
+- **XML is counted or fed to `feedparser`, never parsed with ElementTree**: that needs a bandit suppression, and the feeds are the real check anyway.
+- `WRONG_SEGMENT` is not called a token because bandit's B105 flags any constant with that name.
+
 ### Plugin System
 
 Place Python files in `hathor/plugins/`, or set `plugins_directory` to load them from anywhere (`_load_external_plugins`: by file path with `importlib.util`, sorted, skipping `__init__.py` and anything hidden so a mounted ConfigMap's `..data` symlinks do not load each plugin three times; an explicit directory replaces the package one; a plugin that fails to import raises `HathorException`). They are auto-discovered at client init via `load_plugins()`. See [DEVELOPMENT.md](DEVELOPMENT.md#plugins) for the function signature, naming convention, and an example.

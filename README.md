@@ -508,6 +508,40 @@ Extract cover art from an audio file:
 $ audio-tool picture-extract <audio-file> <output-file>
 ```
 
+## Smoke Test
+
+`hathor-smoke` checks a deployed server from the outside, the way a phone uses it, and exits 1 if
+anything is wrong. It is read only: it never syncs, and it never touches the database or the volume,
+so it is safe to run at any time, against production.
+
+```
+$ HATHOR_TOKEN=... hathor-smoke --base-url https://example.com/hathor
+PASS page: 3150 bytes
+PASS invalid-token: 404 for a wrong token
+PASS index: 6 podcasts, 113 episodes, generated 12 minutes ago
+PASS opml: 6 feeds listed
+PASS feeds: 6 feeds parse and match the index
+PASS file-range: episode 41 answers a range request
+6/6 checks passed
+```
+
+It asks for `<base url>/<token>/`, and checks:
+
+- the page is served as html, and a wrong token is a 404;
+- `index.json` parses and is recent (`--max-index-age`, 2 hours by default: the sync rewrites it every
+  hour, new episodes or not, so an old one means the sync stopped) and has episodes in it
+  (`--allow-empty` for a library that has none yet);
+- the opml is served with its own content type and lists a feed for every podcast;
+- every feed parses and holds exactly the episodes the index lists;
+- one byte of the smallest episode comes back for a range request, which is what lets a phone resume a
+  download.
+
+Every check runs even when an earlier one fails, so a run says everything that is wrong at once. The
+token comes from `HATHOR_TOKEN` (or `--token`, which shows in the process list) and is never printed:
+it is replaced with `<token>` in every message, an error from the network library included. A request
+that gets a 502, 503 or 504, or a connection error, is retried (`--retries`), since the server restarts
+on every deploy.
+
 ## Docker
 
 Build the image:

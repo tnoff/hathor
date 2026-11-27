@@ -51,6 +51,7 @@ test = [
 [project.scripts]
 hathor = "hathor.cli:main"
 audio-tool = "hathor.audio.cli:main"
+hathor-smoke = "hathor.smoke:cli"
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}

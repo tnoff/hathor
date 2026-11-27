@@ -26,6 +26,11 @@ class SyncFailure(HathorException):
             lines.append(f'  ... and {len(failures) - 10} more')
         super().__init__('\n'.join(lines))
 
+class SmokeFailure(HathorException):
+    '''
+    A check of hathor-smoke did not pass. The message says what was wrong and never holds the url token
+    '''
+
 class AudioFileException(Exception):
     '''
     Generic AudioFileException
