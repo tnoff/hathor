@@ -78,13 +78,14 @@ Shared `render_output(data, as_json)` used by both CLIs. Every command result fl
 
 ### Smoke test
 
-`hathor/smoke.py` is the `hathor-smoke` entry point (`hathor.smoke:cli`, not a `main` wrapper). It is a client of what `episode_index` writes and nginx serves, so it breaks if either changes shape: `tests/test_smoke.py` builds its fixture with the real client (`episode_index`, feeds and all) and serves it from a `requests_mock` that behaves like the deployed nginx config (token prefix only, range requests, per directory content types), so a change to the index or the feeds fails here instead of in production. Rules that are easy to break:
+`hathor_smoke/` is a separate top-level package, shipped in the same wheel and image, whose `hathor-smoke` command (`hathor_smoke.cli:cli`) checks a deployed server from the outside. `hathor_smoke/checks.py` holds the checks, `cli.py` the click command, `exc.py` `SmokeFailure`. It is a client of what `episode_index` writes and nginx serves, so it breaks if either changes shape: `tests/smoke/test_smoke.py` builds its fixture with the real client (`episode_index`, feeds and all) and serves it from a `requests_mock` that behaves like the deployed nginx config (token prefix only, range requests, per directory content types), so a change to the index or the feeds fails here instead of in production. Rules that are easy to break:
 
-- **Read only, no database.** It must never build a `HathorClient`: that runs the Alembic migrations, and a smoke run on a new image would migrate the production database before the sync does. It only does HTTP GETs.
+- **The package never imports `hathor`, and `hathor` never imports it** (`tests/smoke/test_boundary.py` checks both, and that importing the command loads nothing from `hathor`). Only the tests may build a `HathorClient`, to make the fixture. This is the point of the split: building a client runs the Alembic migrations, so a smoke run on a new image could migrate the production database before the sync does, and importing `hathor` sets up telemetry. The smoke test only does HTTP GETs.
 - **The url token never leaves `Smoke.scrub`.** Every message goes through it, `requests` errors included (they name the whole url). Do not print a url, a response body or an exception without it. The token is the whole of the server's authentication.
-- **A new check** is a function `(smoke, state) -> detail` that raises `SmokeFailure` (or lets a `requests` error through) and is added to `CHECKS`. Checks do not stop each other; one that needs the index calls `index_of(state)`, which fails with a clear message when the index check did not pass.
+- **A new check** is a function `(smoke, state) -> detail` in `checks.py` that raises `SmokeFailure` (or lets a `requests` error through) and is added to `CHECKS`. Checks do not stop each other; one that needs the index calls `index_of(state)`, which fails with a clear message when the index check did not pass.
 - **XML is counted or fed to `feedparser`, never parsed with ElementTree**: that needs a bandit suppression, and the feeds are the real check anyway.
 - `WRONG_SEGMENT` is not called a token because bandit's B105 flags any constant with that name.
+- A new package needs adding to `tox.ini` (pylint, bandit, `--cov`) and to the image-input filter in `.github/workflows/ci.yml`, or a change to it is not linted or does not build the image on a PR.
 
 ### Plugin System
 

@@ -10,9 +10,10 @@ import pytest
 import requests
 from requests_mock import ANY
 
-from hathor import smoke
 from hathor.client import HathorClient
-from hathor.smoke import Smoke, cli, run_checks
+from hathor_smoke import checks
+from hathor_smoke.checks import Smoke, run_checks
+from hathor_smoke.cli import cli
 
 from tests.test_feeds import add
 
@@ -171,14 +172,14 @@ def test_page_must_answer(requests_mock):
 
 @pytest.mark.usefixtures('site')
 def test_a_wrong_token_must_be_a_404(requests_mock):
-    requests_mock.get(f'{SERVER}/{smoke.WRONG_SEGMENT}/index.json', text='{}')
+    requests_mock.get(f'{SERVER}/{checks.WRONG_SEGMENT}/index.json', text='{}')
     assert failures(run()) == {'invalid-token': 'status 200 for a wrong token, expected 404'}
 
 # ------------------------------------------------------------------ the index
 
 @pytest.mark.usefixtures('site')
 def test_a_stale_index_fails_and_what_needs_it_says_so(mocker):
-    mocker.patch('hathor.smoke.utcnow', return_value=datetime.now(timezone.utc) + timedelta(hours=3))
+    mocker.patch('hathor_smoke.checks.utcnow', return_value=datetime.now(timezone.utc) + timedelta(hours=3))
     found = failures(run())
     assert found['index'] == 'index is 180 minutes old, the limit is 120'
     assert {name for name in found if name != 'index'} == {'opml', 'feeds', 'file-range'}
@@ -186,7 +187,7 @@ def test_a_stale_index_fails_and_what_needs_it_says_so(mocker):
 
 @pytest.mark.usefixtures('site')
 def test_the_age_limit_can_be_raised(mocker):
-    mocker.patch('hathor.smoke.utcnow', return_value=datetime.now(timezone.utc) + timedelta(hours=3))
+    mocker.patch('hathor_smoke.checks.utcnow', return_value=datetime.now(timezone.utc) + timedelta(hours=3))
     assert failures(run(max_index_age=4 * 3600)) == {}
 
 @pytest.mark.usefixtures('site')
@@ -361,7 +362,7 @@ def test_a_502_or_503_while_the_server_restarts_is_retried(flaky):
     Flaky.refusals = 2
     runner = Smoke(flaky, TOKEN, retries=3, backoff_factor=0)
     try:
-        assert smoke.check_page(runner, {}) == '13 bytes'
+        assert checks.check_page(runner, {}) == '13 bytes'
     finally:
         runner.close()
     assert Flaky.served == [f'/{TOKEN}/'] * 3

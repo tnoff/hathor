@@ -24,7 +24,7 @@ tox
 Run tests only (no lint):
 
 ```bash
-pytest --cov=hathor --cov-report=html --cov-fail-under=98 tests/
+pytest --cov=hathor --cov=hathor_smoke --cov-report=html --cov-fail-under=98 tests/
 ```
 
 Run a single test file:
@@ -45,9 +45,9 @@ Matches what `tox` runs under its `py315` factor (`tox.ini`) -- pylint,
 tests-pylint, and a bandit security scan, all excluding `hathor/plugins/`:
 
 ```bash
-pylint --ignore=plugins hathor/
+pylint --ignore=plugins hathor/ hathor_smoke/
 pylint --rcfile .pylintrc.test tests/
-bandit -r hathor/ --exclude hathor/plugins
+bandit -r hathor/ hathor_smoke/ --exclude hathor/plugins
 ```
 
 ## Database migrations
@@ -159,7 +159,7 @@ docker build -t hathor .
 ```
 
 Built and scanned on every PR that touches an image input (`Dockerfile`,
-`pyproject.toml`, `VERSION`, `hathor/`) via the shared `tnoff/github-workflows`
+`pyproject.toml`, `VERSION`, `hathor/`, `hathor_smoke/`) via the shared `tnoff/github-workflows`
 `docker-build-check.yml`. It is not pushed from CI on PRs; see Releasing.
 
 ## Releasing
