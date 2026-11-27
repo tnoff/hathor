@@ -5,6 +5,13 @@ All notable changes to hathor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.0] - 2026-11-27
+
+### Changed
+
+- Added `hathor-smoke`, a read only check of a deployed server from the outside: the page, a wrong token, a recent index, the opml, every feed against the index, and a range request on an episode file. It exits 1 if anything is wrong and never prints the url token.
+- Documented how to export YouTube cookies and set `ytdlp_options.cookiefile` for age restricted and sign in only videos.
+
 ## [2.15.10] - 2026-11-26
 
 ### Changed
