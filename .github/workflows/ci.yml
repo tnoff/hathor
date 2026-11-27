@@ -75,7 +75,7 @@ jobs:
   # advertised as "build-essential + git + ffmpeg + postgresql", but that was
   # the fleet-wide Python base rather than this repo's requirement -- feedparser,
   # mutagen, yt-dlp, SQLAlchemy, google-api-python-client and requests all ship
-  # wheels, and nothing under hathor/ or tests/ shells out to a binary.
+  # wheels, and nothing under hathor/, hathor_smoke/ or tests/ shells out to a binary.
   tox:
     name: Tox
     needs: metadata
@@ -116,7 +116,7 @@ jobs:
           while IFS= read -r f; do
             [ -n "$f" ] || continue
             case "$f" in
-              Dockerfile|pyproject.toml|VERSION|hathor/*) MATCH=true; break ;;
+              Dockerfile|pyproject.toml|VERSION|hathor/*|hathor_smoke/*) MATCH=true; break ;;
             esac
           done <<< "$(git diff --name-only "origin/${BASE_REF}...HEAD")"
           echo "image inputs changed: ${MATCH}"

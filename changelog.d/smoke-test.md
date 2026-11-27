@@ -1,0 +1,1 @@
+Added `hathor-smoke`, a read only check of a deployed server from the outside: the page, a wrong token, a recent index, the opml, every feed against the index, and a range request on an episode file. It exits 1 if anything is wrong and never prints the url token.
