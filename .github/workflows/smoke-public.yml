@@ -1,0 +1,84 @@
+# Public smoke probe: runs hathor-smoke against the PUBLIC url, from a GitHub
+# runner, every 15 minutes.
+#
+# Why this exists. The in-cluster CronJob (docker-apps apps/hathor/smoke-cronjob.yaml)
+# talks to the hathor-server Service directly, because a pod cannot reach the
+# public url: ingress-nginx requires PROXY protocol and kube-proxy sends a pod's
+# traffic for the load balancer straight to an ingress pod, skipping the header.
+# So DNS, the TLS certificate, the load balancer and the ingress rule are NOT
+# covered by it. This workflow is the one thing that walks that whole path, the
+# way a podcast client does.
+#
+# It runs the same checks (the same hathor_smoke package, same CLI), so the two
+# probes cannot drift apart: an in-cluster pass with a public failure means the
+# problem is in front of the server, and the reverse means it is behind it.
+#
+# Secrets (terraform infra/repos.tf module.hathor, written by tnoff/terraform):
+#   HATHOR_TOKEN               the url token, the only auth on the public path.
+#                              Rotating it in terraform-admin reaches this secret
+#                              on the next infra apply; until then this fails on
+#                              404.
+#   DISCORD_SMOKE_WEBHOOK_URL  the #smoke-tests webhook.
+#
+# A failure posts to #smoke-tests via the notify job. The fleet notifier
+# (notify-failure.yml) also posts to #ci-alerts for the same run. That is
+# deliberate: a broken notify job here would otherwise fail silently.
+name: Smoke (public)
+
+on:
+  schedule:
+    # Off the quarter hour: GitHub delays and sometimes drops runs on the hour
+    # and half hour, and the in-cluster probe sits on 7,22,37,52.
+    - cron: '11,26,41,56 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A slow run must not stack on the next one.
+concurrency:
+  group: smoke-public
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe tyler-north.com
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Install
+        run: pip install --quiet .
+
+      # The token comes from the environment, never argv, so it is in no
+      # process listing. hathor-smoke replaces it with <token> in everything it
+      # prints, and GitHub masks the secret in the log as well.
+      - name: hathor-smoke
+        env:
+          HATHOR_SMOKE_BASE_URL: https://tyler-north.com/hathor
+          HATHOR_TOKEN: ${{ secrets.HATHOR_TOKEN }}
+        run: hathor-smoke
+
+  notify:
+    name: Notify #smoke-tests
+    needs: probe
+    if: failure()
+    permissions: {}
+    uses: tnoff/github-workflows/.github/workflows/discord-notify.yml@adea087c43d56fd13d5b1abf2d5f2ba3e695784d  # discord-notify-v1.0.0
+    with:
+      message: >-
+        The public hathor probe failed. It runs from outside the cluster, so
+        this covers DNS, TLS, the load balancer and the ingress as well as the
+        server. If the in-cluster CronJob (hathor-smoke) is passing, look in
+        front of the server; the Actions log has the FAIL lines.
+    secrets:
+      discord_webhook_url: ${{ secrets.DISCORD_SMOKE_WEBHOOK_URL }}
